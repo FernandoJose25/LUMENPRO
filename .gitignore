@@ -11,3 +11,8 @@ Cargo.lock.tmp
 
 # TypeScript incremental build info
 *.tsbuildinfo
+
+# tsc -b sin outDir emite estos junto a vite.config.ts al correr `npm run
+# build` (preexistente, no depende de estos cambios) — no son fuente.
+vite.config.js
+vite.config.d.ts

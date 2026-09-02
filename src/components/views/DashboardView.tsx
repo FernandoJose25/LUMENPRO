@@ -1,15 +1,9 @@
-import { useState } from "react";
 import { Panel as ResizablePanel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { Panel as UiPanel } from "@/components/ui/Panel";
-import { Button } from "@/components/ui/Button";
+import { ScenesPanel } from "@/components/scenes/ScenesPanel";
 import { FixtureControl } from "@/components/fixtures/FixtureControl";
-import { cn } from "@/lib/utils";
-
-const SCENES = ["Entrada", "Novios", "Baile", "Fiesta", "Clímax"];
 
 export function DashboardView() {
-  const [activeScene, setActiveScene] = useState("Entrada");
-
   return (
     <PanelGroup direction="horizontal" className="min-w-0 flex-1 gap-2 p-2">
       <ResizablePanel defaultSize={58} minSize={35}>
@@ -23,26 +17,7 @@ export function DashboardView() {
           </ResizablePanel>
           <PanelResizeHandle className="h-1 rounded-full bg-transparent transition-colors hover:bg-accent/40 data-[resize-handle-active]:bg-accent" />
           <ResizablePanel defaultSize={35} minSize={20}>
-            <UiPanel title="ESCENAS / CHASES" className="h-full">
-              <div className="flex flex-wrap gap-2">
-                {SCENES.map((scene) => (
-                  <Button
-                    key={scene}
-                    size="lg"
-                    variant="secondary"
-                    selected={scene === activeScene}
-                    onClick={() => setActiveScene(scene)}
-                    className={cn(scene === activeScene && "bg-accent/15 text-accent")}
-                  >
-                    {scene}
-                  </Button>
-                ))}
-              </div>
-              <p className="mt-3 text-[11px] text-text-secondary">
-                Pendiente — lógica real de escenas/chases (Fase 4, ver AUDIT.md). Estos botones
-                todavía no guardan estado de canales.
-              </p>
-            </UiPanel>
+            <ScenesPanel />
           </ResizablePanel>
         </PanelGroup>
       </ResizablePanel>

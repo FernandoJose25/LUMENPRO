@@ -44,10 +44,27 @@
 
 ## 🔲 Pendiente — Fase 4: Scenes / Chases / Effects / Groups
 
-- [ ] Lógica real detrás de los botones de escenas (hoy son placeholders)
-- [ ] Editor de chases
-- [ ] Motor de efectos
-- [ ] Agrupación de fixtures
+- [x] **Scenes** — lógica real, ya no son placeholders. `fixtureStore` ahora
+      tiene `liveValues` (instanceId→channelId→valor, antes vivía como
+      `useState` local en `FixtureControl` y se perdía al cambiar de fixture)
+      y `scenes: Scene[]` (`types/scene.ts`). Guardar captura una foto de
+      `liveValues`; recuperar hace *merge* (solo pisa los canales que esa
+      escena capturó, no un blackout del resto del rig — igual que en una
+      consola real). Nuevo componente `components/scenes/ScenesPanel.tsx`
+      reemplaza el bloque de botones hardcodeados (`SCENES = [...]`) del
+      Dashboard: guardar (prompt de nombre), recuperar (clic), re-grabar
+      (⟳, sobre una escena existente), renombrar (doble clic) y borrar (×,
+      con confirmación) — todo persistido en `localStorage` junto con
+      fixtures. `npm run typecheck` y `npm run build` verificados OK.
+      **Sin tests automatizados** (no hay `vitest`/`jest` configurado en el
+      repo todavía) — la verificación fue lectura de código + typecheck +
+      build, no una corrida manual en el navegador.
+- [ ] Editor de chases (secuencias de escenas con tiempos/crossfade)
+- [ ] Motor de efectos (generadores paramétricos: sine, chase de color, etc.)
+- [ ] Agrupación de fixtures como entidad de primera clase — hoy
+      `FixtureInstance.group?: string` existe en el tipo (`types/fixture.ts`)
+      pero ninguna pantalla lo usa: no hay forma de crear/editar/asignar
+      grupos, ni de recuperar una escena "solo para el grupo X"
 
 ## 🔲 Pendiente — Motor y hardware
 
@@ -80,6 +97,6 @@
 3. Envolver en Tauri — andamiaje escrito (`src-tauri/`), **falta correr
    `cargo tauri dev`/`build` con Rust actualizado y confirmar que compila**
    antes de poder probar el `.exe` real
-4. Scenes/Chases/Effects
+4. Scenes (hecho) → Chases/Effects/Groups (pendientes)
 5. Visualizer 2D/3D
 6. Resto de pulido (Live Mode, Command Palette, Audio Reactive, doble monitor)

@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
 import { Fader } from "@/components/ui/Fader";
@@ -12,15 +11,14 @@ import type { FixtureChannel } from "@/types/fixture";
  * no están hardcodeados. Pan/Tilt como joystick XY (recomendado en la
  * tabla de la sección 7) queda para una iteración posterior — aquí todos
  * los canales usan Fader, que ya soporta drag/wheel/teclado/numérico.
+ *
+ * Los valores en vivo viven en el fixtureStore (no en un useState local):
+ * antes se perdían al cambiar de fixture seleccionado, y Scenes (Fase 4)
+ * necesita poder capturarlos y recuperarlos desde un solo lugar.
  */
 export function FixtureControl() {
-  const { selectedInstance, selectedDefinition, instances, selectInstance } = useFixtureStore();
-  const [values, setValues] = useState<Record<string, number>>({});
-
-  useEffect(() => {
-    if (!selectedDefinition) return;
-    setValues(Object.fromEntries(selectedDefinition.channels.map((c) => [c.id, c.defaultValue])));
-  }, [selectedDefinition?.id]);
+  const { selectedInstance, selectedDefinition, instances, selectInstance, getChannelValue, setChannelValue } =
+    useFixtureStore();
 
   if (!selectedInstance || !selectedDefinition) {
     return (
@@ -56,10 +54,10 @@ export function FixtureControl() {
           <Fader
             key={ch.id}
             label={ch.name}
-            value={values[ch.id] ?? ch.defaultValue}
+            value={getChannelValue(selectedInstance.id, ch.id, ch.defaultValue)}
             min={ch.dmxMin}
             max={ch.dmxMax}
-            onChange={(v) => setValues((prev) => ({ ...prev, [ch.id]: v }))}
+            onChange={(v) => setChannelValue(selectedInstance.id, ch.id, v)}
           />
         ))}
       </div>
