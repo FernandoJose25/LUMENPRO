@@ -3,3 +3,11 @@ dist
 dist-ssr
 *.local
 .DS_Store
+
+# Rust / Tauri
+target/
+src-tauri/target/
+Cargo.lock.tmp
+
+# TypeScript incremental build info
+*.tsbuildinfo

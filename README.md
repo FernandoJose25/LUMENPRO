@@ -23,13 +23,34 @@ src/
   lib/fixtureStore.tsx   Store con persistencia en localStorage (placeholder hasta Tauri+SQLite)
   lib/utils.ts           helper cn()
   App.tsx                 Enruta Dashboard / Fixtures / placeholders por fase
+dmx-engine/               Motor DMX en Rust (crate independiente, ver AUDIT.md §8)
+src-tauri/                Andamiaje de la app de escritorio (ver PASOS-PENDIENTES.md)
 ```
 
 ## Comandos
 
 ```bash
 npm install
-npm run dev        # servidor de desarrollo
-npm run build       # build de producción
+npm run dev        # servidor de desarrollo (web)
+npm run build       # build de producción (web)
 npm run typecheck
+```
+
+### Motor DMX (Rust)
+
+```bash
+cd dmx-engine
+cargo test              # 8/8 tests
+cargo run --bin smoke_test
+```
+
+### App de escritorio (Tauri)
+
+`src-tauri/` tiene el andamiaje base, pero **no verificado** contra un
+build real (ver PASOS-PENDIENTES.md). Requiere Rust actualizado vía
+`rustup` (no la versión de `apt`) y, en Linux, `libwebkit2gtk-4.1-dev`:
+
+```bash
+cargo install tauri-cli --version "^2"
+npm run tauri dev     # una vez que compile de verdad
 ```

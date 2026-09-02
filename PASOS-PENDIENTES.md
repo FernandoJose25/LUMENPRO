@@ -13,6 +13,21 @@
   Mock para desarrollar sin hardware. Compila, 8/8 tests pasan, smoke
   test corrido contra Mock. **No probado contra hardware real** — ver
   AUDIT.md §8.
+- **Andamiaje de Tauri** (`src-tauri/`) — `Cargo.toml`, `tauri.conf.json`,
+  `main.rs` con comandos (`connect_mock`, `connect_enttec`, `disconnect`,
+  `set_channel`, `get_channel`, `set_block`, `blackout`, `list_serial_ports`,
+  `engine_status`) que envuelven `lumenpro_dmx` como dependencia local. `npm
+  install` con `@tauri-apps/cli`/`@tauri-apps/api` corrido y verificado; el
+  build del frontend (`npm run build`, `npm run typecheck`) sigue pasando.
+  **`cargo check`/`cargo tauri dev` de `src-tauri` NO se pudo verificar en
+  este entorno**: el sandbox trae Rust 1.75 (vía `apt`) y las dependencias
+  actuales de Tauri 2 requieren un toolchain más nuevo (`edition2024`);
+  tampoco había `libwebkit2gtk-4.1-dev` instalable (mirror de Ubuntu
+  devolvía 404 para esos paquetes). Falta además generar los iconos reales
+  (ver `src-tauri/icons/README.md`) antes de poder correr `cargo tauri
+  build`. **Antes de dar este paso por cerrado, alguien con Rust actualizado
+  (`rustup`, no el `apt` de Ubuntu) y, si es posible, en Windows —el target
+  real del `.exe`— debe correr `cargo tauri dev` y arreglar lo que falle.**
 
 ## 🔲 Pendiente — Fase 3 (cerrar Fixtures)
 
@@ -42,8 +57,12 @@
       (label 6) sobre `serialport`. **Sin probar contra hardware real.**
       Art-Net/sACN (para no depender de un widget USB) sigue sin hacer.
 - [ ] Empaquetado Tauri — **aquí es donde recién se genera el `.exe`**.
-      Siguiente paso lógico: `cargo install tauri-cli`, `cargo tauri init`
-      dentro del repo, y mover `dmx-engine` como dependencia local.
+      Andamiaje base ya en `src-tauri/` (`Cargo.toml`, `tauri.conf.json`,
+      `main.rs` con comandos IPC sobre `dmx-engine`), **pero sin `cargo tauri
+      dev`/`build` corrido con éxito todavía** — requiere Rust actualizado vía
+      `rustup` (no el 1.75 de `apt`), `libwebkit2gtk-4.1-dev` instalado, e
+      iconos reales generados con `cargo tauri icon`. Todo eso solo se puede
+      hacer/verificar fuera de este sandbox.
 - [ ] Doble monitor (depende de Tauri, gestión de ventanas nativas)
 
 ## 🔲 Pendiente — Visualizer y extras
@@ -58,7 +77,9 @@
 1. Confirmar direcciones DMX y canales reales (bloquea todo lo demás con hardware)
 2. ~~Motor DMX en Rust + driver USB-DMX~~ — hecho como crate `dmx-engine/`,
    sin probar contra hardware (paso 1 sigue pendiente y esto lo bloquea)
-3. Envolver en Tauri (ya ahí puedes probar el `.exe` real, aunque sea sin visualizer)
+3. Envolver en Tauri — andamiaje escrito (`src-tauri/`), **falta correr
+   `cargo tauri dev`/`build` con Rust actualizado y confirmar que compila**
+   antes de poder probar el `.exe` real
 4. Scenes/Chases/Effects
 5. Visualizer 2D/3D
 6. Resto de pulido (Live Mode, Command Palette, Audio Reactive, doble monitor)
