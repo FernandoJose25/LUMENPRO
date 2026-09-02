@@ -189,3 +189,87 @@ directamente en el Fixture Editor.
 npx tsc -b --noEmit   → sin errores
 npm run build          → ✓ 50 modules transformed, built in 2.87s
 ```
+
+## 8. Ronda 3 — Motor DMX en Rust (paso 2 del roadmap)
+
+Siguiendo el orden ya acordado en `PASOS-PENDIENTES.md`, y dado que el
+paso 1 (confirmar direcciones DMX contra la consola física MAX 512)
+requiere el hardware delante y no se puede hacer de forma remota, se
+avanzó al paso 2: el motor DMX en Rust, como crate independiente
+(`dmx-engine/`) antes de envolverlo en Tauri.
+
+### 8.1 Por qué un crate aparte y no directo en `src-tauri`
+
+`src-tauri` todavía no existe (el empaquetado Tauri es el paso 3). Meter
+el motor DMX suelto ahí habría significado inventar un `src-tauri`
+mínimo solo para que compile — mezclando dos pasos del roadmap en uno.
+En cambio, `dmx-engine/` es una librería Rust normal y corriente
+(`cargo test`, `cargo run --bin smoke_test`) que **no depende de Tauri
+para nada**. Cuando llegue el paso 3, se agrega como dependencia local
+en el `Cargo.toml` de `src-tauri` (`lumenpro_dmx = { path = "../dmx-engine" }`)
+y se exponen sus funciones como comandos Tauri (`connect`, `set_channel`,
+`disconnect`, etc.) — trabajo aparte, no hecho todavía.
+
+### 8.2 Qué hay adentro
+
+- `src/universe.rs` — `DmxUniverse`: buffer de 512 canales (1-indexado,
+  igual que la consola y que el campo `index` de `fixtureLibrary.ts`),
+  compartible entre hilos con `Arc<RwLock<...>>`.
+- `src/output.rs` — trait `DmxOutput` + dos implementaciones:
+  - `MockOutput`: no toca hardware, para desarrollar Scenes/Chases/Effects
+    y probar el motor sin el Enttec ni la MAX 512 conectados.
+  - `EnttecUsbProOutput`: driver real para el **Enttec DMX USB PRO** (o
+    compatibles), sobre el crate `serialport`. El framing de paquete
+    (`0x7E`, label `0x06` "Output Only Send DMX Packet", longitud
+    little-endian, start code `0x00`, `0xE7` de cierre) está tomado del
+    formato público de la Enttec DMX USB PRO API Specification 1.44,
+    documentado también por OLA/DMXKing.
+- `src/engine.rs` — `DmxEngine`: hilo de salida a FPS configurable
+  (30-40 típico) que lee el `DmxUniverse` en cada tick y lo manda por el
+  `DmxOutput` activo. `start()`/`stop()` limpios, `Drop` para no dejar
+  hilos huérfanos.
+- `src/bin/smoke_test.rs` — prueba manual: `cargo run --bin smoke_test`
+  (Mock) o `cargo run --bin smoke_test /dev/ttyUSB0` / `COM5` (Enttec
+  real) — sube el dimmer de las 6 direcciones ya sembradas en
+  `fixtureLibrary.ts` (Orus #1/#2, LPC007 #1-4) 3 segundos y hace blackout.
+
+### 8.3 Verificado de verdad vs. no verificado — sé preciso acá
+
+**Verificado en este sandbox** (Ubuntu, Rust 1.75 vía apt, sin GUI ni
+hardware DMX):
+
+```
+cargo build   → compila limpio (serialport 4.3.0 + libudev-dev)
+cargo test    → 8/8 tests pasan (universo, framing de paquete Enttec,
+                motor enviando frames a la frecuencia configurada)
+cargo run --bin smoke_test   → corre extremo a extremo contra MockOutput,
+                sube y baja dimmers, hace blackout, sin errores
+```
+
+**NO verificado — no tengo cómo, y no voy a fingir que sí:**
+
+- El driver `EnttecUsbProOutput` **nunca tocó un Enttec real** ni ningún
+  otro widget compatible. El framing de paquete es correcto contra la
+  especificación pública, pero variantes de firmware o clones baratos
+  (Eurolite, DMXKing, etc.) a veces difieren en detalles. Antes de
+  usarlo en un show, probalo primero con ENTTEC EMU o QLC+ para
+  descartar un problema de cableado/driver del sistema operativo, y
+  después con `smoke_test <puerto>`.
+- No hay reconexión automática si se desconecta el USB a mitad de show
+  — eso queda para cuando se integre en Tauri (paso 3), donde sí tiene
+  sentido exponerlo como estado observable por la UI.
+- Solo soporta 1 universo. Está bien para tu rig actual (6 fixtures,
+  ~55 canales), pero si en algún momento sumás fixtures que crucen el
+  canal 512 vas a necesitar un segundo universo — no contemplado todavía.
+
+### 8.4 Pendiente inmediato relacionado
+
+- Instalar Rust localmente (`rustup`, no estaba disponible por defecto
+  en este sandbox tampoco — se instaló vía `apt install rustc cargo`
+  como salida rápida, pero para desarrollo real conviene `rustup` por
+  versiones más nuevas y `cargo tauri` cuando llegue el paso 3).
+- Cuando tengas el Enttec (o el que sea) a mano: `cargo run --bin
+  smoke_test <puerto>` y confirmá que las 6 luces responden en las
+  direcciones sembradas — ahí mismo aprovechás para hacer el paso 1
+  pendiente (verificar direcciones reales contra la MAX 512) y corregir
+  `fixtureLibrary.ts` si hace falta.

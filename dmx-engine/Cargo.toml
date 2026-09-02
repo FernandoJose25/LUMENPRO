@@ -1,0 +1,18 @@
+[package]
+name = "lumenpro_dmx"
+version = "0.1.0"
+edition = "2021"
+description = "Motor DMX de LUMENPRO: universo de 512 canales, hilo de salida a frecuencia fija y drivers de hardware (Enttec DMX USB PRO + mock)."
+
+[lib]
+name = "lumenpro_dmx"
+path = "src/lib.rs"
+
+[[bin]]
+name = "smoke_test"
+path = "src/bin/smoke_test.rs"
+
+[dependencies]
+serialport = "=4.3.0"
+thiserror = "1.0"
+unescaper = "=0.1.6"
