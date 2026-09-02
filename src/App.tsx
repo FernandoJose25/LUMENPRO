@@ -4,13 +4,13 @@ import { Topbar } from "@/components/layout/Topbar";
 import { FixtureStoreProvider } from "@/lib/fixtureStore";
 import { DashboardView } from "@/components/views/DashboardView";
 import { FixturesView } from "@/components/views/FixturesView";
+import { GroupsView } from "@/components/groups/GroupsView";
+import { ScenesView } from "@/components/scenes/ScenesView";
 import { PlaceholderView } from "@/components/views/PlaceholderView";
 
 // A qué fase del plan (sección 33 del brief) corresponde cada sección del
 // Sidebar que todavía no está implementada.
 const PENDING_PHASE: Record<string, string> = {
-  Groups: "Fase 4 — Programming",
-  Scenes: "Fase 4 — Programming",
   Chases: "Fase 4 — Programming",
   Effects: "Fase 4 — Programming",
   Timeline: "Fase 4 — Programming",
@@ -43,6 +43,8 @@ export default function App() {
 
           {section === "Dashboard" ? <DashboardView /> : null}
           {section === "Fixtures" ? <FixturesView /> : null}
+          {section === "Groups" ? <GroupsView /> : null}
+          {section === "Scenes" ? <ScenesView /> : null}
           {PENDING_PHASE[section] ? (
             <PlaceholderView section={section} phase={PENDING_PHASE[section]} />
           ) : null}

@@ -1,6 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { FixtureDefinition, FixtureInstance } from "@/types/fixture";
 import type { Scene } from "@/types/scene";
+import type { Group } from "@/types/group";
+import { GROUP_COLORS } from "@/types/group";
 import { seedDefinitions, seedInstances } from "@/data/fixtureLibrary";
 
 function makeId(prefix: string): string {
@@ -23,6 +25,7 @@ interface FixtureStoreState {
   /** Última escena recuperada con éxito — solo para resaltar el botón activo
    *  en la UI; no es una garantía de que nada se haya movido desde entonces. */
   activeSceneId: string | null;
+  groups: Group[];
 }
 
 interface FixtureStoreValue extends FixtureStoreState {
@@ -45,6 +48,17 @@ interface FixtureStoreValue extends FixtureStoreState {
   renameScene: (sceneId: string, name: string) => void;
   removeScene: (sceneId: string) => void;
   recallScene: (sceneId: string) => void;
+  addGroup: (name: string) => Group;
+  renameGroup: (groupId: string, name: string) => void;
+  removeGroup: (groupId: string) => void;
+  /** Asigna un fixture a un grupo, o lo desagrupa si groupId es null.
+   *  Un fixture solo puede estar en un grupo a la vez (ver types/group.ts). */
+  setInstanceGroup: (instanceId: string, groupId: string | null) => void;
+  /** Escribe el mismo valor de canal en todos los fixtures de un grupo que
+   *  tengan un canal de ese `ChannelType` (p. ej. "sube el Dimmer de todo
+   *  el grupo a 200" sin importar en qué índice de canal esté el Dimmer
+   *  de cada fixture — LPC007 y Orus no lo tienen en el mismo índice). */
+  setGroupChannelByType: (groupId: string, channelType: string, value: number) => void;
 }
 
 function loadInitialState(): FixtureStoreState {
@@ -61,6 +75,7 @@ function loadInitialState(): FixtureStoreState {
         liveValues: parsed.liveValues ?? {},
         scenes: parsed.scenes ?? [],
         activeSceneId: parsed.activeSceneId ?? null,
+        groups: parsed.groups ?? [],
       };
     }
   } catch {
@@ -73,6 +88,7 @@ function loadInitialState(): FixtureStoreState {
     liveValues: {},
     scenes: [],
     activeSceneId: null,
+    groups: [],
   };
 }
 
@@ -229,6 +245,65 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
     });
   }, []);
 
+  const addGroup = useCallback((name: string): Group => {
+    let created!: Group;
+    setState((s) => {
+      created = {
+        id: makeId("group"),
+        name: name.trim() || `Grupo ${s.groups.length + 1}`,
+        color: GROUP_COLORS[s.groups.length % GROUP_COLORS.length],
+      };
+      return { ...s, groups: [...s.groups, created] };
+    });
+    return created;
+  }, []);
+
+  const renameGroup = useCallback((groupId: string, name: string) => {
+    setState((s) => ({
+      ...s,
+      groups: s.groups.map((g) => (g.id === groupId ? { ...g, name: name.trim() || g.name } : g)),
+    }));
+  }, []);
+
+  const removeGroup = useCallback((groupId: string) => {
+    setState((s) => ({
+      ...s,
+      groups: s.groups.filter((g) => g.id !== groupId),
+      // Desagrupa a los fixtures que estaban en el grupo borrado, en vez
+      // de dejarlos apuntando a un group.id que ya no existe.
+      instances: s.instances.map((i) => (i.group === groupId ? { ...i, group: undefined } : i)),
+    }));
+  }, []);
+
+  const setInstanceGroup = useCallback((instanceId: string, groupId: string | null) => {
+    setState((s) => ({
+      ...s,
+      instances: s.instances.map((i) => (i.id === instanceId ? { ...i, group: groupId ?? undefined } : i)),
+    }));
+  }, []);
+
+  /** Aplica un valor a todo canal de tipo `channelType` en todo fixture del
+   *  grupo — cada fixture puede tener ese tipo de canal en un índice DMX
+   *  distinto (LPC007 vs Orus), por eso se resuelve por tipo, no por id de
+   *  canal fijo. Si un fixture del grupo no tiene ese tipo de canal, se
+   *  omite silenciosamente (p. ej. subir "Gobo" en un grupo mixto que
+   *  incluye PARs sin gobo). */
+  const setGroupChannelByType = useCallback((groupId: string, channelType: string, value: number) => {
+    setState((s) => {
+      const liveValues: Record<string, Record<string, number>> = { ...s.liveValues };
+      for (const instance of s.instances) {
+        if (instance.group !== groupId) continue;
+        const def = s.definitions.find((d) => d.id === instance.definitionId);
+        if (!def) continue;
+        for (const channel of def.channels) {
+          if (channel.type !== channelType) continue;
+          liveValues[instance.id] = { ...liveValues[instance.id], [channel.id]: value };
+        }
+      }
+      return { ...s, liveValues };
+    });
+  }, []);
+
   const selectedInstance = useMemo(
     () => state.instances.find((i) => i.id === state.selectedInstanceId) ?? null,
     [state.instances, state.selectedInstanceId],
@@ -256,6 +331,11 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
     renameScene,
     removeScene,
     recallScene,
+    addGroup,
+    renameGroup,
+    removeGroup,
+    setInstanceGroup,
+    setGroupChannelByType,
   };
 
   return <FixtureStoreContext.Provider value={value}>{children}</FixtureStoreContext.Provider>;

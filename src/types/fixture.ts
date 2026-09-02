@@ -95,6 +95,9 @@ export interface FixtureInstance {
   universe: number;
   address: number;
   mode?: string;
+  /** Group.id (types/group.ts) al que pertenece este fixture, o undefined
+   *  si no está agrupado. Antes era un string libre sin usar en ningún
+   *  lado (Fase 4 lo activa) — ahora referencia siempre un Group real. */
   group?: string;
   panInvert?: boolean;
   tiltInvert?: boolean;

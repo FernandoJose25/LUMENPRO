@@ -55,16 +55,37 @@
       Dashboard: guardar (prompt de nombre), recuperar (clic), re-grabar
       (⟳, sobre una escena existente), renombrar (doble clic) y borrar (×,
       con confirmación) — todo persistido en `localStorage` junto con
-      fixtures. `npm run typecheck` y `npm run build` verificados OK.
-      **Sin tests automatizados** (no hay `vitest`/`jest` configurado en el
-      repo todavía) — la verificación fue lectura de código + typecheck +
-      build, no una corrida manual en el navegador.
+      fixtures. La entrada "Scenes" del Sidebar (antes caía en
+      PlaceholderView aunque la lógica ya existía) ahora abre
+      `components/scenes/ScenesView.tsx`, el mismo panel con más espacio y
+      `FixtureControl` al lado. `npm run typecheck` y `npm run build`
+      verificados OK. **Sin tests automatizados** (no hay `vitest`/`jest`
+      configurado en el repo todavía) — la verificación fue lectura de
+      código + typecheck + build, no una corrida manual en el navegador.
 - [ ] Editor de chases (secuencias de escenas con tiempos/crossfade)
 - [ ] Motor de efectos (generadores paramétricos: sine, chase de color, etc.)
-- [ ] Agrupación de fixtures como entidad de primera clase — hoy
-      `FixtureInstance.group?: string` existe en el tipo (`types/fixture.ts`)
-      pero ninguna pantalla lo usa: no hay forma de crear/editar/asignar
-      grupos, ni de recuperar una escena "solo para el grupo X"
+- [x] **Groups** — entidad de primera clase. Nuevo `types/group.ts`
+      (`Group { id, name, color }`) y `FixtureInstance.group` pasa de string
+      libre sin usar a guardar siempre un `Group.id` real. `fixtureStore`
+      agrega CRUD de grupos (`addGroup`, `renameGroup`, `removeGroup`,
+      `setInstanceGroup`) y `setGroupChannelByType` — escribe un valor a
+      todos los fixtures del grupo que tengan un canal de ese tipo
+      (Dimmer, Color, etc.), resuelto por `ChannelType` porque cada modelo
+      puede tener ese canal en un índice DMX distinto (LPC007 vs Orus).
+      Nueva vista `components/groups/GroupsView.tsx` — antes "Groups" en el
+      Sidebar caía en PlaceholderView, ahora: panel izquierdo para
+      crear/renombrar/borrar grupos y marcar qué fixtures pertenecen a cada
+      uno (checkbox list); panel derecho "Group Control" con un fader por
+      cada tipo de canal presente en el grupo, que aplica a todos los
+      miembros a la vez (es un control de escritura tipo "master de grupo",
+      no un espejo del valor actual de cada fixture). Borrar un grupo
+      desagrupa a sus fixtures, no los borra. `npm run typecheck` y
+      `npm run build` verificados OK. **Sin probar en navegador real** ni
+      con datos de más de un grupo simultáneo — falta esa verificación
+      manual. Scenes/Chases todavía NO usan el grupo para acotar su
+      alcance (guardar una escena sigue capturando todo `liveValues`
+      tocado, sin filtrar por grupo) — eso queda pendiente si hace falta
+      "escena solo para el grupo X".
 
 ## 🔲 Pendiente — Motor y hardware
 
@@ -97,6 +118,6 @@
 3. Envolver en Tauri — andamiaje escrito (`src-tauri/`), **falta correr
    `cargo tauri dev`/`build` con Rust actualizado y confirmar que compila**
    antes de poder probar el `.exe` real
-4. Scenes (hecho) → Chases/Effects/Groups (pendientes)
+4. Scenes (hecho) → Groups (hecho) → Chases/Effects (pendientes)
 5. Visualizer 2D/3D
 6. Resto de pulido (Live Mode, Command Palette, Audio Reactive, doble monitor)

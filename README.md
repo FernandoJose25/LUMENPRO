@@ -17,15 +17,17 @@ src/
   components/ui/         Design System: Button, Panel, Fader, Tabs, StatusIndicator
   components/layout/     Sidebar, Topbar, BlackoutButton
   components/fixtures/   FixtureManager, FixtureEditor, FixtureControl
-  components/scenes/     ScenesPanel — guardar/recuperar/renombrar/borrar escenas (Fase 4)
+  components/scenes/     ScenesPanel + ScenesView — guardar/recuperar/renombrar/borrar escenas (Fase 4)
+  components/groups/     GroupsView — crear/renombrar/borrar grupos, asignar fixtures, control por lote (Fase 4)
   components/views/      DashboardView, FixturesView, PlaceholderView
   types/fixture.ts       Modelo de datos (FixtureDefinition, FixtureInstance, FixtureChannel)
   types/scene.ts          Modelo de datos de Scenes (foto de liveValues por fixture/canal)
+  types/group.ts          Modelo de datos de Groups (Group { id, name, color })
   data/fixtureLibrary.ts Semilla: tu rig real (2x Orus 280W, 4x LPC007) — ver AUDIT.md §7.2
   lib/fixtureStore.tsx   Store con persistencia en localStorage (placeholder hasta Tauri+SQLite).
-                          Incluye liveValues (valores de canal en vivo) y CRUD de Scenes.
+                          Incluye liveValues, CRUD de Scenes y CRUD de Groups.
   lib/utils.ts           helper cn()
-  App.tsx                 Enruta Dashboard / Fixtures / placeholders por fase
+  App.tsx                 Enruta Dashboard / Fixtures / Groups / Scenes / placeholders por fase
 dmx-engine/               Motor DMX en Rust (crate independiente, ver AUDIT.md §8)
 src-tauri/                Andamiaje de la app de escritorio (ver PASOS-PENDIENTES.md)
 ```
