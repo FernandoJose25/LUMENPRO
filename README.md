@@ -28,6 +28,7 @@ src/
                           Incluye liveValues, CRUD de Scenes y CRUD de Groups.
   lib/utils.ts           helper cn()
   App.tsx                 Enruta Dashboard / Fixtures / Groups / Scenes / placeholders por fase
+  test/                   Tests de integración (Vitest + Testing Library + jsdom) — `npm test`
 dmx-engine/               Motor DMX en Rust (crate independiente, ver AUDIT.md §8)
 src-tauri/                Andamiaje de la app de escritorio (ver PASOS-PENDIENTES.md)
 ```
@@ -39,6 +40,7 @@ npm install
 npm run dev        # servidor de desarrollo (web)
 npm run build       # build de producción (web)
 npm run typecheck
+npm test            # tests de integración (Vitest + Testing Library + jsdom)
 ```
 
 ### Motor DMX (Rust)

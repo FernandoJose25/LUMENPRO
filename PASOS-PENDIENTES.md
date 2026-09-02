@@ -59,9 +59,10 @@
       PlaceholderView aunque la lógica ya existía) ahora abre
       `components/scenes/ScenesView.tsx`, el mismo panel con más espacio y
       `FixtureControl` al lado. `npm run typecheck` y `npm run build`
-      verificados OK. **Sin tests automatizados** (no hay `vitest`/`jest`
-      configurado en el repo todavía) — la verificación fue lectura de
-      código + typecheck + build, no una corrida manual en el navegador.
+      verificados OK. **Verificado con tests de integración reales** (ver
+      abajo, `npm test`) — guardar/recuperar/re-grabar/borrar simulados con
+      clics de usuario de verdad (`@testing-library/user-event`), no solo
+      lectura de código.
 - [ ] Editor de chases (secuencias de escenas con tiempos/crossfade)
 - [ ] Motor de efectos (generadores paramétricos: sine, chase de color, etc.)
 - [x] **Groups** — entidad de primera clase. Nuevo `types/group.ts`
@@ -80,12 +81,31 @@
       miembros a la vez (es un control de escritura tipo "master de grupo",
       no un espejo del valor actual de cada fixture). Borrar un grupo
       desagrupa a sus fixtures, no los borra. `npm run typecheck` y
-      `npm run build` verificados OK. **Sin probar en navegador real** ni
-      con datos de más de un grupo simultáneo — falta esa verificación
-      manual. Scenes/Chases todavía NO usan el grupo para acotar su
-      alcance (guardar una escena sigue capturando todo `liveValues`
-      tocado, sin filtrar por grupo) — eso queda pendiente si hace falta
-      "escena solo para el grupo X".
+      `npm run build` verificados OK. **Verificado con tests de integración
+      reales** (`npm test`): crear grupo, cancelar el prompt, asignar/
+      desasignar fixture, mover el fader de Group Control y confirmar que
+      escribe en `liveValues`, borrar grupo sin borrar fixtures. **Sin
+      probar en un navegador de verdad** (esto es Node+jsdom, no Chrome) ni
+      con más de un grupo simultáneo en pantalla a la vez — sigue siendo
+      recomendable que lo abras tú una vez. Scenes/Chases todavía NO usan
+      el grupo para acotar su alcance (guardar una escena sigue capturando
+      todo `liveValues` tocado, sin filtrar por grupo) — eso queda
+      pendiente si hace falta "escena solo para el grupo X".
+- [x] **Tests de integración** (`npm test`, Vitest + Testing Library +
+      jsdom) — `vitest.config.ts` separado de `vite.config.ts` (para no
+      mezclarlo con la config de Tauri), `src/test/setup.ts` con cleanup
+      automático entre tests. `src/test/groups.test.tsx` (5 tests) y
+      `src/test/scenes.test.tsx` (4 tests), 9/9 pasan. Simulan clics reales
+      de usuario (`@testing-library/user-event` + `fireEvent`), no solo
+      llaman funciones del store directamente — el objetivo era responder
+      "¿esto realmente funciona si alguien le hace clic?", no solo "¿tipa
+      bien?". **Sigue siendo jsdom, no un navegador real** — no prueba
+      CSS/layout/drag real del `Fader` (el pointer-drag del slider no se
+      testeó, solo la entrada numérica, que es la vía "para valores
+      exactos" que ya pedía la sección 27 del brief original) ni cómo se
+      ve/siente de verdad. Cero cobertura todavía de `FixtureManager`,
+      `FixtureEditor`, `Sidebar`/`Topbar`, ni del motor DMX en Rust más
+      allá de sus propios `cargo test` (que son un suite aparte).
 
 ## 🔲 Pendiente — Motor y hardware
 
