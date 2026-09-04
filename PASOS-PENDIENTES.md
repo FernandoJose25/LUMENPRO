@@ -42,7 +42,7 @@
 - [ ] Color wheel visual, selector de gobo con miniaturas, editor de curvas gráfico
 - [ ] Persistencia real (hoy `localStorage`, migrar a SQLite cuando exista Tauri)
 
-## 🔲 Pendiente — Fase 4: Scenes / Chases / Effects / Groups
+## ✅ Fase 4 — Scenes / Groups / Chases / Effects (completa, ver detalle abajo)
 
 - [x] **Scenes** — lógica real, ya no son placeholders. `fixtureStore` ahora
       tiene `liveValues` (instanceId→channelId→valor, antes vivía como
@@ -111,7 +111,57 @@
       soporta todavía "empezar desde el step N" ni click para saltar a un
       step específico durante la reproducción — solo Reproducir desde el
       principio y Detener.
-- [ ] Motor de efectos (generadores paramétricos: sine, chase de color, etc.)
+- [x] **Effects** (generadores paramétricos). Nuevo `types/effect.ts`
+      (`Effect { groupId, channelType, waveform, speedCpm, min, max,
+      phaseOffsetDeg }`, 4 formas de onda: seno/cuadrada/diente de
+      sierra/triangular). A diferencia de Chases (que salta entre valores
+      fijos de escenas guardadas), un Effect genera valores continuamente
+      sin necesitar escenas previas — apunta siempre a un Group y a un
+      `ChannelType` (mismo patrón que `setGroupChannelByType`).
+      `fixtureStore` agrega CRUD (`addEffect`, `renameEffect`,
+      `removeEffect`, `updateEffect`) más `startEffect`/`stopEffect`, que
+      solo tocan `runningEffectIds` — una lista que **deliberadamente NO
+      se persiste** entre recargas de página (no hay nada real corriendo
+      detrás, sin motor DMX conectado al frontend — ver AUDIT.md §8).
+
+      Motor de reproducción nuevo en `lib/effectEngine.ts`
+      (`useEffectsEngine`): a diferencia de `useChasePlayer` (un hook por
+      vista, activo solo mientras esa pantalla está abierta), este es **un
+      único intervalo global** que recorre todos los efectos corriendo en
+      cada tick — se monta una sola vez en `App.tsx` (no en
+      `EffectsView`), así un efecto sigue animando aunque el usuario
+      navegue a otra sección del Sidebar, igual que en una consola real.
+      Cada fixture del grupo recibe un desfase de fase según su posición
+      en el array de instancias (`phaseOffsetDeg`), para efectos tipo
+      "ola" recorriendo el grupo.
+
+      Nueva vista `components/effects/EffectsView.tsx` — antes "Effects"
+      en el Sidebar caía en PlaceholderView: panel izquierdo crea/
+      renombra/borra effects; panel derecho edita grupo objetivo, tipo de
+      canal, forma de onda, velocidad (ciclos/min), rango min/max y
+      desfase de fase, con ▶ Reproducir / ■ Detener (deshabilitado sin
+      grupo asignado). `npm run typecheck` y `npm run build` verificados
+      OK.
+
+      **Verificado con 4 tests de integración reales**
+      (`src/test/effects.test.tsx`, 18/18 en total con las suites
+      anteriores): defaults al crear, el botón Reproducir se habilita
+      solo con grupo asignado, borrar un effect que estaba corriendo lo
+      saca de `runningEffectIds`, y el test más importante — reproducir
+      una onda cuadrada con timers controlados y confirmar
+      matemáticamente que alterna entre max y min en el instante exacto
+      del medio ciclo, y que Detener congela el valor. Nota técnica de
+      testing: el motor registra su `setInterval` al *montarse* (no al
+      arrancar un effect en particular), así que los timers falsos deben
+      activarse ANTES de renderizar el árbol de componentes — si no,
+      `vi.advanceTimersByTime` no le hace nada a un intervalo ya
+      registrado con el `setInterval` real.
+
+      Pendiente: no hay preview visual de la forma de onda en la UI (solo
+      números), y con múltiples efectos corriendo sobre el mismo tipo de
+      canal en fixtures compartidos, el último que corre en el loop del
+      motor "gana" en ese tick (no hay mezcla/prioridad entre efectos
+      superpuestos).
 - [x] **Groups** — entidad de primera clase. Nuevo `types/group.ts`
       (`Group { id, name, color }`) y `FixtureInstance.group` pasa de string
       libre sin usar a guardar siempre un `Group.id` real. `fixtureStore`
@@ -185,6 +235,6 @@
 3. Envolver en Tauri — andamiaje escrito (`src-tauri/`), **falta correr
    `cargo tauri dev`/`build` con Rust actualizado y confirmar que compila**
    antes de poder probar el `.exe` real
-4. Scenes (hecho) → Groups (hecho) → Chases (hecho) → Effects (pendiente)
+4. Scenes (hecho) → Groups (hecho) → Chases (hecho) → Effects (hecho)
 5. Visualizer 2D/3D
 6. Resto de pulido (Live Mode, Command Palette, Audio Reactive, doble monitor)

@@ -7,12 +7,13 @@ import { FixturesView } from "@/components/views/FixturesView";
 import { GroupsView } from "@/components/groups/GroupsView";
 import { ScenesView } from "@/components/scenes/ScenesView";
 import { ChasesView } from "@/components/chases/ChasesView";
+import { EffectsView } from "@/components/effects/EffectsView";
+import { useEffectsEngine } from "@/lib/effectEngine";
 import { PlaceholderView } from "@/components/views/PlaceholderView";
 
 // A qué fase del plan (sección 33 del brief) corresponde cada sección del
 // Sidebar que todavía no está implementada.
 const PENDING_PHASE: Record<string, string> = {
-  Effects: "Fase 4 — Programming",
   Timeline: "Fase 4 — Programming",
   "Audio Reactive": "Fase 5 — Live",
   Universes: "el motor DMX (fuera del alcance frontend de las Fases 1-6)",
@@ -20,11 +21,22 @@ const PENDING_PHASE: Record<string, string> = {
   Settings: "una fase de configuración general aún no planificada",
 };
 
+/** Monta useEffectsEngine dentro del árbol de FixtureStoreProvider — no
+ *  puede llamarse en App() directamente porque el contexto todavía no
+ *  existe en ese punto (App es quien renderiza el Provider, no un hijo
+ *  suyo). Así el motor corre siempre, sin importar qué sección del
+ *  Sidebar esté abierta — ver comentario en lib/effectEngine.ts. */
+function EffectsEngineMount() {
+  useEffectsEngine();
+  return null;
+}
+
 export default function App() {
   const [section, setSection] = useState("Dashboard");
 
   return (
     <FixtureStoreProvider>
+      <EffectsEngineMount />
       <div className="flex h-screen flex-col bg-bg">
         <Topbar
           showName="Concierto 01"
@@ -46,6 +58,7 @@ export default function App() {
           {section === "Groups" ? <GroupsView /> : null}
           {section === "Scenes" ? <ScenesView /> : null}
           {section === "Chases" ? <ChasesView /> : null}
+          {section === "Effects" ? <EffectsView /> : null}
           {PENDING_PHASE[section] ? (
             <PlaceholderView section={section} phase={PENDING_PHASE[section]} />
           ) : null}

@@ -4,6 +4,7 @@ import type { Scene } from "@/types/scene";
 import type { Group } from "@/types/group";
 import { GROUP_COLORS } from "@/types/group";
 import type { Chase, ChaseStep } from "@/types/chase";
+import type { Effect } from "@/types/effect";
 import { seedDefinitions, seedInstances } from "@/data/fixtureLibrary";
 
 function makeId(prefix: string): string {
@@ -28,6 +29,12 @@ interface FixtureStoreState {
   activeSceneId: string | null;
   groups: Group[];
   chases: Chase[];
+  effects: Effect[];
+  /** Ids de Effect corriendo AHORA. Deliberadamente NO se persiste entre
+   *  recargas de página (ver loadInitialState y el useEffect de guardado)
+   *  — al recargar, ningún efecto debería seguir "corriendo" porque no
+   *  hay nada real detrás todavía (sin motor DMX conectado al frontend). */
+  runningEffectIds: string[];
 }
 
 interface FixtureStoreValue extends FixtureStoreState {
@@ -70,6 +77,12 @@ interface FixtureStoreValue extends FixtureStoreState {
   updateChaseStep: (chaseId: string, stepId: string, patch: Partial<Omit<ChaseStep, "id">>) => void;
   /** Mueve un step una posición hacia arriba (-1) o abajo (+1) en la secuencia. */
   moveChaseStep: (chaseId: string, stepId: string, direction: -1 | 1) => void;
+  addEffect: (name: string) => Effect;
+  renameEffect: (effectId: string, name: string) => void;
+  removeEffect: (effectId: string) => void;
+  updateEffect: (effectId: string, patch: Partial<Omit<Effect, "id" | "createdAt">>) => void;
+  startEffect: (effectId: string) => void;
+  stopEffect: (effectId: string) => void;
 }
 
 function loadInitialState(): FixtureStoreState {
@@ -88,6 +101,8 @@ function loadInitialState(): FixtureStoreState {
         activeSceneId: parsed.activeSceneId ?? null,
         groups: parsed.groups ?? [],
         chases: parsed.chases ?? [],
+        effects: parsed.effects ?? [],
+        runningEffectIds: [], // nunca se restaura desde localStorage, ver comentario en el tipo
       };
     }
   } catch {
@@ -102,6 +117,8 @@ function loadInitialState(): FixtureStoreState {
     activeSceneId: null,
     groups: [],
     chases: [],
+    effects: [],
+    runningEffectIds: [],
   };
 }
 
@@ -118,7 +135,11 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
 
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      // runningEffectIds es deliberadamente efímero (ver comentario en el
+      // tipo) — se excluye para que localStorage no acumule ruido de una
+      // sesión de reproducción que ya terminó.
+      const { runningEffectIds: _runningEffectIds, ...persisted } = state;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(persisted));
     } catch {
       // Si falla el guardado (modo privado, cuota llena), se sigue en memoria.
     }
@@ -421,6 +442,66 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
     }));
   }, []);
 
+  const addEffect = useCallback(
+    (name: string): Effect => {
+      // Mismo cuidado que en addChase/addGroup: el objeto se construye
+      // ANTES de llamar a setState (ver comentario ahí — no depender de
+      // que el updater corra de forma síncrona).
+      const created: Effect = {
+        id: makeId("effect"),
+        name: name.trim() || `Effect ${state.effects.length + 1}`,
+        groupId: null,
+        channelType: "DIMMER",
+        waveform: "sine",
+        speedCpm: 20,
+        min: 0,
+        max: 255,
+        phaseOffsetDeg: 0,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      setState((s) => ({ ...s, effects: [...s.effects, created] }));
+      return created;
+    },
+    [state.effects.length],
+  );
+
+  const renameEffect = useCallback((effectId: string, name: string) => {
+    setState((s) => ({
+      ...s,
+      effects: s.effects.map((e) =>
+        e.id === effectId ? { ...e, name: name.trim() || e.name, updatedAt: Date.now() } : e,
+      ),
+    }));
+  }, []);
+
+  const removeEffect = useCallback((effectId: string) => {
+    setState((s) => ({
+      ...s,
+      effects: s.effects.filter((e) => e.id !== effectId),
+      runningEffectIds: s.runningEffectIds.filter((id) => id !== effectId),
+    }));
+  }, []);
+
+  const updateEffect = useCallback((effectId: string, patch: Partial<Omit<Effect, "id" | "createdAt">>) => {
+    setState((s) => ({
+      ...s,
+      effects: s.effects.map((e) => (e.id === effectId ? { ...e, ...patch, updatedAt: Date.now() } : e)),
+    }));
+  }, []);
+
+  const startEffect = useCallback((effectId: string) => {
+    setState((s) =>
+      s.runningEffectIds.includes(effectId)
+        ? s
+        : { ...s, runningEffectIds: [...s.runningEffectIds, effectId] },
+    );
+  }, []);
+
+  const stopEffect = useCallback((effectId: string) => {
+    setState((s) => ({ ...s, runningEffectIds: s.runningEffectIds.filter((id) => id !== effectId) }));
+  }, []);
+
   const selectedInstance = useMemo(
     () => state.instances.find((i) => i.id === state.selectedInstanceId) ?? null,
     [state.instances, state.selectedInstanceId],
@@ -461,6 +542,12 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
     removeChaseStep,
     updateChaseStep,
     moveChaseStep,
+    addEffect,
+    renameEffect,
+    removeEffect,
+    updateEffect,
+    startEffect,
+    stopEffect,
   };
 
   return <FixtureStoreContext.Provider value={value}>{children}</FixtureStoreContext.Provider>;
