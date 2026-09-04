@@ -222,7 +222,21 @@
 
 ## 🔲 Pendiente — Visualizer y extras
 
-- [ ] Visualizer 2D/3D (hoy es un placeholder vacío en el Dashboard)
+- [x] **Visualizer 2D** — primera versión funcional en
+      `components/visualizer/StageVisualizer.tsx`, ya no es un placeholder
+      vacío. Cada fixture del rig es un punto de luz cuyo color (RGB si el
+      fixture los tiene) y brillo (canal Dimmer) reflejan `liveValues` EN
+      VIVO — ahora que Scenes/Chases/Effects escriben ahí de verdad, el
+      Visualizer tiene algo real y dinámico que mostrar. El anillo del
+      punto usa el color del Group si el fixture está agrupado.
+      **Alcance acotado deliberadamente**: layout automático ordenado por
+      dirección DMX (fila/grid), NO posicionamiento manual tipo "planta
+      de escenario", y sin vista 3D — eso queda pendiente. `npm run
+      typecheck` y `npm run build` verificados OK. **Sin tests
+      automatizados para este componente todavía** (a diferencia de
+      Scenes/Groups/Chases/Effects) — es puramente visual/derivado de
+      `liveValues` ya testeado en los otros suites, el riesgo de bugs de
+      lógica es bajo, pero sigue sin cobertura propia.
 - [ ] Live Mode separado
 - [ ] Command Palette / atajos globales
 - [ ] Audio Reactive
@@ -236,5 +250,5 @@
    `cargo tauri dev`/`build` con Rust actualizado y confirmar que compila**
    antes de poder probar el `.exe` real
 4. Scenes (hecho) → Groups (hecho) → Chases (hecho) → Effects (hecho)
-5. Visualizer 2D/3D
+5. Visualizer 2D (hecho, básico) → posicionamiento manual + 3D (pendientes)
 6. Resto de pulido (Live Mode, Command Palette, Audio Reactive, doble monitor)

@@ -21,6 +21,7 @@ src/
   components/groups/     GroupsView — crear/renombrar/borrar grupos, asignar fixtures, control por lote (Fase 4)
   components/chases/     ChasesView — secuencias de escenas con fade/hold, reproducir/detener (Fase 4)
   components/effects/    EffectsView — generadores paramétricos (seno/cuadrada/etc.) sobre un grupo (Fase 4)
+  components/visualizer/ StageVisualizer — puntos de luz en vivo, color/brillo real desde liveValues
   components/views/      DashboardView, FixturesView, PlaceholderView
   types/fixture.ts       Modelo de datos (FixtureDefinition, FixtureInstance, FixtureChannel)
   types/scene.ts          Modelo de datos de Scenes (foto de liveValues por fixture/canal)
