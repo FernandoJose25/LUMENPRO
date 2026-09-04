@@ -63,7 +63,54 @@
       abajo, `npm test`) — guardar/recuperar/re-grabar/borrar simulados con
       clics de usuario de verdad (`@testing-library/user-event`), no solo
       lectura de código.
-- [ ] Editor de chases (secuencias de escenas con tiempos/crossfade)
+- [x] **Chases** (secuencias de escenas con tiempos/crossfade). Nuevo
+      `types/chase.ts` (`Chase { steps: ChaseStep[], loop }`, cada
+      `ChaseStep` referencia una `Scene` real por `sceneId` — no duplica
+      valores de canal, así que editar una escena después actualiza a
+      todos los chases que la usan). `fixtureStore` agrega CRUD completo
+      (`addChase`, `renameChase`, `removeChase`, `setChaseLoop`,
+      `addChaseStep`, `removeChaseStep`, `updateChaseStep`,
+      `moveChaseStep`). Motor de reproducción nuevo en
+      `lib/chasePlayer.ts` (`useChasePlayer`): corre en el navegador
+      (`setInterval` a ~25fps, no hay motor DMX conectado al frontend
+      todavía — ver AUDIT.md §8), interpola linealmente `liveValues` desde
+      el valor en vivo actual (no desde un valor "teórico" del step
+      anterior) hasta el objetivo de cada escena, con fade + hold
+      independientes por step. Nueva vista `components/chases/ChasesView.tsx`
+      — antes "Chases" en el Sidebar caía en PlaceholderView: panel
+      izquierdo crea/renombra/borra chases; panel derecho edita la
+      secuencia (elegir escena de un `<select>`, ajustar fade/hold en ms,
+      reordenar ↑↓, quitar step) con controles ▶ Reproducir / ■ Detener,
+      toggle de Loop e indicador de progreso en vivo (step/fase/%).
+      `npm run typecheck` y `npm run build` verificados OK.
+
+      **Verificado con tests de integración reales** (`npm test`, 5 tests
+      en `src/test/chases.test.tsx`): crear chase + agregar steps con
+      tiempos por defecto, reordenar invierte la secuencia, quitar step,
+      toggle de loop persiste, y el test más importante — reproducir con
+      timers controlados (`vi.useFakeTimers`) y confirmar matemáticamente
+      que el valor interpola a mitad de camino, llega exacto al valor
+      objetivo al terminar cada fade, y que detener congela el valor en
+      vez de seguir animando.
+
+      **Bug real encontrado y arreglado en el proceso** (no solo de
+      tests): `addChase`/`addGroup` (y `saveScene`, corregido por las
+      dudas) devolvían el objeto recién creado leyendo una variable que
+      se asignaba *dentro* del callback de `setState`, asumiendo que React
+      ejecuta ese callback de forma síncrona antes de que la función
+      retorne. Esa suposición no está garantizada por React, y de hecho
+      fallaba en un caso de uso real: mover un fader y guardar una escena
+      justo antes de crear un chase. El fix: construir el objeto completo
+      *antes* de llamar a `setState`, no depender de la ejecución síncrona
+      del updater. Este bug pudo haber estado latente en Groups desde el
+      commit anterior sin que ningún test lo detectara — los tests de
+      Groups nunca probaron crear un grupo *después* de otras acciones en
+      el mismo tick.
+
+      Sigue pendiente: Effects (generadores paramétricos). Chases no
+      soporta todavía "empezar desde el step N" ni click para saltar a un
+      step específico durante la reproducción — solo Reproducir desde el
+      principio y Detener.
 - [ ] Motor de efectos (generadores paramétricos: sine, chase de color, etc.)
 - [x] **Groups** — entidad de primera clase. Nuevo `types/group.ts`
       (`Group { id, name, color }`) y `FixtureInstance.group` pasa de string
@@ -138,6 +185,6 @@
 3. Envolver en Tauri — andamiaje escrito (`src-tauri/`), **falta correr
    `cargo tauri dev`/`build` con Rust actualizado y confirmar que compila**
    antes de poder probar el `.exe` real
-4. Scenes (hecho) → Groups (hecho) → Chases/Effects (pendientes)
+4. Scenes (hecho) → Groups (hecho) → Chases (hecho) → Effects (pendiente)
 5. Visualizer 2D/3D
 6. Resto de pulido (Live Mode, Command Palette, Audio Reactive, doble monitor)

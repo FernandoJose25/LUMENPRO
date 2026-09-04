@@ -19,15 +19,18 @@ src/
   components/fixtures/   FixtureManager, FixtureEditor, FixtureControl
   components/scenes/     ScenesPanel + ScenesView — guardar/recuperar/renombrar/borrar escenas (Fase 4)
   components/groups/     GroupsView — crear/renombrar/borrar grupos, asignar fixtures, control por lote (Fase 4)
+  components/chases/     ChasesView — secuencias de escenas con fade/hold, reproducir/detener (Fase 4)
   components/views/      DashboardView, FixturesView, PlaceholderView
   types/fixture.ts       Modelo de datos (FixtureDefinition, FixtureInstance, FixtureChannel)
   types/scene.ts          Modelo de datos de Scenes (foto de liveValues por fixture/canal)
   types/group.ts          Modelo de datos de Groups (Group { id, name, color })
+  types/chase.ts           Modelo de datos de Chases (Chase { steps: ChaseStep[], loop }, cada step referencia una Scene)
   data/fixtureLibrary.ts Semilla: tu rig real (2x Orus 280W, 4x LPC007) — ver AUDIT.md §7.2
   lib/fixtureStore.tsx   Store con persistencia en localStorage (placeholder hasta Tauri+SQLite).
-                          Incluye liveValues, CRUD de Scenes y CRUD de Groups.
+                          Incluye liveValues, CRUD de Scenes, Groups y Chases.
+  lib/chasePlayer.ts     Motor de reproducción de Chases (interpolación en el navegador, ver AUDIT.md §8)
   lib/utils.ts           helper cn()
-  App.tsx                 Enruta Dashboard / Fixtures / Groups / Scenes / placeholders por fase
+  App.tsx                 Enruta Dashboard / Fixtures / Groups / Scenes / Chases / placeholders por fase
   test/                   Tests de integración (Vitest + Testing Library + jsdom) — `npm test`
 dmx-engine/               Motor DMX en Rust (crate independiente, ver AUDIT.md §8)
 src-tauri/                Andamiaje de la app de escritorio (ver PASOS-PENDIENTES.md)

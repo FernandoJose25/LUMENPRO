@@ -3,6 +3,7 @@ import type { FixtureDefinition, FixtureInstance } from "@/types/fixture";
 import type { Scene } from "@/types/scene";
 import type { Group } from "@/types/group";
 import { GROUP_COLORS } from "@/types/group";
+import type { Chase, ChaseStep } from "@/types/chase";
 import { seedDefinitions, seedInstances } from "@/data/fixtureLibrary";
 
 function makeId(prefix: string): string {
@@ -26,6 +27,7 @@ interface FixtureStoreState {
    *  en la UI; no es una garantía de que nada se haya movido desde entonces. */
   activeSceneId: string | null;
   groups: Group[];
+  chases: Chase[];
 }
 
 interface FixtureStoreValue extends FixtureStoreState {
@@ -59,6 +61,15 @@ interface FixtureStoreValue extends FixtureStoreState {
    *  el grupo a 200" sin importar en qué índice de canal esté el Dimmer
    *  de cada fixture — LPC007 y Orus no lo tienen en el mismo índice). */
   setGroupChannelByType: (groupId: string, channelType: string, value: number) => void;
+  addChase: (name: string) => Chase;
+  renameChase: (chaseId: string, name: string) => void;
+  removeChase: (chaseId: string) => void;
+  setChaseLoop: (chaseId: string, loop: boolean) => void;
+  addChaseStep: (chaseId: string, sceneId: string) => void;
+  removeChaseStep: (chaseId: string, stepId: string) => void;
+  updateChaseStep: (chaseId: string, stepId: string, patch: Partial<Omit<ChaseStep, "id">>) => void;
+  /** Mueve un step una posición hacia arriba (-1) o abajo (+1) en la secuencia. */
+  moveChaseStep: (chaseId: string, stepId: string, direction: -1 | 1) => void;
 }
 
 function loadInitialState(): FixtureStoreState {
@@ -76,6 +87,7 @@ function loadInitialState(): FixtureStoreState {
         scenes: parsed.scenes ?? [],
         activeSceneId: parsed.activeSceneId ?? null,
         groups: parsed.groups ?? [],
+        chases: parsed.chases ?? [],
       };
     }
   } catch {
@@ -89,6 +101,7 @@ function loadInitialState(): FixtureStoreState {
     scenes: [],
     activeSceneId: null,
     groups: [],
+    chases: [],
   };
 }
 
@@ -184,20 +197,26 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
 
   const saveScene = useCallback(
     (name: string): Scene => {
+      // La escena se construye completa ANTES de llamar a setState — no
+      // dentro del updater. React no garantiza que el updater corra de
+      // forma síncrona (es una optimización interna, no un contrato
+      // público); cuando ya hay otras actualizaciones de estado pendientes
+      // en el mismo tick (p. ej. moviste un fader justo antes), esa
+      // suposición falla y el valor devuelto queda a medio construir.
+      // `state` (closure del último render) es suficientemente reciente
+      // para esto — no es una operación que necesite el estado "del
+      // futuro" que solo existe dentro del updater.
       const scene: Scene = {
         id: makeId("scene"),
         name: name.trim() || "Sin nombre",
-        values: {},
+        values: captureSnapshot(state),
         createdAt: Date.now(),
         updatedAt: Date.now(),
       };
-      setState((s) => {
-        scene.values = captureSnapshot(s);
-        return { ...s, scenes: [...s.scenes, scene], activeSceneId: scene.id };
-      });
+      setState((s) => ({ ...s, scenes: [...s.scenes, scene], activeSceneId: scene.id }));
       return scene;
     },
-    [captureSnapshot],
+    [captureSnapshot, state],
   );
 
   /** Re-graba una escena existente con el estado actual del rig — "actualizar
@@ -245,18 +264,18 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
     });
   }, []);
 
-  const addGroup = useCallback((name: string): Group => {
-    let created!: Group;
-    setState((s) => {
-      created = {
+  const addGroup = useCallback(
+    (name: string): Group => {
+      const created: Group = {
         id: makeId("group"),
-        name: name.trim() || `Grupo ${s.groups.length + 1}`,
-        color: GROUP_COLORS[s.groups.length % GROUP_COLORS.length],
+        name: name.trim() || `Grupo ${state.groups.length + 1}`,
+        color: GROUP_COLORS[state.groups.length % GROUP_COLORS.length],
       };
-      return { ...s, groups: [...s.groups, created] };
-    });
-    return created;
-  }, []);
+      setState((s) => ({ ...s, groups: [...s.groups, created] }));
+      return created;
+    },
+    [state.groups.length],
+  );
 
   const renameGroup = useCallback((groupId: string, name: string) => {
     setState((s) => ({
@@ -304,6 +323,104 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
     });
   }, []);
 
+  const addChase = useCallback(
+    (name: string): Chase => {
+      const created: Chase = {
+        id: makeId("chase"),
+        name: name.trim() || `Chase ${state.chases.length + 1}`,
+        steps: [],
+        loop: true,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      setState((s) => ({ ...s, chases: [...s.chases, created] }));
+      return created;
+    },
+    [state.chases.length],
+  );
+
+  const renameChase = useCallback((chaseId: string, name: string) => {
+    setState((s) => ({
+      ...s,
+      chases: s.chases.map((c) =>
+        c.id === chaseId ? { ...c, name: name.trim() || c.name, updatedAt: Date.now() } : c,
+      ),
+    }));
+  }, []);
+
+  const removeChase = useCallback((chaseId: string) => {
+    setState((s) => ({ ...s, chases: s.chases.filter((c) => c.id !== chaseId) }));
+  }, []);
+
+  const setChaseLoop = useCallback((chaseId: string, loop: boolean) => {
+    setState((s) => ({
+      ...s,
+      chases: s.chases.map((c) => (c.id === chaseId ? { ...c, loop, updatedAt: Date.now() } : c)),
+    }));
+  }, []);
+
+  /** Agrega un step al final referenciando una Scene existente, con
+   *  tiempos por defecto razonables (1s de fade, 3s de hold) que el
+   *  usuario puede ajustar después con updateChaseStep. */
+  const addChaseStep = useCallback((chaseId: string, sceneId: string) => {
+    setState((s) => ({
+      ...s,
+      chases: s.chases.map((c) =>
+        c.id === chaseId
+          ? {
+              ...c,
+              steps: [...c.steps, { id: makeId("step"), sceneId, fadeMs: 1000, holdMs: 3000 }],
+              updatedAt: Date.now(),
+            }
+          : c,
+      ),
+    }));
+  }, []);
+
+  const removeChaseStep = useCallback((chaseId: string, stepId: string) => {
+    setState((s) => ({
+      ...s,
+      chases: s.chases.map((c) =>
+        c.id === chaseId
+          ? { ...c, steps: c.steps.filter((st) => st.id !== stepId), updatedAt: Date.now() }
+          : c,
+      ),
+    }));
+  }, []);
+
+  const updateChaseStep = useCallback(
+    (chaseId: string, stepId: string, patch: Partial<Omit<ChaseStep, "id">>) => {
+      setState((s) => ({
+        ...s,
+        chases: s.chases.map((c) =>
+          c.id === chaseId
+            ? {
+                ...c,
+                steps: c.steps.map((st) => (st.id === stepId ? { ...st, ...patch } : st)),
+                updatedAt: Date.now(),
+              }
+            : c,
+        ),
+      }));
+    },
+    [],
+  );
+
+  const moveChaseStep = useCallback((chaseId: string, stepId: string, direction: -1 | 1) => {
+    setState((s) => ({
+      ...s,
+      chases: s.chases.map((c) => {
+        if (c.id !== chaseId) return c;
+        const index = c.steps.findIndex((st) => st.id === stepId);
+        const target = index + direction;
+        if (index === -1 || target < 0 || target >= c.steps.length) return c;
+        const steps = [...c.steps];
+        [steps[index], steps[target]] = [steps[target], steps[index]];
+        return { ...c, steps, updatedAt: Date.now() };
+      }),
+    }));
+  }, []);
+
   const selectedInstance = useMemo(
     () => state.instances.find((i) => i.id === state.selectedInstanceId) ?? null,
     [state.instances, state.selectedInstanceId],
@@ -336,6 +453,14 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
     removeGroup,
     setInstanceGroup,
     setGroupChannelByType,
+    addChase,
+    renameChase,
+    removeChase,
+    setChaseLoop,
+    addChaseStep,
+    removeChaseStep,
+    updateChaseStep,
+    moveChaseStep,
   };
 
   return <FixtureStoreContext.Provider value={value}>{children}</FixtureStoreContext.Provider>;
