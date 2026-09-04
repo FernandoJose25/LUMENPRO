@@ -1,8 +1,11 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 
-const SECTIONS = [
+// Exportado para que CommandPalette (App.tsx) pueda generar comandos
+// "Ir a <sección>" sin mantener una segunda lista duplicada.
+export const SECTIONS = [
   "Dashboard",
+  "Live",
   "Fixtures",
   "Groups",
   "Scenes",

@@ -1,13 +1,15 @@
 import { useState } from "react";
-import { Sidebar } from "@/components/layout/Sidebar";
+import { Sidebar, SECTIONS } from "@/components/layout/Sidebar";
 import { Topbar } from "@/components/layout/Topbar";
-import { FixtureStoreProvider } from "@/lib/fixtureStore";
+import { FixtureStoreProvider, useFixtureStore } from "@/lib/fixtureStore";
 import { DashboardView } from "@/components/views/DashboardView";
 import { FixturesView } from "@/components/views/FixturesView";
 import { GroupsView } from "@/components/groups/GroupsView";
 import { ScenesView } from "@/components/scenes/ScenesView";
 import { ChasesView } from "@/components/chases/ChasesView";
 import { EffectsView } from "@/components/effects/EffectsView";
+import { LiveView } from "@/components/live/LiveView";
+import { CommandPalette } from "@/components/command-palette/CommandPalette";
 import { useEffectsEngine } from "@/lib/effectEngine";
 import { PlaceholderView } from "@/components/views/PlaceholderView";
 
@@ -32,38 +34,50 @@ function EffectsEngineMount() {
 }
 
 export default function App() {
-  const [section, setSection] = useState("Dashboard");
-
   return (
     <FixtureStoreProvider>
       <EffectsEngineMount />
-      <div className="flex h-screen flex-col bg-bg">
-        <Topbar
-          showName="Concierto 01"
-          dmxConnected={false}
-          universe={1}
-          bpm={128}
-          cpu={18}
-          fps={60}
-          onBlackout={() => {
-            /* Sin motor DMX todavía — ver AUDIT.md. */
-          }}
-        />
-
-        <div className="flex min-h-0 flex-1">
-          <Sidebar active={section} onSelect={setSection} />
-
-          {section === "Dashboard" ? <DashboardView /> : null}
-          {section === "Fixtures" ? <FixturesView /> : null}
-          {section === "Groups" ? <GroupsView /> : null}
-          {section === "Scenes" ? <ScenesView /> : null}
-          {section === "Chases" ? <ChasesView /> : null}
-          {section === "Effects" ? <EffectsView /> : null}
-          {PENDING_PHASE[section] ? (
-            <PlaceholderView section={section} phase={PENDING_PHASE[section]} />
-          ) : null}
-        </div>
-      </div>
+      <AppShell />
     </FixtureStoreProvider>
+  );
+}
+
+/** Todo lo que necesita leer del fixtureStore (Blackout real de la Topbar,
+ *  Command Palette) vive aquí en vez de en App() — mismo motivo que
+ *  EffectsEngineMount: App() es quien renderiza <FixtureStoreProvider>,
+ *  así que su propio cuerpo todavía no puede leer ese contexto. */
+function AppShell() {
+  const [section, setSection] = useState("Dashboard");
+  const { blackout } = useFixtureStore();
+
+  return (
+    <div className="flex h-screen flex-col bg-bg">
+      <Topbar
+        showName="Concierto 01"
+        dmxConnected={false}
+        universe={1}
+        bpm={128}
+        cpu={18}
+        fps={60}
+        onBlackout={blackout}
+      />
+
+      <div className="flex min-h-0 flex-1">
+        <Sidebar active={section} onSelect={setSection} />
+
+        {section === "Dashboard" ? <DashboardView /> : null}
+        {section === "Live" ? <LiveView /> : null}
+        {section === "Fixtures" ? <FixturesView /> : null}
+        {section === "Groups" ? <GroupsView /> : null}
+        {section === "Scenes" ? <ScenesView /> : null}
+        {section === "Chases" ? <ChasesView /> : null}
+        {section === "Effects" ? <EffectsView /> : null}
+        {PENDING_PHASE[section] ? (
+          <PlaceholderView section={section} phase={PENDING_PHASE[section]} />
+        ) : null}
+      </div>
+
+      <CommandPalette sections={SECTIONS} activeSection={section} onSelectSection={setSection} />
+    </div>
   );
 }

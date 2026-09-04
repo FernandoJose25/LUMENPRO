@@ -83,6 +83,17 @@ interface FixtureStoreValue extends FixtureStoreState {
   updateEffect: (effectId: string, patch: Partial<Omit<Effect, "id" | "createdAt">>) => void;
   startEffect: (effectId: string) => void;
   stopEffect: (effectId: string) => void;
+  /** Blackout real (Live Mode + Topbar) — pone TODO canal de TODO fixture
+   *  patcheado a 0, no solo los canales ya tocados en liveValues (a
+   *  diferencia de captureSnapshot, que sí filtra por eso para Scenes).
+   *  También detiene todos los Effects corriendo (runningEffectIds), para
+   *  que el motor de Effects no vuelva a subir un valor en el próximo
+   *  tick. NO detiene un Chase reproduciéndose — ese estado vive en el
+   *  hook local de quien lo montó (ChasesView o LiveView), no en el
+   *  store; si un chase sigue corriendo, su próximo tick pisa el blackout.
+   *  Quien dispare blackout desde una vista con un chase activo debe
+   *  también llamar a `stop()` del chase player local (ver LiveView). */
+  blackout: () => void;
 }
 
 function loadInitialState(): FixtureStoreState {
@@ -502,6 +513,21 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
     setState((s) => ({ ...s, runningEffectIds: s.runningEffectIds.filter((id) => id !== effectId) }));
   }, []);
 
+  const blackout = useCallback(() => {
+    setState((s) => {
+      const liveValues: Record<string, Record<string, number>> = {};
+      for (const instance of s.instances) {
+        const def = s.definitions.find((d) => d.id === instance.definitionId);
+        if (!def) continue;
+        liveValues[instance.id] = {};
+        for (const channel of def.channels) {
+          liveValues[instance.id][channel.id] = 0;
+        }
+      }
+      return { ...s, liveValues, runningEffectIds: [] };
+    });
+  }, []);
+
   const selectedInstance = useMemo(
     () => state.instances.find((i) => i.id === state.selectedInstanceId) ?? null,
     [state.instances, state.selectedInstanceId],
@@ -548,6 +574,7 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
     updateEffect,
     startEffect,
     stopEffect,
+    blackout,
   };
 
   return <FixtureStoreContext.Provider value={value}>{children}</FixtureStoreContext.Provider>;

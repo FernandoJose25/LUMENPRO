@@ -5,8 +5,11 @@
 ## ✅ Completado
 
 - Fase 1 — Design System (tokens, Button, Panel, Fader, Tabs, StatusIndicator)
-- Fase 2 — Workspace shell (Sidebar, Topbar, Blackout, paneles redimensionables)
+- Fase 2 — Workspace shell (Sidebar, Topbar, Blackout real, paneles redimensionables)
 - Fase 3 (parcial) — Fixture Manager, Fixture Editor, Fixture Control dinámico
+- **Live Mode** (`components/live/LiveView.tsx`) y **Command Palette**
+  (`components/command-palette/CommandPalette.tsx`, atajo Ctrl/Cmd+K) —
+  detalle completo más abajo, en "Pendiente — Visualizer y extras"
 - Repo Git inicializado y subido a GitHub
 - **Motor DMX en Rust** (`dmx-engine/`, crate independiente) — universo de
   512 canales, hilo de salida a FPS fijo, driver Enttec DMX USB PRO +
@@ -237,8 +240,76 @@
       Scenes/Groups/Chases/Effects) — es puramente visual/derivado de
       `liveValues` ya testeado en los otros suites, el riesgo de bugs de
       lógica es bajo, pero sigue sin cobertura propia.
-- [ ] Live Mode separado
-- [ ] Command Palette / atajos globales
+- [x] **Live Mode** — pantalla de operación separada de edición (sección
+      "Live" nueva en el Sidebar, `components/live/LiveView.tsx`). No hay
+      crear/editar/borrar acá — todo lo que expone ya existía como lógica
+      real en fixtureStore/chasePlayer/effectEngine (Fase 4), esto solo lo
+      junta con controles grandes pensados para tocarse rápido durante un
+      show: recall de Scenes, selector + ▶ Reproducir/■ Detener de un
+      Chase (mismo `useChasePlayer` que ChasesView, montado localmente
+      acá — sigue existiendo un solo motor de chase activo a la vez, ver
+      limitación ya documentada arriba en Chases), toggle ▶/■ por Effect
+      (usa el motor global de `effectEngine.ts`, así que Live Mode y
+      EffectsView ven y controlan el mismo estado), y un fader master por
+      tipo de canal para cada Group.
+
+      **Bug real cerrado en el proceso, no solo nueva UI**: el botón
+      Blackout de la Topbar existía desde Fase 2 pero no hacía nada («Sin
+      motor DMX todavía» en el comentario original). Se agregó
+      `fixtureStore.blackout()` — pone a 0 TODO canal de TODO fixture
+      patcheado (no solo los ya tocados, a diferencia de guardar una
+      Scene) y vacía `runningEffectIds` — y ahora tanto la Topbar como el
+      botón grande de Live Mode llaman a la misma acción (una sola fuente
+      de verdad, no dos implementaciones). Como consecuencia, `App.tsx` se
+      reorganizó: el estado de sección y el render de
+      Topbar/Sidebar/vistas se movió a un nuevo componente `AppShell`
+      (hijo de `FixtureStoreProvider`), porque `App()` en sí no puede leer
+      el contexto que él mismo está montando — mismo motivo por el que ya
+      existía `EffectsEngineMount`.
+
+      Nota: `blackout()` no detiene un Chase en reproducción por su
+      cuenta (ese estado vive en el hook local de quien lo montó, no en
+      el store) — si hay un chase corriendo hay que pararlo aparte con el
+      botón Detener.
+
+      `npm run typecheck` y `npm run build` verificados OK. **Verificado
+      con 5 tests de integración reales** (`src/test/live.test.tsx`):
+      recuperar una escena desde Live Mode aplica sus valores, toggle de
+      effect actualiza `runningEffectIds`, mover el fader master de un
+      grupo escribe en `liveValues` del miembro, Blackout apaga el rig Y
+      para los effects corriendo, y reproducir/detener un chase desde
+      Live Mode (reusando el chase creado con la UI real de ChasesView vía
+      `rerender` de Testing Library, para no montar dos motores de chase
+      del mismo chase a la vez en el mismo test).
+
+- [x] **Command Palette** — atajo global Ctrl/Cmd+K (funciona parado en
+      cualquier sección, `components/command-palette/CommandPalette.tsx`,
+      montado una sola vez en `AppShell`), Esc cierra, ↑/↓ navega, Enter
+      ejecuta el resaltado. Comandos: "Ir a &lt;sección&gt;" por cada
+      entrada del Sidebar (`SECTIONS` ahora se exporta desde
+      `Sidebar.tsx` para no duplicar la lista), "Recuperar escena
+      &lt;nombre&gt;" por cada Scene, "Reproducir/Detener effect
+      &lt;nombre&gt;" por cada Effect (mismo motor global que Live Mode y
+      EffectsView), y Blackout.
+
+      Deliberadamente NO incluye "reproducir chase X" como comando
+      global — a diferencia de Effects, Chases no tiene un motor único:
+      se reproduce con un `useChasePlayer` local a quien lo abre
+      (ChasesView o LiveView), así que no hay un "chase actualmente en
+      reproducción" que un comando global pueda controlar desde cualquier
+      pantalla. El comando de navegación a Chases sigue disponible.
+
+      Hay un botón flotante abajo a la derecha ("Ctrl+K Comandos" / "⌘K
+      Comandos" en Mac) para quien no conozca el atajo — la paleta no
+      depende únicamente de saberse la combinación de teclas.
+
+      `npm run typecheck` y `npm run build` verificados OK. **Verificado
+      con 4 tests de integración reales**
+      (`src/test/commandPalette.test.tsx`): abrir con Ctrl+K y cerrar con
+      Esc, un comando "Ir a X" navega y cierra la paleta sola, recuperar
+      una escena desde un comando aplica sus valores, y Blackout desde un
+      comando apaga el rig.
+
 - [ ] Audio Reactive
 
 ## Orden recomendado
@@ -251,4 +322,5 @@
    antes de poder probar el `.exe` real
 4. Scenes (hecho) → Groups (hecho) → Chases (hecho) → Effects (hecho)
 5. Visualizer 2D (hecho, básico) → posicionamiento manual + 3D (pendientes)
-6. Resto de pulido (Live Mode, Command Palette, Audio Reactive, doble monitor)
+6. Live Mode (hecho) → Command Palette (hecho) → Audio Reactive, doble
+   monitor (pendientes)
