@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="beam" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#A66CFF" stop-opacity="0.95"/>
+      <stop offset="1" stop-color="#4C9AFF" stop-opacity="0.15"/>
+    </linearGradient>
+    <radialGradient id="pool" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#C7A6FF" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#4C9AFF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect x="64" y="64" width="896" height="896" rx="200" fill="#0A0A0D"/>
+  <rect x="64" y="64" width="896" height="896" rx="200" fill="none" stroke="#23232B" stroke-width="8"/>
+  <!-- haz de luz -->
+  <path d="M452 270 L572 270 L780 800 L244 800 Z" fill="url(#beam)"/>
+  <!-- charco de luz en el piso -->
+  <ellipse cx="512" cy="800" rx="290" ry="56" fill="url(#pool)"/>
+  <!-- cabeza del reflector -->
+  <rect x="412" y="186" width="200" height="104" rx="28" fill="#F5F5F7"/>
+  <rect x="440" y="270" width="144" height="22" rx="8" fill="#A66CFF"/>
+</svg>

@@ -1,70 +1,72 @@
-# LUMEN PRO — UI
+# LUMEN PRO — Consola de iluminación DMX
 
-Capa de frontend (Design System + Workspace shell) para la consola DMX
-LUMEN PRO. Ver `AUDIT.md` para el detalle completo de qué se implementó,
-qué se difirió y por qué.
+[![CI](https://github.com/FernandoJose25/LUMENPRO/actions/workflows/ci.yml/badge.svg)](https://github.com/FernandoJose25/LUMENPRO/actions/workflows/ci.yml)
+![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
+![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
+![Rust](https://img.shields.io/badge/Rust-motor%20DMX-000000?logo=rust)
+![Tauri](https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri&logoColor=white)
+
+Software de escritorio para controlar luces de escenario por **DMX512**: cabezas móviles, PARs y otros equipos. Es una alternativa propia a consolas como MA o Chamsys, pensada para el equipo real de mi empresa de eventos (2× cabezas móviles Beam 280 y 4× PAR LED).
+
+> **English summary:** Desktop DMX512 lighting console. React + TypeScript UI (design system, resizable workspace, fixture control, scenes, groups, chases with crossfades, parametric effects, live 2D visualizer) plus a Rust DMX engine (512-channel universe, fixed-FPS output thread, Enttec DMX USB PRO driver and a mock driver) exposed to the UI through Tauri 2 commands. Integration tests with Vitest + Testing Library and unit tests in Rust.
+
+![Dashboard de LUMEN PRO](docs/screenshots/dashboard.png)
+
+## Mi rol
+
+Lo diseñé y desarrollé solo, a partir de un brief de producto propio de 37 secciones: design system, UI, modelo de datos, motor DMX en Rust e integración con Tauri. La auditoría de lo construido frente al brief está en [AUDIT.md](AUDIT.md).
+
+## Qué hace
+
+- **Design system propio:** Button, Panel, Fader, Tabs e indicadores de estado, con tokens de color y tipografía.
+- **Workspace profesional:** sidebar, topbar con estado del DMX, paneles redimensionables, **Blackout** global y paleta de comandos (`Ctrl/Cmd + K`).
+- **Fixtures:** biblioteca, editor de canales y control dinámico. Los faders se generan según el perfil de cada equipo (pan/tilt, dimmer, color wheel, gobo, prisma, etc.).
+- **Scenes:** guardan una foto de los valores en vivo y luego se recuperan, re-graban o renombran.
+- **Groups:** agrupan fixtures para controlarlos por lote.
+- **Chases:** secuencias de escenas con fade y hold, en bucle o una sola vez.
+- **Effects:** generadores paramétricos (seno, cuadrada…) aplicados sobre un grupo, con un único motor de intervalos global.
+- **Visualizer 2D en vivo** con el color y el brillo reales que se están enviando.
+- **Motor DMX en Rust** (`dmx-engine/`):
+  - universo de 512 canales thread-safe;
+  - hilo de salida a FPS fijo;
+  - driver para **Enttec DMX USB PRO** por puerto serie;
+  - driver Mock para desarrollar sin hardware.
+- **App de escritorio con Tauri 2** (`src-tauri/`): expone el motor como comandos (`connect_enttec`, `set_channel`, `set_block`, `blackout`, `list_serial_ports`…).
 
 ## Stack
 
-React 18 + TypeScript (estricto) + Vite + Tailwind CSS +
-`react-resizable-panels`. Pensado para envolverse en Tauri 2 más
-adelante (sección 31 del brief original) sin cambios estructurales.
+| Capa | Tecnologías |
+|---|---|
+| UI | React 18, TypeScript estricto, Vite, Tailwind CSS, react-resizable-panels |
+| Estado | Store propio con Context + persistencia en `localStorage` |
+| Motor | Rust: crate `lumenpro_dmx`, hilos, `serialport` |
+| Escritorio | Tauri 2 |
+| Calidad | Vitest + Testing Library + jsdom (27 tests de integración), `cargo test` (8 tests), GitHub Actions |
 
 ## Estructura
 
 ```
-src/
-  components/ui/         Design System: Button, Panel, Fader, Tabs, StatusIndicator
-  components/layout/     Sidebar, Topbar, BlackoutButton
-  components/fixtures/   FixtureManager, FixtureEditor, FixtureControl
-  components/scenes/     ScenesPanel + ScenesView — guardar/recuperar/renombrar/borrar escenas (Fase 4)
-  components/groups/     GroupsView — crear/renombrar/borrar grupos, asignar fixtures, control por lote (Fase 4)
-  components/chases/     ChasesView — secuencias de escenas con fade/hold, reproducir/detener (Fase 4)
-  components/effects/    EffectsView — generadores paramétricos (seno/cuadrada/etc.) sobre un grupo (Fase 4)
-  components/visualizer/ StageVisualizer — puntos de luz en vivo, color/brillo real desde liveValues
-  components/views/      DashboardView, FixturesView, PlaceholderView
-  types/fixture.ts       Modelo de datos (FixtureDefinition, FixtureInstance, FixtureChannel)
-  types/scene.ts          Modelo de datos de Scenes (foto de liveValues por fixture/canal)
-  types/group.ts          Modelo de datos de Groups (Group { id, name, color })
-  types/chase.ts           Modelo de datos de Chases (Chase { steps: ChaseStep[], loop }, cada step referencia una Scene)
-  types/effect.ts          Modelo de datos de Effects (Effect { groupId, channelType, waveform, ... })
-  data/fixtureLibrary.ts Semilla: tu rig real (2x Orus 280W, 4x LPC007) — ver AUDIT.md §7.2
-  lib/fixtureStore.tsx   Store con persistencia en localStorage (placeholder hasta Tauri+SQLite).
-                          Incluye liveValues, CRUD de Scenes, Groups, Chases y Effects.
-  lib/chasePlayer.ts     Motor de reproducción de Chases (interpolación en el navegador, ver AUDIT.md §8)
-  lib/effectEngine.ts    Motor de reproducción de Effects — un único intervalo global, montado en App.tsx
-  lib/utils.ts           helper cn()
-  App.tsx                 Enruta Dashboard / Fixtures / Groups / Scenes / Chases / Effects / placeholders por fase
-  test/                   Tests de integración (Vitest + Testing Library + jsdom) — `npm test`
-dmx-engine/               Motor DMX en Rust (crate independiente, ver AUDIT.md §8)
-src-tauri/                Andamiaje de la app de escritorio (ver PASOS-PENDIENTES.md)
+src/components/   ui/ (design system) · layout/ · fixtures/ · scenes/ · groups/ · chases/ · effects/ · visualizer/ · live/ · command-palette/
+src/lib/          fixtureStore (estado + persistencia), chasePlayer, effectEngine
+src/types/        Modelo de datos: fixture, scene, group, chase, effect
+src/test/         Tests de integración
+dmx-engine/       Motor DMX en Rust (crate independiente)
+src-tauri/        App de escritorio Tauri 2 que envuelve el motor
 ```
 
-## Comandos
+## Correr el proyecto
 
 ```bash
 npm install
-npm run dev        # servidor de desarrollo (web)
-npm run build       # build de producción (web)
-npm run typecheck
-npm test            # tests de integración (Vitest + Testing Library + jsdom)
+npm run dev          # UI en el navegador
+npm test             # tests de integración
+npm run build        # typecheck + build de producción
+
+cd dmx-engine && cargo test           # motor DMX
+cd src-tauri && cargo check           # app de escritorio
+npm run tauri dev                     # app de escritorio con la UI
 ```
 
-### Motor DMX (Rust)
+## Estado y siguiente paso
 
-```bash
-cd dmx-engine
-cargo test              # 8/8 tests
-cargo run --bin smoke_test
-```
-
-### App de escritorio (Tauri)
-
-`src-tauri/` tiene el andamiaje base, pero **no verificado** contra un
-build real (ver PASOS-PENDIENTES.md). Requiere Rust actualizado vía
-`rustup` (no la versión de `apt`) y, en Linux, `libwebkit2gtk-4.1-dev`:
-
-```bash
-cargo install tauri-cli --version "^2"
-npm run tauri dev     # una vez que compile de verdad
-```
+UI de las fases 1–4 completa, y motor DMX y shell de Tauri compilando. El siguiente paso es conectar el store de la UI a los comandos de Tauri (`invoke`) para enviar DMX real desde la interfaz y probarlo con el hardware. El detalle está en [PASOS-PENDIENTES.md](PASOS-PENDIENTES.md).

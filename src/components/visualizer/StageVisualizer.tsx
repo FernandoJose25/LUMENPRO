@@ -45,8 +45,7 @@ export function StageVisualizer() {
           </div>
           <p className="mt-2 text-[11px] text-text-secondary">
             Color y brillo en vivo (Dimmer + RGB si el fixture los tiene). Layout automático por
-            dirección DMX — posicionamiento manual tipo planta de escenario y vista 3D quedan
-            pendientes, ver PASOS-PENDIENTES.md.
+            dirección DMX.
           </p>
         </div>
       )}

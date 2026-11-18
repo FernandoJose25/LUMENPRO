@@ -122,8 +122,7 @@ export function ScenesPanel() {
 
       <p className="mt-3 text-[11px] text-text-secondary">
         Clic: recuperar (aplica los canales guardados, sin tocar el resto del rig) · ⟳: re-grabar
-        con los valores actuales · doble clic: renombrar. Chases/Effects/Groups siguen
-        pendientes — ver PASOS-PENDIENTES.md.
+        con los valores actuales · doble clic: renombrar.
       </p>
     </Panel>
   );

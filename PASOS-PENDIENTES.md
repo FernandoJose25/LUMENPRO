@@ -22,15 +22,10 @@
   `engine_status`) que envuelven `lumenpro_dmx` como dependencia local. `npm
   install` con `@tauri-apps/cli`/`@tauri-apps/api` corrido y verificado; el
   build del frontend (`npm run build`, `npm run typecheck`) sigue pasando.
-  **`cargo check`/`cargo tauri dev` de `src-tauri` NO se pudo verificar en
-  este entorno**: el sandbox trae Rust 1.75 (vía `apt`) y las dependencias
-  actuales de Tauri 2 requieren un toolchain más nuevo (`edition2024`);
-  tampoco había `libwebkit2gtk-4.1-dev` instalable (mirror de Ubuntu
-  devolvía 404 para esos paquetes). Falta además generar los iconos reales
-  (ver `src-tauri/icons/README.md`) antes de poder correr `cargo tauri
-  build`. **Antes de dar este paso por cerrado, alguien con Rust actualizado
-  (`rustup`, no el `apt` de Ubuntu) y, si es posible, en Windows —el target
-  real del `.exe`— debe correr `cargo tauri dev` y arreglar lo que falle.**
+  **`cargo check` de `src-tauri` verificado en Windows con Rust 1.96**
+  (2026-11-17), con los iconos generados desde `src-tauri/icons/logo.svg`.
+  El CI lo repite en `windows-latest` en cada push. Falta conectar la UI a
+  estos comandos (`invoke`) y probar `npm run tauri dev` contra hardware real.
 
 ## 🔲 Pendiente — Fase 3 (cerrar Fixtures)
 
