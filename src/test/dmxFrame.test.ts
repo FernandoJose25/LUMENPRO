@@ -19,7 +19,7 @@ function frameWith(
   instances: FixtureInstance[] = seedInstances,
   definitions: FixtureDefinition[] = seedDefinitions,
 ) {
-  return buildFrame({ instances, definitions, liveValues, blackoutActive });
+  return buildFrame({ instances, definitions, liveValues, blackoutActive, master: 100, strobeActive: false });
 }
 
 describe("buildFrame — de los valores en vivo a los 512 canales", () => {
@@ -110,6 +110,67 @@ describe("Blackout — apaga sin mover las cabezas", () => {
     const frame = frameWith({}, true, [instance], [scanner]);
     expect(frame[99]).toBe(128); // Pan quieto
     expect(frame[100]).toBe(0); // Shutter cerrado
+  });
+});
+
+describe("Intensidad y estrobo generales", () => {
+  const base = {
+    instances: seedInstances,
+    definitions: seedDefinitions,
+    liveValues: {
+      [orus.id]: { [orusCh("DIMMER")]: 200, [orusCh("PAN")]: 180 },
+      [par1.id]: { [parCh("RED")]: 255 },
+    },
+    blackoutActive: false,
+    master: 100,
+    strobeActive: false,
+  };
+
+  it("la intensidad baja el dimmer y nada más", () => {
+    const frame = buildFrame({ ...base, master: 50 });
+    expect(frame[5]).toBe(100); // Dimmer de la cabeza
+    expect(frame[0]).toBe(180); // Pan
+    expect(frame.slice(32, 36)).toEqual([128, 255, 0, 0]); // PAR: dimmer a la mitad, color igual
+  });
+
+  it("un fixture sin dimmer baja sus colores", () => {
+    const definition = seedDefinitions[1];
+    const rgbOnly: FixtureDefinition = {
+      ...definition,
+      id: "rgb",
+      channels: definition.channels
+        .filter((c) => ["RED", "GREEN", "BLUE"].includes(c.type))
+        .map((c, i) => ({ ...c, index: i + 1 })),
+    };
+    const frame = buildFrame({
+      ...base,
+      instances: [{ ...par1, definitionId: "rgb", address: 1 }],
+      definitions: [rgbOnly],
+      master: 20,
+    });
+    expect(frame.slice(0, 3)).toEqual([51, 0, 0]);
+  });
+
+  it("el estrobo usa el rango marcado en cada equipo y al soltarlo todo vuelve igual", () => {
+    const frame = buildFrame({ ...base, strobeActive: true });
+    expect(frame[6]).toBe(87); // cabeza: dentro de 64–95
+    expect(frame[36]).toBe(192); // PAR: 1–255
+    expect(buildFrame(base)[6]).toBe(255);
+  });
+
+  it("en una cabeza sin rango de estrobo conocido no adivina", () => {
+    const definitions = seedDefinitions.map((d) => ({
+      ...d,
+      channels: d.channels.map((c) => ({ ...c, presets: [] })),
+    }));
+    const frame = buildFrame({ ...base, definitions, strobeActive: true });
+    expect(frame[6]).toBe(255);
+    expect(frame[36]).toBe(200);
+  });
+
+  it("el Blackout le gana a la intensidad y al estrobo", () => {
+    const frame = buildFrame({ ...base, strobeActive: true, blackoutActive: true });
+    expect([frame[5], frame[32], frame[33]]).toEqual([0, 0, 0]);
   });
 });
 

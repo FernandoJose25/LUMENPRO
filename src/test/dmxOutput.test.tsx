@@ -5,7 +5,7 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import App from "@/App";
 import { STORAGE_KEY } from "@/lib/showFile";
 
-vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(), isTauri: vi.fn() }));
+vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(), isTauri: vi.fn(), Channel: class {} }));
 
 type Args = Record<string, unknown>;
 const STOPPED = { state: "stopped", output: "", lastError: null, fps: 0 };
@@ -140,6 +140,32 @@ describe("Salida DMX desde la interfaz", () => {
     render(<App />);
     engine.setStatus({ state: "reconnecting", output: "Cable FTDI (COM5)", lastError: "cable", fps: 0 });
     expect(await screen.findByText("Reconectando…", {}, { timeout: 2500 })).toBeInTheDocument();
+  });
+
+  it("al reabrir la app reconecta sola al último adaptador, salvo que se haya desconectado a mano", async () => {
+    const user = userEvent.setup();
+    fakeEngine();
+    const first = render(<App />);
+    await openSection(user, "DMX Output");
+    await waitFor(() => expect(screen.getByLabelText(/Puerto/)).toHaveValue("COM5"));
+    await user.click(screen.getByRole("button", { name: "Conectar" }));
+    await screen.findByText("Cable FTDI (COM5)");
+    first.unmount();
+
+    vi.mocked(invoke).mockClear();
+    fakeEngine();
+    const second = render(<App />);
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("connect_open_dmx", { port: "COM5", fps: 30 }));
+    await openSection(user, "DMX Output");
+    await user.click(await screen.findByRole("button", { name: "Desconectar" }));
+    await screen.findByRole("button", { name: "Conectar" });
+    second.unmount();
+
+    vi.mocked(invoke).mockClear();
+    fakeEngine();
+    render(<App />);
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("engine_status"));
+    expect(invoke).not.toHaveBeenCalledWith("connect_open_dmx", expect.anything());
   });
 
   it("avisa si el adaptador es CH340", async () => {

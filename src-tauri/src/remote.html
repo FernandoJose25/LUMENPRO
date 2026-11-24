@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0A0A0D">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>LUMEN PRO</title>
+<style>
+  :root {
+    --bg: #0a0a0d; --panel: #111116; --panel2: #16161c; --border: #23232b;
+    --text: #f5f5f7; --muted: #a1a1aa; --accent: #a66cff; --ok: #22c55e; --warn: #f5b93d; --danger: #ef4444;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  [hidden] { display: none !important; }
+  html { height: 100%; background: var(--bg); color: var(--text); font: 16px/1.35 system-ui, sans-serif; }
+  body {
+    margin: 0 auto; min-height: 100%; max-width: 560px; display: flex; flex-direction: column; gap: 14px;
+    padding: calc(12px + env(safe-area-inset-top)) 14px calc(14px + env(safe-area-inset-bottom));
+    user-select: none; -webkit-user-select: none; touch-action: manipulation;
+  }
+  button, input { font: inherit; color: inherit; touch-action: manipulation; }
+  button {
+    min-height: 56px; padding: 10px 14px; border: 1px solid var(--border); border-radius: 12px;
+    background: var(--panel2); font-weight: 600;
+  }
+  button:active { filter: brightness(1.35); }
+  button:disabled { opacity: .35; }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  header { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--muted); }
+  header strong { color: var(--text); letter-spacing: .04em; }
+  header span:last-child { margin-left: auto; }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; background: var(--danger); }
+  .dot.ok { background: var(--ok); } .dot.warn { background: var(--warn); }
+  #offline { padding: 10px 12px; border-radius: 10px; background: var(--danger); color: #fff; font-weight: 600; text-align: center; }
+  #now { text-align: center; }
+  #now b { display: block; font-size: 26px; line-height: 1.2; }
+  #now small { color: var(--muted); font-size: 15px; font-variant-numeric: tabular-nums; }
+  #next { min-height: 120px; font-size: 24px; border: 0; background: var(--accent); color: var(--bg); overflow-wrap: anywhere; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  #moments { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  #moments button { overflow-wrap: anywhere; }
+  #moments button.active { border-color: var(--accent); color: var(--accent); background: rgba(166, 108, 255, .14); }
+  label { display: flex; justify-content: space-between; color: var(--muted); font-size: 15px; }
+  label b { color: var(--text); font-variant-numeric: tabular-nums; }
+  input[type=range] { width: 100%; height: 48px; margin: 0; accent-color: var(--accent); touch-action: none; }
+  #strobe.on { background: var(--text); color: var(--bg); }
+  #blackout { color: var(--danger); background: rgba(239, 68, 68, .15); border-color: transparent; letter-spacing: .05em; }
+  #blackout.armed, #blackout.on { background: var(--danger); color: #fff; }
+  #blackout.on { animation: pulse 1.2s infinite; }
+  @keyframes pulse { 50% { opacity: .6; } }
+  .bottom { margin-top: auto; display: flex; flex-direction: column; gap: 10px; }
+  #login { margin: auto 0; display: flex; flex-direction: column; gap: 14px; text-align: center; }
+  #login h1 { margin: 0; font-size: 26px; letter-spacing: .04em; }
+  #login p { margin: 0; color: var(--muted); }
+  #pin {
+    height: 72px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel2);
+    text-align: center; font-size: 34px; letter-spacing: .3em; padding-left: .3em; user-select: text; -webkit-user-select: text;
+  }
+  #login button { background: var(--accent); color: var(--bg); border: 0; }
+  #login-error { min-height: 1.35em; color: var(--danger) !important; }
+</style>
+</head>
+<body>
+  <form id="login" hidden>
+    <h1>LUMEN PRO</h1>
+    <p>Escribe el PIN que aparece en la laptop, en “Celular”.</p>
+    <input id="pin" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off" aria-label="PIN">
+    <button>Entrar</button>
+    <p id="login-error" role="alert"></p>
+  </form>
+
+  <p id="waiting" hidden style="margin:auto;color:var(--muted)">Esperando a LUMEN PRO…</p>
+
+  <main id="app" hidden style="display:contents">
+    <header><strong>LUMEN PRO</strong><span><i id="dmx-dot" class="dot"></i><span id="dmx"></span></span></header>
+    <div id="offline" role="alert" hidden>Sin conexión con la laptop. Reintentando…</div>
+    <div id="now"><b id="now-name"></b><small id="now-time"></small></div>
+    <button id="next"></button>
+    <div class="row"><button id="prev">◀ Anterior</button><button id="stop">■ Detener</button></div>
+    <div id="moments"></div>
+    <div class="bottom">
+      <label for="master">Intensidad <b id="master-value"></b></label>
+      <input id="master" type="range" min="0" max="100">
+      <div class="row"><button id="strobe">Estrobo</button><button id="blackout"></button></div>
+    </div>
+  </main>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const TOKEN = "lumenpro.token";
+let token = localStorage.getItem(TOKEN);
+let version = 0, state = null, clockOffset = 0, online = true, armedUntil = 0, masterTouched = 0;
+
+async function request(path, body) {
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), 3000);
+  try {
+    return await fetch(path, {
+      method: body ? "POST" : "GET",
+      body: body && JSON.stringify(body),
+      headers: token ? { Authorization: "Bearer " + token } : {},
+      signal: abort.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// ---- Entrar ----
+function showLogin(message) {
+  token = null;
+  localStorage.removeItem(TOKEN);
+  $("app").hidden = true;
+  $("waiting").hidden = true;
+  $("login").hidden = false;
+  $("login-error").textContent = message || "";
+}
+
+async function login(pin) {
+  try {
+    const reply = await request("/api/login", { pin });
+    if (reply.status === 429) return showLogin("Demasiados intentos. Espera un minuto.");
+    if (!reply.ok) return showLogin("PIN incorrecto.");
+    token = (await reply.json()).token;
+    localStorage.setItem(TOKEN, token);
+    $("login").hidden = true;
+    version = 0;
+    poll();
+  } catch {
+    showLogin("No se pudo conectar con la laptop.");
+  }
+}
+
+$("login").addEventListener("submit", (e) => {
+  e.preventDefault();
+  login($("pin").value.trim());
+  $("pin").value = "";
+});
+
+// ---- Estado ----
+let pollTimer = null;
+let polling = false;
+function pollSoon(ms) {
+  clearTimeout(pollTimer);
+  pollTimer = setTimeout(poll, ms);
+}
+
+async function poll() {
+  if (!token) return;
+  if (polling) return pollSoon(100);
+  polling = true;
+  try {
+    const reply = await request("/api/state?v=" + version);
+    if (reply.status === 401) return showLogin("El PIN cambió. Escríbelo de nuevo.");
+    if (reply.status === 200) {
+      const data = await reply.json();
+      version = data.version;
+      clockOffset = data.now - Date.now();
+      state = data.state;
+    }
+    setOnline(reply.ok);
+  } catch {
+    setOnline(false);
+  } finally {
+    polling = false;
+  }
+  if (token) pollSoon(online ? 400 : 1000);
+}
+
+function setOnline(value) {
+  online = value;
+  render();
+}
+
+// Al desbloquear el celular no hay que esperar al próximo turno.
+document.addEventListener("visibilitychange", () => { if (!document.hidden) pollSoon(0); });
+
+async function send(command) {
+  if (navigator.vibrate) navigator.vibrate(20);
+  try {
+    const reply = await request("/api/command", command);
+    if (reply.status === 401) return showLogin("El PIN cambió. Escríbelo de nuevo.");
+    if (!reply.ok) setOnline(false);
+  } catch {
+    setOnline(false);
+  }
+  pollSoon(80);
+}
+
+// ---- Pantalla ----
+const clock = (ms) => {
+  const s = Math.max(0, Math.round(ms / 1000));
+  return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
+};
+const DMX = { running: ["ok", "Luces conectadas"], reconnecting: ["warn", "Reconectando cable"], stopped: ["", "Cable desconectado"] };
+
+function render() {
+  if (!token) return;
+  $("waiting").hidden = !!state;
+  $("app").hidden = !state;
+  if (!state) return;
+  $("offline").hidden = online;
+
+  const index = state.moments.findIndex((m) => m.id === state.activeId);
+  const next = state.moments[index + 1];
+  const [dot, text] = DMX[state.dmx] || DMX.stopped;
+  $("dmx-dot").className = "dot " + dot;
+  $("dmx").textContent = text;
+
+  $("next").textContent = next ? "Siguiente: " + next.name : state.moments.length ? "Fin del evento" : "Crea los momentos en la laptop";
+  $("next").disabled = !online || !next;
+  $("prev").disabled = !online || index <= 0;
+  $("stop").disabled = !online || !state.startedAt;
+
+  const list = $("moments");
+  while (list.children.length > state.moments.length) list.lastChild.remove();
+  state.moments.forEach((m, i) => {
+    const button = list.children[i] || list.appendChild(document.createElement("button"));
+    button.textContent = m.name;
+    button.disabled = !online;
+    button.className = m.id === state.activeId ? "active" : "";
+    button.onclick = () => send({ type: "moment", id: m.id });
+  });
+
+  if (Date.now() - masterTouched > 800) $("master").value = state.master;
+  $("master-value").textContent = $("master").value + " %";
+  $("master").disabled = !online;
+  $("strobe").className = state.strobe ? "on" : "";
+  $("strobe").textContent = state.strobe ? "Estrobo encendido" : "Estrobo";
+  $("strobe").disabled = !online;
+
+  const armed = !state.blackout && Date.now() < armedUntil;
+  $("blackout").className = state.blackout ? "on" : armed ? "armed" : "";
+  $("blackout").textContent = state.blackout ? "VOLVER A ENCENDER" : armed ? "CONFIRMAR" : "BLACKOUT";
+  $("blackout").disabled = !online;
+  renderClock();
+}
+
+function renderClock() {
+  if (!state) return;
+  const index = state.moments.findIndex((m) => m.id === state.activeId);
+  const moment = state.moments[index], next = state.moments[index + 1];
+  $("now-name").textContent = moment ? moment.name : "Listo para empezar";
+  let time = "";
+  if (moment && !state.startedAt) time = "Detenido";
+  else if (moment) {
+    const elapsed = Date.now() + clockOffset - state.startedAt;
+    time = clock(elapsed);
+    if (next && moment.durationSec !== null) time += " · pasa a " + next.name + " en " + clock(moment.durationSec * 1000 - elapsed);
+  }
+  $("now-time").textContent = time;
+}
+setInterval(renderClock, 500);
+
+// `from` evita saltarse un momento con un doble toque o con dos celulares:
+// la laptop ignora la orden si ya no está en ese momento.
+$("next").onclick = () => send({ type: "next", from: state.activeId });
+$("prev").onclick = () => send({ type: "prev", from: state.activeId });
+$("stop").onclick = () => send({ type: "stop" });
+$("strobe").onclick = () => send({ type: "strobe", on: !state.strobe });
+$("blackout").onclick = () => {
+  if (state.blackout) return send({ type: "blackout", on: false });
+  if (Date.now() < armedUntil) {
+    armedUntil = 0;
+    return send({ type: "blackout", on: true });
+  }
+  armedUntil = Date.now() + 1500;
+  render();
+  setTimeout(render, 1550);
+};
+
+// Mientras se arrastra manda como mucho 10 valores por segundo, y siempre el último.
+let masterTimer = null;
+$("master").oninput = () => {
+  masterTouched = Date.now();
+  $("master-value").textContent = $("master").value + " %";
+  if (masterTimer) return;
+  masterTimer = setTimeout(() => {
+    masterTimer = null;
+    send({ type: "master", value: Number($("master").value) });
+  }, 100);
+};
+
+// ---- Arranque ----
+function loginFromQr() {
+  const pin = location.hash.slice(1);
+  if (!/^\d{6}$/.test(pin)) return false;
+  // Fuera de la barra de direcciones y del historial.
+  history.replaceState(null, "", "/");
+  login(pin);
+  return true;
+}
+// Con la página ya abierta, escanear el QR solo cambia el hash: no recarga.
+window.addEventListener("hashchange", loginFromQr);
+if (!loginFromQr()) {
+  if (token) poll();
+  else showLogin();
+}
+</script>
+</body>
+</html>

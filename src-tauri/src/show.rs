@@ -15,7 +15,7 @@ fn show_path(app: &AppHandle) -> Result<PathBuf, String> {
 
 /// Escribe a un temporal y lo renombra: si se corta la luz a mitad del
 /// guardado, queda el show anterior completo en vez de uno a medias.
-fn write_atomic(path: &Path, json: &str) -> std::io::Result<()> {
+pub(crate) fn write_atomic(path: &Path, json: &str) -> std::io::Result<()> {
     let tmp = path.with_extension("json.tmp");
     let mut file = fs::File::create(&tmp)?;
     file.write_all(json.as_bytes())?;

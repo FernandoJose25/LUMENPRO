@@ -25,6 +25,10 @@ const STOPPED: EngineStatus = { state: "stopped", output: "", lastError: null, f
 const FPS = 30;
 const STATUS_POLL_MS = 1000;
 
+/** Último adaptador conectado. Si la app se cierra en pleno evento, al abrirla
+ *  las luces vuelven sin tocar nada. "Desconectar" lo olvida. */
+const LAST_KEY = "lumenpro.dmx.last";
+
 export interface DmxOutput {
   /** false en el navegador: ahí no hay motor DMX, solo interfaz. */
   available: boolean;
@@ -43,7 +47,7 @@ export interface DmxOutput {
  * sección esté abierta.
  */
 export function useDmxOutput(): DmxOutput {
-  const { instances, definitions, liveValues, blackoutActive } = useFixtureStore();
+  const { instances, definitions, liveValues, blackoutActive, master, strobeActive } = useFixtureStore();
   const available = isTauri();
 
   const [status, setStatus] = useState(STOPPED);
@@ -51,8 +55,8 @@ export function useDmxOutput(): DmxOutput {
   const [error, setError] = useState<string | null>(null);
 
   const frame = useMemo(
-    () => buildFrame({ instances, definitions, liveValues, blackoutActive }),
-    [instances, definitions, liveValues, blackoutActive],
+    () => buildFrame({ instances, definitions, liveValues, blackoutActive, master, strobeActive }),
+    [instances, definitions, liveValues, blackoutActive, master, strobeActive],
   );
 
   const latestFrame = useRef(frame);
@@ -116,6 +120,7 @@ export function useDmxOutput(): DmxOutput {
       try {
         if (adapter === "mock") await invoke("connect_mock", { fps: FPS });
         else await invoke(`connect_${adapter}`, { port, fps: FPS });
+        localStorage.setItem(LAST_KEY, JSON.stringify({ adapter, port }));
       } catch (e) {
         setError(String(e));
       }
@@ -124,7 +129,15 @@ export function useDmxOutput(): DmxOutput {
     [refreshStatus],
   );
 
+  useEffect(() => {
+    const last = available ? localStorage.getItem(LAST_KEY) : null;
+    if (!last) return;
+    const { adapter, port } = JSON.parse(last) as { adapter: DmxAdapter; port: string };
+    void connect(adapter, port);
+  }, [available, connect]);
+
   const disconnect = useCallback(async () => {
+    localStorage.removeItem(LAST_KEY);
     setError(null);
     try {
       await invoke("disconnect");

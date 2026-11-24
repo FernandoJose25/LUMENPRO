@@ -10,6 +10,7 @@
 //! Acá no hay un "blackout" propio a propósito: poner los 512 canales a 0
 //! también movería Pan/Tilt y las cabezas girarían de golpe.
 
+mod remote;
 mod show;
 
 use lumenpro_dmx::{
@@ -18,7 +19,7 @@ use lumenpro_dmx::{
 };
 use serde::Serialize;
 use std::sync::Mutex;
-use tauri::State;
+use tauri::{AppHandle, Manager, State};
 
 /// Estado compartido de la app: un único universo DMX + el motor que lo
 /// saca por hardware. El universo vive separado del motor a propósito:
@@ -53,13 +54,34 @@ fn poisoned() -> String {
 
 /// Los comandos que abren o cierran puertos son `async`: corren fuera del
 /// hilo de la ventana, así un driver USB lento no congela la interfaz.
-fn start_engine<F>(state: &DmxState, fps: u32, open: F) -> Result<(), String>
+fn start_engine<F>(app: &AppHandle, state: &DmxState, fps: u32, open: F) -> Result<(), String>
 where
     F: Fn() -> Result<Box<dyn DmxOutput>, DmxOutputError> + Send + 'static,
 {
     let mut engine = state.engine.lock().map_err(|_| poisoned())?;
-    engine.start(open, fps).map_err(|e| e.to_string())
+    let started = engine.start(open, fps).map_err(|e| e.to_string());
+    keep_awake(app, started.is_ok());
+    started
 }
+
+/// Mientras sale DMX, Windows no suspende ni apaga la pantalla: con el show
+/// manejado desde el celular nadie toca la laptop y se dormiría a mitad del
+/// evento. (Cerrar la tapa la suspende igual.)
+#[cfg(windows)]
+fn keep_awake(app: &AppHandle, on: bool) {
+    use windows_sys::Win32::System::Power::{
+        SetThreadExecutionState, ES_CONTINUOUS, ES_DISPLAY_REQUIRED, ES_SYSTEM_REQUIRED,
+    };
+    let flags = if on { ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED } else { ES_CONTINUOUS };
+    // El pedido dura lo que viva el hilo que lo hace, por eso el principal.
+    let _ = app.run_on_main_thread(move || {
+        // SAFETY: función de Win32 sin punteros ni condiciones previas.
+        unsafe { SetThreadExecutionState(flags) };
+    });
+}
+
+#[cfg(not(windows))]
+fn keep_awake(_: &AppHandle, _: bool) {}
 
 /// Lista los puertos serie disponibles, para que la UI muestre un selector
 /// y avise si el adaptador trae un chip que no es FTDI.
@@ -83,27 +105,28 @@ fn list_serial_ports() -> Result<Vec<SerialPort>, String> {
 /// Conecta el motor a un output Mock (sin hardware), para ensayar un show
 /// sin tener el adaptador a mano.
 #[tauri::command(async)]
-fn connect_mock(state: State<'_, DmxState>, fps: u32) -> Result<(), String> {
-    start_engine(&state, fps, || Ok(Box::new(MockOutput::new())))
+fn connect_mock(app: AppHandle, state: State<'_, DmxState>, fps: u32) -> Result<(), String> {
+    start_engine(&app, &state, fps, || Ok(Box::new(MockOutput::new())))
 }
 
 /// Cable FTDI barato (Open DMX): el timing lo genera la PC.
 #[tauri::command(async)]
-fn connect_open_dmx(state: State<'_, DmxState>, port: String, fps: u32) -> Result<(), String> {
-    start_engine(&state, fps, move || Ok(Box::new(OpenDmxOutput::open(&port)?)))
+fn connect_open_dmx(app: AppHandle, state: State<'_, DmxState>, port: String, fps: u32) -> Result<(), String> {
+    start_engine(&app, &state, fps, move || Ok(Box::new(OpenDmxOutput::open(&port)?)))
 }
 
 /// Enttec DMX USB PRO (o compatible): el timing lo genera el adaptador.
 #[tauri::command(async)]
-fn connect_enttec(state: State<'_, DmxState>, port: String, fps: u32) -> Result<(), String> {
-    start_engine(&state, fps, move || Ok(Box::new(EnttecUsbProOutput::open(&port)?)))
+fn connect_enttec(app: AppHandle, state: State<'_, DmxState>, port: String, fps: u32) -> Result<(), String> {
+    start_engine(&app, &state, fps, move || Ok(Box::new(EnttecUsbProOutput::open(&port)?)))
 }
 
 /// Detiene el hilo de salida (no borra el universo).
 #[tauri::command(async)]
-fn disconnect(state: State<'_, DmxState>) -> Result<(), String> {
+fn disconnect(app: AppHandle, state: State<'_, DmxState>) -> Result<(), String> {
     let mut engine = state.engine.lock().map_err(|_| poisoned())?;
     engine.stop();
+    keep_awake(&app, false);
     Ok(())
 }
 
@@ -135,6 +158,11 @@ fn main() {
 
     tauri::Builder::default()
         .manage(DmxState { universe, engine })
+        .setup(|app| {
+            let remote = remote::RemoteState::load(app.handle())?;
+            app.manage(remote);
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             list_serial_ports,
             connect_mock,
@@ -146,6 +174,11 @@ fn main() {
             show::load_show,
             show::save_show,
             show::export_show,
+            remote::remote_attach,
+            remote::remote_status,
+            remote::remote_set_enabled,
+            remote::remote_new_pin,
+            remote::remote_publish,
         ])
         .run(tauri::generate_context!())
         .expect("error corriendo la app de Tauri");

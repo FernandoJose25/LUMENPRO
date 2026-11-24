@@ -10,6 +10,9 @@ interface FrameInput {
   definitions: FixtureDefinition[];
   liveValues: Record<string, Record<string, number>>;
   blackoutActive: boolean;
+  /** Intensidad general, 0–100. */
+  master: number;
+  strobeActive: boolean;
 }
 
 /** Canales que emiten luz. MODE entra porque un PAR en programa automático
@@ -23,8 +26,32 @@ function goesDarkOnBlackout(channel: FixtureChannel, definition: FixtureDefiniti
   return channel.type === "STROBE" && !definition.channels.some((c) => LIGHT_TYPES.includes(c.type));
 }
 
+const COLOR_TYPES: ChannelType[] = ["RED", "GREEN", "BLUE", "WHITE"];
+
+/** La intensidad general baja el dimmer; sin dimmer, los colores. */
+function followsMaster(channel: FixtureChannel, definition: FixtureDefinition): boolean {
+  if (channel.type === "DIMMER") return true;
+  return COLOR_TYPES.includes(channel.type) && !definition.channels.some((c) => c.type === "DIMMER");
+}
+
+/** Valor para el botón Estrobo, o null si no se sabe cuál es. En una cabeza
+ *  sin rango conocido no se adivina: podría caer en "cerrado". En un PAR lo
+ *  habitual es lento a rápido en todo el canal. */
+function strobeValue(channel: FixtureChannel, definition: FixtureDefinition): number | null {
+  const range = channel.presets.find((p) => p.label === "Estrobo");
+  if (range) return range.dmxFrom + (range.dmxTo - range.dmxFrom) * 0.75;
+  return definition.channels.some((c) => c.type === "PAN") ? null : 200;
+}
+
 /** Los 512 canales tal como salen por el cable (índice 0 = canal DMX 1). */
-export function buildFrame({ instances, definitions, liveValues, blackoutActive }: FrameInput): number[] {
+export function buildFrame({
+  instances,
+  definitions,
+  liveValues,
+  blackoutActive,
+  master,
+  strobeActive,
+}: FrameInput): number[] {
   const frame = new Array<number>(DMX_CHANNELS).fill(0);
 
   for (const instance of instances) {
@@ -36,10 +63,10 @@ export function buildFrame({ instances, definitions, liveValues, blackoutActive 
       const address = instance.address + channel.index - 1;
       if (address < 1 || address > DMX_CHANNELS) continue;
 
-      const value =
-        blackoutActive && goesDarkOnBlackout(channel, definition)
-          ? 0
-          : (liveValues[instance.id]?.[channel.id] ?? channel.defaultValue);
+      let value = liveValues[instance.id]?.[channel.id] ?? channel.defaultValue;
+      if (strobeActive && channel.type === "STROBE") value = strobeValue(channel, definition) ?? value;
+      if (followsMaster(channel, definition)) value = (value * master) / 100;
+      if (blackoutActive && goesDarkOnBlackout(channel, definition)) value = 0;
       const output = channel.invert ? channel.dmxMin + channel.dmxMax - value : value;
       frame[address - 1] = Math.max(0, Math.min(255, Math.round(output)));
     }

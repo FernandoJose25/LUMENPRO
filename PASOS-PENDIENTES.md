@@ -40,6 +40,16 @@
   diapositivas) y plantilla de quinceañera por tipo de canal. Al entrar, lo que
   la escena no define vuelve a su default; los effects arrancan al terminar el
   fade. En los fades, estrobo/gobo/rueda de color saltan (`lib/fade.ts`).
+- **Control por celular** (2026-11-24): `src-tauri/src/remote.rs` (HTTP en el
+  puerto 8777, PIN con bloqueo por intentos, token persistente en `remote.json`)
+  sirve `remote.html` y hace de relevo; `lib/remoteControl.ts` ejecuta las
+  órdenes. Sección "Celular" con QR. Apagado por defecto. Va sin cifrar: usar
+  una WiFi propia. **Sin probar con un celular real** (sí con Chromium móvil).
+- **Intensidad y estrobo generales** en la salida (`dmxFrame.ts`), en Live y en el
+  celular. El estrobo usa el preset "Estrobo" de cada canal; en cabezas sin ese
+  preset no hace nada.
+- Mientras sale DMX la laptop no se suspende, y al abrir la app reconecta sola
+  al último adaptador.
 - **Número de canal editable** en Fixture Editor: mueve la función sin romper
   escenas (guardan el id del canal, no su posición).
 - **Show en disco** (`show.json` en AppData, escritura atómica) con exportar e
@@ -232,7 +242,8 @@
 - [x] Empaquetado Tauri — `npm run tauri build` genera el `.exe`.
 - [x] Momentos del evento con "Siguiente" (escena + chase + effects en un botón)
 - [ ] Buscador de canales (subir de a uno para identificar un equipo sin manual)
-- [ ] Control por celular (página por WiFi local con PIN)
+- [x] Control por celular (página por WiFi local con PIN)
+- [ ] Probar el celular real en la WiFi del evento (firewall de Windows)
 - [ ] Doble monitor (depende de Tauri, gestión de ventanas nativas)
 
 ## 🔲 Pendiente — Visualizer y extras

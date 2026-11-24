@@ -44,6 +44,10 @@ interface FixtureStoreState {
    *  así nada puede pisarlo y al quitarlo todo vuelve como estaba. Tampoco
    *  se persiste. */
   blackoutActive: boolean;
+  /** Intensidad general 0–100 y estrobo general: se aplican en la salida
+   *  (dmxFrame.ts) sobre lo que esté sonando. No se persisten. */
+  master: number;
+  strobeActive: boolean;
   /** En el orden del evento. */
   moments: Moment[];
   /** Último momento lanzado. Se persiste: si la app se cierra a mitad del
@@ -106,13 +110,16 @@ interface FixtureStoreValue extends FixtureStoreState {
    *  Effects y Chases siguen corriendo por debajo, a oscuras. */
   blackout: () => void;
   releaseBlackout: () => void;
+  setMaster: (value: number) => void;
+  setStrobe: (on: boolean) => void;
   addMoment: (name: string) => Moment;
   updateMoment: (momentId: string, patch: Partial<Omit<Moment, "id">>) => void;
   removeMoment: (momentId: string) => void;
   moveMoment: (momentId: string, direction: -1 | 1) => void;
   /** Agrega los momentos de una quinceañera armados sobre el rig actual. */
   addQuinceTemplate: () => void;
-  /** Lanza un momento: corta los effects del anterior y quita el Blackout. */
+  /** Lanza un momento: corta los effects del anterior, el estrobo y el
+   *  Blackout. */
   startMoment: (momentId: string) => void;
   /** Pasa al siguiente (1) o vuelve al anterior (-1). Sin ninguno lanzado,
    *  "siguiente" es el primero. */
@@ -144,6 +151,8 @@ function restoreState(parsed: Partial<FixtureStoreState>): FixtureStoreState {
     effects: parsed.effects ?? [],
     runningEffectIds: [], // nunca se restaura, ver comentario en el tipo
     blackoutActive: false, // ídem
+    master: 100, // ídem
+    strobeActive: false, // ídem
     moments: parsed.moments ?? [],
     activeMomentId: parsed.activeMomentId ?? null,
     momentRun: null, // ídem
@@ -154,6 +163,8 @@ function serialize(state: FixtureStoreState): string {
   const {
     runningEffectIds: _runningEffectIds,
     blackoutActive: _blackoutActive,
+    master: _master,
+    strobeActive: _strobeActive,
     momentRun: _momentRun,
     ...persisted
   } = state;
@@ -600,6 +611,11 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
   const blackout = useCallback(() => setState((s) => ({ ...s, blackoutActive: true })), []);
   const releaseBlackout = useCallback(() => setState((s) => ({ ...s, blackoutActive: false })), []);
 
+  const setMaster = useCallback((value: number) => {
+    setState((s) => ({ ...s, master: Math.max(0, Math.min(100, Math.round(value))) }));
+  }, []);
+  const setStrobe = useCallback((on: boolean) => setState((s) => ({ ...s, strobeActive: on })), []);
+
   const addMoment = useCallback(
     (name: string): Moment => {
       const created: Moment = {
@@ -667,6 +683,7 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
         activeSceneId: moment.sceneId ?? s.activeSceneId,
         runningEffectIds: [],
         blackoutActive: false,
+        strobeActive: false,
       };
     });
   }, []);
@@ -733,6 +750,8 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
     stopEffect,
     blackout,
     releaseBlackout,
+    setMaster,
+    setStrobe,
     addMoment,
     updateMoment,
     removeMoment,

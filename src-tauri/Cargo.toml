@@ -12,10 +12,19 @@ tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
+# Control por celular (src/remote.rs)
+tiny_http = "0.12"
+if-addrs = "0.15"
+qrcodegen = "1.8"
+getrandom = "0.4"
+
 # Motor DMX propio (crate `dmx-engine/` en la raíz del repo). Se referencia
 # por path, no por versión publicada: es un crate interno del monorepo,
 # no algo que vaya a crates.io.
 lumenpro_dmx = { path = "../dmx-engine" }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_System_Power"] }
 
 [[bin]]
 name = "lumenpro"

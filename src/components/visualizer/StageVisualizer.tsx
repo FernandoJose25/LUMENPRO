@@ -15,7 +15,7 @@ import type { FixtureDefinition, FixtureInstance } from "@/types/fixture";
  * una iteración posterior (ver nota al final del panel).
  */
 export function StageVisualizer() {
-  const { instances, definitions, getChannelValue, groups, blackoutActive } = useFixtureStore();
+  const { instances, definitions, getChannelValue, groups, blackoutActive, master } = useFixtureStore();
 
   const sorted = [...instances].sort((a, b) => a.address - b.address);
 
@@ -39,7 +39,7 @@ export function StageVisualizer() {
                   definition={def}
                   getChannelValue={getChannelValue}
                   groupColor={group?.color ?? null}
-                  blackoutActive={blackoutActive}
+                  intensity={blackoutActive ? 0 : master / 100}
                 />
               );
             })}
@@ -59,13 +59,14 @@ function FixtureLight({
   definition,
   getChannelValue,
   groupColor,
-  blackoutActive,
+  intensity,
 }: {
   instance: FixtureInstance;
   definition: FixtureDefinition;
   getChannelValue: (instanceId: string, channelId: string, fallback: number) => number;
   groupColor: string | null;
-  blackoutActive: boolean;
+  /** 0–1: intensidad general, o 0 en Blackout. */
+  intensity: number;
 }) {
   const find = (type: string) => definition.channels.find((c) => c.type === type);
   const dimmerCh = find("DIMMER");
@@ -86,7 +87,7 @@ function FixtureLight({
   // blanco puro modulado por el dimmer — sigue siendo visualmente honesto.
   const color = hasRgb ? `rgb(${r}, ${g}, ${b})` : "rgb(255, 255, 255)";
 
-  const brightness = blackoutActive ? 0 : dimmer / 255;
+  const brightness = (dimmer / 255) * intensity;
   // Piso mínimo de opacidad para que un fixture "apagado" siga siendo
   // visible como un punto tenue en vez de desaparecer del todo — más útil
   // para ver el layout completo del rig de un vistazo.

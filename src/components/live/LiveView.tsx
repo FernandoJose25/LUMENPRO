@@ -97,6 +97,7 @@ function LiveStatusBar({
   onBlackout: () => void;
   onReleaseBlackout: () => void;
 }) {
+  const { master, setMaster, strobeActive, setStrobe } = useFixtureStore();
   return (
     <div className="flex shrink-0 items-center gap-4 rounded-panel border border-border bg-panel px-3 py-2">
       <span className="text-xs font-medium tracking-wide text-text-secondary">LIVE MODE</span>
@@ -107,6 +108,16 @@ function LiveStatusBar({
         {groupCount === 1 ? "" : "s"}
       </span>
       <div className="flex-1" />
+      <div className="w-72">
+        <Fader label="Intensidad" value={master} max={100} onChange={setMaster} />
+      </div>
+      <Button
+        variant={strobeActive ? "danger" : "secondary"}
+        aria-pressed={strobeActive}
+        onClick={() => setStrobe(!strobeActive)}
+      >
+        Estrobo
+      </Button>
       {/* Mismo componente y misma acción que el Blackout de la Topbar — una
        *  sola fuente de verdad (fixtureStore.blackout), no una copia local. */}
       <BlackoutButton active={blackoutActive} onBlackout={onBlackout} onRelease={onReleaseBlackout} />

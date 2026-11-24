@@ -11,11 +11,13 @@ import { EffectsView } from "@/components/effects/EffectsView";
 import { LiveView } from "@/components/live/LiveView";
 import { DmxOutputView } from "@/components/dmx/DmxOutputView";
 import { MomentsView } from "@/components/moments/MomentsView";
+import { RemoteView } from "@/components/remote/RemoteView";
 import { SettingsView } from "@/components/views/SettingsView";
 import { CommandPalette } from "@/components/command-palette/CommandPalette";
 import { useEffectsEngine } from "@/lib/effectEngine";
 import { useDmxOutput } from "@/lib/dmxOutput";
 import { useMomentsEngine } from "@/lib/momentsEngine";
+import { useRemoteControl } from "@/lib/remoteControl";
 import { PlaceholderView } from "@/components/views/PlaceholderView";
 
 // A qué fase del plan (sección 33 del brief) corresponde cada sección del
@@ -60,6 +62,7 @@ function AppShell() {
   const [section, setSection] = useState("Dashboard");
   const { blackoutActive, blackout, releaseBlackout, saveShow } = useFixtureStore();
   const dmx = useDmxOutput();
+  const remote = useRemoteControl(dmx.status.state);
 
   return (
     <div className="flex h-screen flex-col bg-bg">
@@ -87,6 +90,7 @@ function AppShell() {
         {section === "Chases" ? <ChasesView /> : null}
         {section === "Effects" ? <EffectsView /> : null}
         {section === "DMX Output" ? <DmxOutputView dmx={dmx} /> : null}
+        {section === "Celular" ? <RemoteView remote={remote} /> : null}
         {section === "Settings" ? <SettingsView /> : null}
         {PENDING_PHASE[section] ? (
           <PlaceholderView section={section} phase={PENDING_PHASE[section]} />
