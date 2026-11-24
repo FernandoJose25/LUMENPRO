@@ -21,8 +21,8 @@ export interface EngineStatus {
 const STOPPED: EngineStatus = { state: "stopped", output: "", lastError: null, fps: 0 };
 
 // 30 y no 40: con el cable FTDI el timing lo marca la PC y 512 canales tardan
-// 22,6 ms en salir. A 40 no queda margen y parpadea (ver OpenDmxOutput).
-const FPS = 30;
+// 22,6 ms en salir. A 40 casi no queda margen (ver OpenDmxOutput).
+export const DEFAULT_FPS = 30;
 const STATUS_POLL_MS = 1000;
 
 /** Último adaptador conectado. Si la app se cierra en pleno evento, al abrirla
@@ -37,7 +37,7 @@ export interface DmxOutput {
   error: string | null;
   frame: number[];
   refreshPorts: () => Promise<void>;
-  connect: (adapter: DmxAdapter, port: string) => Promise<void>;
+  connect: (adapter: DmxAdapter, port: string, fps: number) => Promise<void>;
   disconnect: () => Promise<void>;
 }
 
@@ -47,7 +47,8 @@ export interface DmxOutput {
  * sección esté abierta.
  */
 export function useDmxOutput(): DmxOutput {
-  const { instances, definitions, liveValues, blackoutActive, master, strobeActive } = useFixtureStore();
+  const { instances, definitions, liveValues, blackoutActive, master, strobeActive, identifyId } =
+    useFixtureStore();
   const available = isTauri();
 
   const [status, setStatus] = useState(STOPPED);
@@ -55,8 +56,8 @@ export function useDmxOutput(): DmxOutput {
   const [error, setError] = useState<string | null>(null);
 
   const frame = useMemo(
-    () => buildFrame({ instances, definitions, liveValues, blackoutActive, master, strobeActive }),
-    [instances, definitions, liveValues, blackoutActive, master, strobeActive],
+    () => buildFrame({ instances, definitions, liveValues, blackoutActive, master, strobeActive, identifyId }),
+    [instances, definitions, liveValues, blackoutActive, master, strobeActive, identifyId],
   );
 
   const latestFrame = useRef(frame);
@@ -115,12 +116,12 @@ export function useDmxOutput(): DmxOutput {
   }, [available, refreshPorts, refreshStatus]);
 
   const connect = useCallback(
-    async (adapter: DmxAdapter, port: string) => {
+    async (adapter: DmxAdapter, port: string, fps: number) => {
       setError(null);
       try {
-        if (adapter === "mock") await invoke("connect_mock", { fps: FPS });
-        else await invoke(`connect_${adapter}`, { port, fps: FPS });
-        localStorage.setItem(LAST_KEY, JSON.stringify({ adapter, port }));
+        if (adapter === "mock") await invoke("connect_mock", { fps });
+        else await invoke(`connect_${adapter}`, { port, fps });
+        localStorage.setItem(LAST_KEY, JSON.stringify({ adapter, port, fps }));
       } catch (e) {
         setError(String(e));
       }
@@ -132,8 +133,8 @@ export function useDmxOutput(): DmxOutput {
   useEffect(() => {
     const last = available ? localStorage.getItem(LAST_KEY) : null;
     if (!last) return;
-    const { adapter, port } = JSON.parse(last) as { adapter: DmxAdapter; port: string };
-    void connect(adapter, port);
+    const { adapter, port, fps } = JSON.parse(last) as { adapter: DmxAdapter; port: string; fps?: number };
+    void connect(adapter, port, fps ?? DEFAULT_FPS);
   }, [available, connect]);
 
   const disconnect = useCallback(async () => {

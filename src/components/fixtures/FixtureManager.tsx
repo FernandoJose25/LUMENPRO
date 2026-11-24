@@ -3,7 +3,9 @@ import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
 import { useFixtureStore } from "@/lib/fixtureStore";
 import type { FixtureDefinition, FixtureInstance } from "@/types/fixture";
-import { FixtureEditor } from "./FixtureEditor";
+import { nextFreeAddress } from "@/lib/dmxFrame";
+import { ChannelFinder } from "./ChannelFinder";
+import { emptyChannel, FixtureEditor } from "./FixtureEditor";
 
 interface FixtureManagerProps {
   onOpenControl: (instanceId: string) => void;
@@ -28,6 +30,7 @@ export function FixtureManager({ onOpenControl }: FixtureManagerProps) {
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState<string | null>(definitions[0]?.id ?? null);
   const [editingDef, setEditingDef] = useState<FixtureDefinition | "new" | null>(null);
+  const [finderId, setFinderId] = useState<string | null>(null);
 
   const groups = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -43,6 +46,34 @@ export function FixtureManager({ onOpenControl }: FixtureManagerProps) {
           def.manufacturer.toLowerCase().includes(q),
       );
   }, [definitions, instances, query]);
+
+  /** Un equipo del que solo se sabe cuántos canales usa. */
+  function addUnknown() {
+    const model = window.prompt("Nombre del equipo:", "Barra LED")?.trim();
+    if (!model) return;
+    const count = Number(window.prompt("¿Cuántos canales usa? (en su menú: 16CH, 26CH…)", "16"));
+    if (!Number.isInteger(count) || count < 1 || count > 512) return;
+    const definitionId = `def-${crypto.randomUUID()}`;
+    const instanceId = `inst-${crypto.randomUUID()}`;
+    addDefinition({
+      id: definitionId,
+      manufacturer: "Sin identificar",
+      model,
+      verified: false,
+      verifiedNote: "Canales por identificar mirando la luz.",
+      channels: Array.from({ length: count }, (_, i) => ({ ...emptyChannel(i + 1), name: `Canal ${i + 1}` })),
+    });
+    addInstance({
+      id: instanceId,
+      definitionId,
+      label: `${model.toUpperCase()} #1`,
+      universe: 1,
+      address: nextFreeAddress(instances, definitions, count),
+    });
+    setFinderId(instanceId);
+  }
+
+  if (finderId) return <ChannelFinder instanceId={finderId} onClose={() => setFinderId(null)} />;
 
   if (editingDef) {
     return (
@@ -109,6 +140,7 @@ export function FixtureManager({ onOpenControl }: FixtureManagerProps) {
                         onChange={updateInstance}
                         onRemove={() => removeInstance(inst.id)}
                         onOpenControl={() => onOpenControl(inst.id)}
+                        onFindChannels={() => setFinderId(inst.id)}
                       />
                     ))}
                   <Button
@@ -121,7 +153,11 @@ export function FixtureManager({ onOpenControl }: FixtureManagerProps) {
                         definitionId: def.id,
                         label: `${def.model.toUpperCase()} #${count + 1}`,
                         universe: 1,
-                        address: 1,
+                        address: nextFreeAddress(
+                          instances,
+                          definitions,
+                          Math.max(1, ...def.channels.map((c) => c.index)),
+                        ),
                       })
                     }
                   >
@@ -138,6 +174,9 @@ export function FixtureManager({ onOpenControl }: FixtureManagerProps) {
         <Button variant="primary" className="w-full" onClick={() => setEditingDef("new")}>
           + ADD FIXTURE
         </Button>
+        <Button className="mt-2 w-full" onClick={addUnknown}>
+          + Equipo sin manual
+        </Button>
       </div>
     </Panel>
   );
@@ -148,11 +187,13 @@ function InstanceRow({
   onChange,
   onRemove,
   onOpenControl,
+  onFindChannels,
 }: {
   instance: FixtureInstance;
   onChange: (i: FixtureInstance) => void;
   onRemove: () => void;
   onOpenControl: () => void;
+  onFindChannels: () => void;
 }) {
   return (
     <div className="flex items-center gap-2 rounded-control px-2 py-1.5 text-xs hover:bg-panel2">
@@ -164,6 +205,9 @@ function InstanceRow({
       >
         {instance.label}
       </button>
+      <Button size="sm" variant="ghost" aria-label={`Identificar canales de ${instance.label}`} onClick={onFindChannels}>
+        Canales
+      </Button>
       <span className="text-text-secondary">Universe</span>
       <input
         type="number"

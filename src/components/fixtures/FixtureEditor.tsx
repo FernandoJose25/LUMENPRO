@@ -12,7 +12,7 @@ interface FixtureEditorProps {
 const CHANNEL_TYPES = Object.keys(CHANNEL_TYPE_LABELS) as ChannelType[];
 const CURVES = ["linear", "log", "s-curve"] as const;
 
-function emptyChannel(index: number): FixtureChannel {
+export function emptyChannel(index: number): FixtureChannel {
   return {
     id: `ch-${crypto.randomUUID()}`,
     index,

@@ -50,6 +50,15 @@
   preset no hace nada.
 - Mientras sale DMX la laptop no se suspende, y al abrir la app reconecta sola
   al último adaptador.
+- **Simulador** (2026-11-24): `lib/stage.ts` (geometría y cámara propias) y
+  `components/stage/`. Sección "Escenario" para ubicar las luces; en el Dashboard
+  reemplaza al visualizer de puntos. No simula gobos ni prisma. `panInvert` y
+  `tiltInvert` de cada unidad ya se aplican en la salida.
+- **Identificar canales** (`ChannelFinder`): barrer, asignar función, valor inicial
+  y presets. "+ Equipo sin manual" crea N canales en direcciones libres. En DMX
+  Output, "Identificar" enciende una luz 3 s y "Velocidad" ajusta los FPS.
+- **Colores y presets** de un toque (`ColorSwatches`) en Fixture Control, Groups y
+  Live; reemplazan la barra decorativa.
 - **Número de canal editable** en Fixture Editor: mueve la función sin romper
   escenas (guardan el id del canal, no su posición).
 - **Show en disco** (`show.json` en AppData, escritura atómica) con exportar e
@@ -65,9 +74,9 @@
 - [ ] Verificar el modo y los canales del "Orus" 280W en el menú del equipo:
       hay documentos que dicen 16, 18 y 26/32. El estrobo por defecto es 255
       (abierto) por analogía con dos cabezas 10R, sin confirmar
-- [ ] Agregar la barra LED móvil (modelo por identificar)
+- [ ] Agregar la barra LED móvil con "+ Equipo sin manual" (modelo por identificar)
 - [ ] Control XY dedicado para Pan/Tilt (hoy usa `Fader` genérico)
-- [ ] Color wheel visual, selector de gobo con miniaturas, editor de curvas gráfico
+- [ ] Selector de gobo con miniaturas, editor de curvas gráfico
 - [ ] Curvas de canal: se editan pero todavía no se aplican en la salida
 
 ## ✅ Fase 4 — Scenes / Groups / Chases / Effects (completa, ver detalle abajo)
@@ -241,7 +250,7 @@
       (en `dmx-engine/`) y luego la app. Revisar parpadeo.
 - [x] Empaquetado Tauri — `npm run tauri build` genera el `.exe`.
 - [x] Momentos del evento con "Siguiente" (escena + chase + effects en un botón)
-- [ ] Buscador de canales (subir de a uno para identificar un equipo sin manual)
+- [x] Buscador de canales (subir de a uno para identificar un equipo sin manual)
 - [x] Control por celular (página por WiFi local con PIN)
 - [ ] Probar el celular real en la WiFi del evento (firewall de Windows)
 - [ ] Doble monitor (depende de Tauri, gestión de ventanas nativas)
@@ -340,6 +349,6 @@
 2. ~~Motor DMX en Rust + driver USB-DMX~~ — hecho, sin probar contra hardware
 3. ~~Envolver en Tauri~~ — hecho, la interfaz envía DMX y genera el `.exe`
 4. Scenes (hecho) → Groups (hecho) → Chases (hecho) → Effects (hecho)
-5. Visualizer 2D (hecho, básico) → posicionamiento manual + 3D (pendientes)
+5. Simulador con posiciones y haces (hecho)
 6. Live Mode (hecho) → Command Palette (hecho) → Audio Reactive, doble
    monitor (pendientes)

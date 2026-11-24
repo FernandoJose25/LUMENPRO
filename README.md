@@ -10,6 +10,8 @@ Software de escritorio para controlar luces de escenario por **DMX512**: cabezas
 
 > **English summary:** Desktop DMX512 lighting console. React + TypeScript UI (design system, resizable workspace, fixture control, scenes, groups, chases with crossfades, parametric effects, live 2D visualizer) plus a Rust DMX engine (512-channel universe, fixed-FPS output thread with automatic reconnection, Open DMX (FTDI) and Enttec DMX USB PRO drivers plus a mock driver) connected to the UI through Tauri 2 commands. Integration tests with Vitest + Testing Library and unit tests in Rust.
 
+![Simulador del escenario](docs/screenshots/escenario.png)
+
 ![Dashboard de LUMEN PRO](docs/screenshots/dashboard.png)
 
 ## Mi rol
@@ -20,14 +22,15 @@ Lo diseñé y desarrollé solo, a partir de un brief de producto propio de 37 se
 
 - **Design system propio:** Button, Panel, Fader, Tabs e indicadores de estado, con tokens de color y tipografía.
 - **Workspace profesional:** sidebar, topbar con estado del DMX, paneles redimensionables, **Blackout** global y paleta de comandos (`Ctrl/Cmd + K`).
-- **Fixtures:** biblioteca, editor de canales y control dinámico. Los faders se generan según el perfil de cada equipo (pan/tilt, dimmer, color wheel, gobo, prisma, etc.).
+- **Fixtures:** biblioteca, editor de canales y control dinámico. Los faders, colores y presets se generan según el perfil de cada equipo (pan/tilt, dimmer, color wheel, gobo, prisma, etc.).
 - **Scenes:** guardan una foto de los valores en vivo y luego se recuperan, re-graban o renombran.
 - **Groups:** agrupan fixtures para controlarlos por lote.
 - **Chases:** secuencias de escenas con fade y hold, en bucle o una sola vez.
 - **Momentos:** el evento en orden (Entrada, Vals, Fotos, Hora loca…). Cada uno junta escena, chase y effects en un botón, con "Siguiente", transición y avance automático opcional. Incluye una plantilla de quinceañera.
 - **Control por celular:** página en la red local (QR + PIN) con Siguiente, momentos, intensidad, estrobo y Blackout.
 - **Effects:** generadores paramétricos (seno, cuadrada…) aplicados sobre un grupo, con un único motor de intervalos global.
-- **Visualizer 2D en vivo** con el color y el brillo reales que se están enviando.
+- **Simulador del escenario:** haces en perspectiva con pan/tilt, color, zoom y estrobo reales, posiciones editables y cámara libre. Sin dependencias 3D: proyección propia sobre canvas.
+- **Equipos sin manual:** identificador que barre canal por canal y guarda su función, valor inicial y presets.
 - **Motor DMX en Rust** (`dmx-engine/`):
   - universo de 512 canales thread-safe;
   - hilo de salida a FPS fijo;
@@ -44,13 +47,13 @@ Lo diseñé y desarrollé solo, a partir de un brief de producto propio de 37 se
 | Estado | Store propio con Context; el show se guarda en `show.json` (app) o `localStorage` (navegador) |
 | Motor | Rust: crate `lumenpro_dmx`, hilos, `serialport` |
 | Escritorio | Tauri 2 |
-| Calidad | Vitest + Testing Library + jsdom (94 tests), `cargo test` (26 tests), GitHub Actions |
+| Calidad | Vitest + Testing Library + jsdom (132 tests), `cargo test` (26 tests), GitHub Actions |
 
 ## Estructura
 
 ```
-src/components/   ui/ (design system) · layout/ · fixtures/ · scenes/ · groups/ · chases/ · effects/ · visualizer/ · live/ · command-palette/
-src/lib/          fixtureStore (estado + persistencia), chasePlayer, effectEngine, momentsEngine, dmxFrame, dmxOutput
+src/components/   ui/ (design system) · layout/ · fixtures/ · scenes/ · groups/ · chases/ · effects/ · moments/ · stage/ · dmx/ · remote/ · live/ · command-palette/
+src/lib/          fixtureStore (estado + persistencia), chasePlayer, effectEngine, momentsEngine, dmxFrame, dmxOutput, remoteControl, stage
 src/types/        Modelo de datos: fixture, scene, group, chase, effect, moment
 src/test/         Tests de integración
 dmx-engine/       Motor DMX en Rust (crate independiente)
@@ -73,4 +76,4 @@ npm run tauri build                   # instalador .exe (src-tauri/target/releas
 
 ## Estado y siguiente paso
 
-La interfaz ya envía los 512 canales al motor DMX y la app se empaqueta como `.exe`. El show se maneja desde la laptop o el celular. Falta probarlo con el adaptador y las luces reales; el siguiente paso es el simulador con posiciones y haces. El detalle está en [PASOS-PENDIENTES.md](PASOS-PENDIENTES.md).
+La interfaz ya envía los 512 canales al motor DMX y la app se empaqueta como `.exe`. El show se maneja desde la laptop o el celular. Falta probarlo con el adaptador y las luces reales. El detalle está en [PASOS-PENDIENTES.md](PASOS-PENDIENTES.md).

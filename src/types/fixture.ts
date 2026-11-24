@@ -56,6 +56,22 @@ export interface ChannelPreset {
   label: string;
   dmxFrom: number;
   dmxTo: number;
+  /** Color con el que se ve en el simulador (rueda de color), en hex. */
+  color?: string;
+}
+
+/** Dónde está el equipo en el escenario, para el simulador. Metros y grados;
+ *  x a la derecha, y hacia arriba, z hacia el público. */
+export interface Placement {
+  x: number;
+  y: number;
+  z: number;
+  /** Giro sobre el eje vertical. 0 = mirando al público. */
+  yaw: number;
+  /** Inclinación de un equipo fijo: 90 = techo, 0 = al frente, -90 = piso. */
+  pitch: number;
+  /** Cabeza colgada de un truss en vez de apoyada. */
+  hung: boolean;
 }
 
 /** Sección 10 — cada canal debe permitir: nombre, tipo, rango DMX, presets,
@@ -99,6 +115,9 @@ export interface FixtureInstance {
    *  si no está agrupado. Antes era un string libre sin usar en ningún
    *  lado (Fase 4 lo activa) — ahora referencia siempre un Group real. */
   group?: string;
+  /** Invierten el movimiento en la salida, para que la cabeza real coincida
+   *  con el simulador según cómo esté montada. */
   panInvert?: boolean;
   tiltInvert?: boolean;
+  placement?: Placement;
 }

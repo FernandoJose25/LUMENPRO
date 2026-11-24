@@ -7,6 +7,7 @@ import { BlackoutButton } from "@/components/layout/BlackoutButton";
 import { cn } from "@/lib/utils";
 import { useFixtureStore } from "@/lib/fixtureStore";
 import { useChasePlayer } from "@/lib/chasePlayer";
+import { ColorSwatches } from "@/components/fixtures/ColorSwatches";
 import { LiveMoments } from "./LiveMoments";
 import { CHANNEL_TYPE_LABELS, type ChannelType } from "@/types/fixture";
 
@@ -319,6 +320,9 @@ function GroupMasterRow({
         <span className="font-mono text-[10px] font-normal text-text-secondary">
           {members.length} fixture{members.length === 1 ? "" : "s"}
         </span>
+      </div>
+      <div className="mb-2">
+        <ColorSwatches instances={members} />
       </div>
       <div className="flex flex-col gap-2">
         {channelTypes.map((type) => (

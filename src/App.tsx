@@ -12,6 +12,7 @@ import { LiveView } from "@/components/live/LiveView";
 import { DmxOutputView } from "@/components/dmx/DmxOutputView";
 import { MomentsView } from "@/components/moments/MomentsView";
 import { RemoteView } from "@/components/remote/RemoteView";
+import { StageView } from "@/components/stage/StageView";
 import { SettingsView } from "@/components/views/SettingsView";
 import { CommandPalette } from "@/components/command-palette/CommandPalette";
 import { useEffectsEngine } from "@/lib/effectEngine";
@@ -84,6 +85,7 @@ function AppShell() {
         {section === "Dashboard" ? <DashboardView /> : null}
         {section === "Live" ? <LiveView /> : null}
         {section === "Momentos" ? <MomentsView /> : null}
+        {section === "Escenario" ? <StageView /> : null}
         {section === "Fixtures" ? <FixturesView /> : null}
         {section === "Groups" ? <GroupsView /> : null}
         {section === "Scenes" ? <ScenesView /> : null}

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
 import { Fader } from "@/components/ui/Fader";
+import { ColorSwatches } from "@/components/fixtures/ColorSwatches";
 import { cn } from "@/lib/utils";
 import { useFixtureStore } from "@/lib/fixtureStore";
 import { CHANNEL_TYPE_LABELS, type ChannelType } from "@/types/fixture";
@@ -232,7 +233,10 @@ function GroupControl({ groupId }: { groupId: string | null }) {
         {members.length} fixture{members.length === 1 ? "" : "s"} · {channelTypes.length} tipo
         {channelTypes.length === 1 ? "" : "s"} de canal en común
       </div>
-      <div className="flex max-h-[calc(100%-3rem)] flex-col gap-2.5 overflow-y-auto scrollbar-thin pr-1">
+      <div className="mb-3">
+        <ColorSwatches instances={members} />
+      </div>
+      <div className="flex max-h-[calc(100%-6rem)] flex-col gap-2.5 overflow-y-auto scrollbar-thin pr-1">
         {channelTypes.map((type) => (
           <Fader
             key={type}

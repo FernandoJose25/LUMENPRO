@@ -3,7 +3,7 @@ import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
 import { StatusIndicator } from "@/components/ui/StatusIndicator";
 import { describePatch } from "@/lib/dmxFrame";
-import type { DmxAdapter, DmxOutput } from "@/lib/dmxOutput";
+import { DEFAULT_FPS, type DmxAdapter, type DmxOutput } from "@/lib/dmxOutput";
 import { useFixtureStore } from "@/lib/fixtureStore";
 
 const ADAPTERS: { id: DmxAdapter; label: string }[] = [
@@ -11,6 +11,8 @@ const ADAPTERS: { id: DmxAdapter; label: string }[] = [
   { id: "enttec", label: "Enttec DMX USB PRO" },
   { id: "mock", label: "Simulado (sin cable)" },
 ];
+
+const SPEEDS = [20, 25, 30, 35, 40];
 
 const CHIP_LABELS = { ftdi: "FTDI", ch340: "CH340", other: "" } as const;
 
@@ -43,6 +45,7 @@ export function DmxOutputView({ dmx }: { dmx: DmxOutput }) {
 function Connection({ dmx }: { dmx: DmxOutput }) {
   const [adapter, setAdapter] = useState<DmxAdapter>("open_dmx");
   const [chosenPort, setChosenPort] = useState<string | null>(null);
+  const [fps, setFps] = useState(DEFAULT_FPS);
 
   // Sin elección explícita (o si el puerto elegido desapareció), se propone
   // el primer FTDI: casi siempre es el único adaptador enchufado.
@@ -51,12 +54,12 @@ function Connection({ dmx }: { dmx: DmxOutput }) {
     dmx.ports.find((p) => p.chip === "ftdi") ??
     dmx.ports[0];
   const needsPort = adapter !== "mock";
-  const { state, output, lastError, fps } = dmx.status;
+  const { state, output, lastError } = dmx.status;
 
   return (
     <div className="flex flex-col gap-3 text-xs text-text-secondary">
       {state === "running" ? (
-        <StatusIndicator status="ok" label={output} detail={`${fps} FPS`} />
+        <StatusIndicator status="ok" label={output} detail={`${dmx.status.fps} FPS`} />
       ) : state === "reconnecting" ? (
         <StatusIndicator status="warn" label={output} detail="reconectando…" />
       ) : (
@@ -108,11 +111,23 @@ function Connection({ dmx }: { dmx: DmxOutput }) {
             </p>
           ) : null}
 
+          <label className="flex flex-col gap-1">
+            Velocidad
+            <select value={fps} onChange={(e) => setFps(Number(e.target.value))} className={selectClass}>
+              {SPEEDS.map((s) => (
+                <option key={s} value={s}>
+                  {s} FPS
+                </option>
+              ))}
+            </select>
+            <span className="text-[11px]">Si las luces parpadean, bájala.</span>
+          </label>
+
           <Button
             variant="primary"
             size="lg"
             disabled={needsPort && !port}
-            onClick={() => void dmx.connect(adapter, port?.name ?? "")}
+            onClick={() => void dmx.connect(adapter, port?.name ?? "", fps)}
           >
             Conectar
           </Button>
@@ -137,15 +152,24 @@ function Connection({ dmx }: { dmx: DmxOutput }) {
 }
 
 function OutputMonitor({ frame }: { frame: number[] }) {
-  const { instances, definitions } = useFixtureStore();
+  const { instances, definitions, identifyId, identify } = useFixtureStore();
 
   return (
     <Panel title="SALIDA — UNIVERSO 1">
       <div className="flex flex-col gap-2">
         {describePatch(instances, definitions).map(({ instance, first, last, issues }) => (
           <div key={instance.id} className="rounded-control border border-border px-3 py-2">
-            <div className="flex items-center justify-between text-xs">
-              <span className="font-medium text-text-primary">{instance.label}</span>
+            <div className="flex items-center gap-3 text-xs">
+              <span className="flex-1 font-medium text-text-primary">{instance.label}</span>
+              <Button
+                size="sm"
+                selected={identifyId === instance.id}
+                title="La enciende 3 segundos para reconocerla"
+                aria-label={`Identificar ${instance.label}`}
+                onClick={() => identify(instance.id)}
+              >
+                Identificar
+              </Button>
               <span className="font-mono text-text-secondary">
                 {first}–{last}
               </span>

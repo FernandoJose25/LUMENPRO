@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/Button";
 import { Fader } from "@/components/ui/Fader";
 import { StatusIndicator } from "@/components/ui/StatusIndicator";
 import { useFixtureStore } from "@/lib/fixtureStore";
-import type { FixtureChannel } from "@/types/fixture";
+import { ColorSwatches } from "./ColorSwatches";
 
 /**
  * Sección 7: "Cuando se selecciona un fixture, el panel debe adaptarse a
@@ -35,7 +35,7 @@ export function FixtureControl() {
     );
   }
 
-  const quickBar = getQuickBar(selectedDefinition.channels);
+  const withPresets = selectedDefinition.channels.filter((c) => c.presets.length > 0);
 
   return (
     <Panel className="h-full" title="FIXTURE CONTROL">
@@ -49,7 +49,7 @@ export function FixtureControl() {
         <StatusIndicator status="active" label="Seleccionado" />
       </div>
 
-      <div className="flex max-h-[calc(100%-9rem)] flex-col gap-2.5 overflow-y-auto scrollbar-thin pr-1">
+      <div className="flex max-h-[calc(100%-13rem)] flex-col gap-2.5 overflow-y-auto scrollbar-thin pr-1">
         {selectedDefinition.channels.map((ch) => (
           <Fader
             key={ch.id}
@@ -62,35 +62,27 @@ export function FixtureControl() {
         ))}
       </div>
 
-      {quickBar.length ? (
-        <div className="mt-3 grid grid-cols-4 gap-1.5 border-t border-border pt-3">
-          {quickBar.map((label) => (
-            <Button key={label} size="sm" variant="secondary">
-              {label}
-            </Button>
-          ))}
-        </div>
-      ) : null}
+      <div className="mt-3 flex max-h-36 flex-col gap-2 overflow-y-auto scrollbar-thin border-t border-border pt-3">
+        <ColorSwatches instances={[selectedInstance]} />
+        {withPresets.map((c) => (
+          <div key={c.id} className="flex flex-wrap items-center gap-1.5">
+            <span className="w-16 shrink-0 text-xs font-medium text-text-secondary">{c.name}</span>
+            {c.presets.map((p) => (
+              <Button
+                key={p.id}
+                size="sm"
+                // El centro del rango: lejos de los bordes, donde los equipos difieren.
+                onClick={() => setChannelValue(selectedInstance.id, c.id, Math.round((p.dmxFrom + p.dmxTo) / 2))}
+              >
+                {p.color ? (
+                  <span className="h-3 w-3 rounded-full" style={{ backgroundColor: p.color }} aria-hidden />
+                ) : null}
+                {p.label}
+              </Button>
+            ))}
+          </div>
+        ))}
+      </div>
     </Panel>
   );
-}
-
-/** Sección 8 — "mostrar únicamente las funciones relevantes" según el tipo de fixture. */
-function getQuickBar(channels: FixtureChannel[]): string[] {
-  const types = new Set(channels.map((c) => c.type));
-  const isRgbPar = types.has("RED") && types.has("GREEN") && types.has("BLUE");
-
-  if (isRgbPar) {
-    return ["RGB", "DIMMER", "STROBE", "MACROS"];
-  }
-
-  const beamButtons: string[] = [];
-  if (types.has("COLOR") || types.has("COLOR_WHEEL")) beamButtons.push("WHITE", "COLOR");
-  if (types.has("GOBO")) beamButtons.push("GOBO");
-  if (types.has("PRISM")) beamButtons.push("PRISM");
-  if (types.has("FROST")) beamButtons.push("FROST");
-  if (types.has("ZOOM")) beamButtons.push("ZOOM");
-  if (types.has("FOCUS")) beamButtons.push("FOCUS");
-  if (types.has("STROBE")) beamButtons.push("STROBE");
-  return beamButtons;
 }

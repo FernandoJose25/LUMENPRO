@@ -5,7 +5,7 @@ export const DMX_CHANNELS = 512;
 /** El motor en Rust maneja un solo universo (ver AUDIT.md §8.3). */
 const OUTPUT_UNIVERSE = 1;
 
-interface FrameInput {
+export interface FrameInput {
   instances: FixtureInstance[];
   definitions: FixtureDefinition[];
   liveValues: Record<string, Record<string, number>>;
@@ -13,6 +13,8 @@ interface FrameInput {
   /** Intensidad general, 0–100. */
   master: number;
   strobeActive: boolean;
+  /** Fixture encendido a pleno para reconocerlo, o null. */
+  identifyId: string | null;
 }
 
 /** Canales que emiten luz. MODE entra porque un PAR en programa automático
@@ -43,31 +45,48 @@ function strobeValue(channel: FixtureChannel, definition: FixtureDefinition): nu
   return definition.channels.some((c) => c.type === "PAN") ? null : 200;
 }
 
+/** Lo que vale un canal una vez aplicados intensidad, estrobo, identificar y
+ *  Blackout. Antes de invertir: es lo que ve el simulador. */
+export function effectiveValue(
+  instance: FixtureInstance,
+  definition: FixtureDefinition,
+  channel: FixtureChannel,
+  input: FrameInput,
+): number {
+  let value = input.liveValues[instance.id]?.[channel.id] ?? channel.defaultValue;
+  if (input.strobeActive && channel.type === "STROBE") value = strobeValue(channel, definition) ?? value;
+  if (followsMaster(channel, definition)) value = (value * input.master) / 100;
+  if (input.identifyId === instance.id) {
+    if (channel.type === "DIMMER" || COLOR_TYPES.includes(channel.type)) value = 255;
+    if (channel.type === "MODE") value = 0;
+    if (channel.type === "STROBE") value = channel.defaultValue;
+  }
+  if (input.blackoutActive && goesDarkOnBlackout(channel, definition)) value = 0;
+  return value;
+}
+
+function isInverted(instance: FixtureInstance, channel: FixtureChannel): boolean {
+  const byMount =
+    (instance.panInvert === true && (channel.type === "PAN" || channel.type === "PAN_FINE")) ||
+    (instance.tiltInvert === true && (channel.type === "TILT" || channel.type === "TILT_FINE"));
+  return channel.invert !== byMount;
+}
+
 /** Los 512 canales tal como salen por el cable (índice 0 = canal DMX 1). */
-export function buildFrame({
-  instances,
-  definitions,
-  liveValues,
-  blackoutActive,
-  master,
-  strobeActive,
-}: FrameInput): number[] {
+export function buildFrame(input: FrameInput): number[] {
   const frame = new Array<number>(DMX_CHANNELS).fill(0);
 
-  for (const instance of instances) {
+  for (const instance of input.instances) {
     if (instance.universe !== OUTPUT_UNIVERSE) continue;
-    const definition = definitions.find((d) => d.id === instance.definitionId);
+    const definition = input.definitions.find((d) => d.id === instance.definitionId);
     if (!definition) continue;
 
     for (const channel of definition.channels) {
       const address = instance.address + channel.index - 1;
       if (address < 1 || address > DMX_CHANNELS) continue;
 
-      let value = liveValues[instance.id]?.[channel.id] ?? channel.defaultValue;
-      if (strobeActive && channel.type === "STROBE") value = strobeValue(channel, definition) ?? value;
-      if (followsMaster(channel, definition)) value = (value * master) / 100;
-      if (blackoutActive && goesDarkOnBlackout(channel, definition)) value = 0;
-      const output = channel.invert ? channel.dmxMin + channel.dmxMax - value : value;
+      const value = effectiveValue(instance, definition, channel, input);
+      const output = isInverted(instance, channel) ? channel.dmxMin + channel.dmxMax - value : value;
       frame[address - 1] = Math.max(0, Math.min(255, Math.round(output)));
     }
   }
@@ -110,4 +129,20 @@ export function describePatch(instances: FixtureInstance[], definitions: Fixture
   }
 
   return rows;
+}
+
+/** Primera dirección donde entran `count` canales seguidos sin pisar a nadie;
+ *  1 si ya no queda lugar. */
+export function nextFreeAddress(
+  instances: FixtureInstance[],
+  definitions: FixtureDefinition[],
+  count: number,
+): number {
+  let address = 1;
+  for (const row of describePatch(instances, definitions)) {
+    if (row.instance.universe !== OUTPUT_UNIVERSE) continue;
+    if (address + count - 1 < row.first) break;
+    address = Math.max(address, row.last + 1);
+  }
+  return address + count - 1 <= DMX_CHANNELS ? address : 1;
 }

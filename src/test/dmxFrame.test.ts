@@ -19,7 +19,7 @@ function frameWith(
   instances: FixtureInstance[] = seedInstances,
   definitions: FixtureDefinition[] = seedDefinitions,
 ) {
-  return buildFrame({ instances, definitions, liveValues, blackoutActive, master: 100, strobeActive: false });
+  return buildFrame({ instances, definitions, liveValues, blackoutActive, master: 100, strobeActive: false, identifyId: null });
 }
 
 describe("buildFrame — de los valores en vivo a los 512 canales", () => {
@@ -124,6 +124,7 @@ describe("Intensidad y estrobo generales", () => {
     blackoutActive: false,
     master: 100,
     strobeActive: false,
+    identifyId: null,
   };
 
   it("la intensidad baja el dimmer y nada más", () => {

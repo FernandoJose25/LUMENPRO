@@ -19,6 +19,8 @@ function makeId(prefix: string): string {
 // como mucho una vez por segundo en vez de escribir a disco en cada tick.
 const PERSIST_EVERY_MS = 1000;
 
+const IDENTIFY_MS = 3000;
+
 interface FixtureStoreState {
   definitions: FixtureDefinition[];
   instances: FixtureInstance[];
@@ -48,6 +50,8 @@ interface FixtureStoreState {
    *  (dmxFrame.ts) sobre lo que esté sonando. No se persisten. */
   master: number;
   strobeActive: boolean;
+  /** Fixture que se está identificando (ver identify), o null. */
+  identifyId: string | null;
   /** En el orden del evento. */
   moments: Moment[];
   /** Último momento lanzado. Se persiste: si la app se cierra a mitad del
@@ -112,6 +116,8 @@ interface FixtureStoreValue extends FixtureStoreState {
   releaseBlackout: () => void;
   setMaster: (value: number) => void;
   setStrobe: (on: boolean) => void;
+  /** Enciende un fixture a pleno unos segundos para reconocerlo. */
+  identify: (instanceId: string) => void;
   addMoment: (name: string) => Moment;
   updateMoment: (momentId: string, patch: Partial<Omit<Moment, "id">>) => void;
   removeMoment: (momentId: string) => void;
@@ -153,6 +159,7 @@ function restoreState(parsed: Partial<FixtureStoreState>): FixtureStoreState {
     blackoutActive: false, // ídem
     master: 100, // ídem
     strobeActive: false, // ídem
+    identifyId: null, // ídem
     moments: parsed.moments ?? [],
     activeMomentId: parsed.activeMomentId ?? null,
     momentRun: null, // ídem
@@ -165,6 +172,7 @@ function serialize(state: FixtureStoreState): string {
     blackoutActive: _blackoutActive,
     master: _master,
     strobeActive: _strobeActive,
+    identifyId: _identifyId,
     momentRun: _momentRun,
     ...persisted
   } = state;
@@ -616,6 +624,13 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
   }, []);
   const setStrobe = useCallback((on: boolean) => setState((s) => ({ ...s, strobeActive: on })), []);
 
+  const identifyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const identify = useCallback((instanceId: string) => {
+    if (identifyTimer.current) clearTimeout(identifyTimer.current);
+    setState((s) => ({ ...s, identifyId: instanceId }));
+    identifyTimer.current = setTimeout(() => setState((s) => ({ ...s, identifyId: null })), IDENTIFY_MS);
+  }, []);
+
   const addMoment = useCallback(
     (name: string): Moment => {
       const created: Moment = {
@@ -752,6 +767,7 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
     releaseBlackout,
     setMaster,
     setStrobe,
+    identify,
     addMoment,
     updateMoment,
     removeMoment,

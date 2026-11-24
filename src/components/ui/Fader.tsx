@@ -111,7 +111,7 @@ export function Fader({
           style={{ left: `${pct}%` }}
         />
       </div>
-      <div className="flex w-16 shrink-0 items-center rounded-control border border-border bg-panel2">
+      <div className="flex w-20 shrink-0 items-center rounded-control border border-border bg-panel2">
         <button
           type="button"
           disabled={disabled}

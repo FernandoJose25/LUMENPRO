@@ -1,10 +1,9 @@
+import { lookValues, type Look } from "@/lib/look";
 import type { Effect } from "@/types/effect";
 import type { ChannelType, FixtureDefinition, FixtureInstance } from "@/types/fixture";
 import { GROUP_COLORS, type Group } from "@/types/group";
 import type { Moment } from "@/types/moment";
 import type { Scene } from "@/types/scene";
-
-type Look = Partial<Record<ChannelType, number>>;
 
 interface Rig {
   instances: FixtureInstance[];
@@ -97,24 +96,14 @@ export function buildQuinceTemplate(rig: Rig, makeId: (prefix: string) => string
     ...effect(parsGroup, "PAR: ola azul", "BLUE", 44, 0, 255, 90),
   ];
 
-  function valuesFor(instance: FixtureInstance, look: Look): Record<string, number> {
-    const channels = definitionOf(instance)?.channels ?? [];
-    return Object.fromEntries(
-      channels.flatMap((c) => {
-        const value = look[c.type];
-        return value === undefined ? [] : [[c.id, value] as const];
-      }),
-    );
-  }
-
   function moment(name: string, fadeMs: number, parLook: Look, headLook: Look, effectIds: string[] = []) {
     const scene: Scene = {
       id: makeId("scene"),
       name,
-      values: Object.fromEntries([
-        ...pars.map((i) => [i.id, valuesFor(i, parLook)] as const),
-        ...heads.map((i) => [i.id, valuesFor(i, headLook)] as const),
-      ]),
+      values: {
+        ...lookValues(pars, rig.definitions, parLook),
+        ...lookValues(heads, rig.definitions, headLook),
+      },
       createdAt: now,
       updatedAt: now,
     };
