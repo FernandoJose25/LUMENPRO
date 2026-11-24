@@ -1,0 +1,145 @@
+import { describe, it, expect } from "vitest";
+import { buildFrame, describePatch } from "@/lib/dmxFrame";
+import { seedDefinitions, seedInstances } from "@/data/fixtureLibrary";
+import type { ChannelType, FixtureDefinition, FixtureInstance } from "@/types/fixture";
+
+const orus = seedInstances[0]; // DMX 1–16
+const par1 = seedInstances[2]; // DMX 33–39
+
+function channelId(definitionId: string, type: ChannelType) {
+  return seedDefinitions.find((d) => d.id === definitionId)!.channels.find((c) => c.type === type)!.id;
+}
+
+const orusCh = (type: ChannelType) => channelId("def-orus-280", type);
+const parCh = (type: ChannelType) => channelId("def-lpc007", type);
+
+function frameWith(
+  liveValues: Record<string, Record<string, number>>,
+  blackoutActive = false,
+  instances: FixtureInstance[] = seedInstances,
+  definitions: FixtureDefinition[] = seedDefinitions,
+) {
+  return buildFrame({ instances, definitions, liveValues, blackoutActive });
+}
+
+describe("buildFrame — de los valores en vivo a los 512 canales", () => {
+  it("cada canal sale en dirección del fixture + índice, y lo no tocado sale con su default", () => {
+    const frame = frameWith({
+      [orus.id]: { [orusCh("DIMMER")]: 200 },
+      [par1.id]: { [parCh("RED")]: 255, [parCh("BLUE")]: 10 },
+    });
+
+    expect(frame).toHaveLength(512);
+    expect(frame[0]).toBe(128); // canal 1: Pan, default
+    expect(frame[5]).toBe(200); // canal 6: Dimmer del Orus #1
+    expect(frame.slice(32, 39)).toEqual([255, 255, 0, 10, 0, 0, 0]); // PAR #1
+    expect(frame[511]).toBe(0);
+  });
+
+  it("una cabeza recién conectada sale con el shutter abierto: 0 sería cerrado y no encendería", () => {
+    expect(frameWith({})[6]).toBe(255);
+  });
+
+  it("un canal invertido sale espejado", () => {
+    const definitions = seedDefinitions.map((d) => ({
+      ...d,
+      channels: d.channels.map((c) => (c.type === "TILT" ? { ...c, invert: true } : c)),
+    }));
+    const frame = frameWith({ [orus.id]: { [orusCh("TILT")]: 55 } }, false, seedInstances, definitions);
+    expect(frame[2]).toBe(200);
+  });
+
+  it("ignora canales más allá del 512 y otros universos en vez de pisar a otros fixtures", () => {
+    const frame = frameWith(
+      {},
+      false,
+      [
+        { ...par1, id: "a", address: 510 },
+        { ...par1, id: "b", address: 1, universe: 2 },
+      ],
+    );
+    expect(frame).toHaveLength(512);
+    expect(frame[509]).toBe(255);
+    expect(frame[0]).toBe(0);
+  });
+});
+
+describe("Blackout — apaga sin mover las cabezas", () => {
+  const liveValues = {
+    [orus.id]: {
+      [orusCh("PAN")]: 180,
+      [orusCh("TILT")]: 60,
+      [orusCh("DIMMER")]: 255,
+      [orusCh("GOBO")]: 40,
+    },
+    [par1.id]: { [parCh("RED")]: 255, [parCh("MODE")]: 220 },
+  };
+
+  it("dimmer, color y programas automáticos a 0; pan, tilt, gobo y shutter quedan igual", () => {
+    const frame = frameWith(liveValues, true);
+    expect(frame[0]).toBe(180); // Pan
+    expect(frame[2]).toBe(60); // Tilt
+    expect(frame[5]).toBe(0); // Dimmer
+    expect(frame[6]).toBe(255); // Shutter: si se cerrara, al volver no abriría solo
+    expect(frame[8]).toBe(40); // Gobo
+    expect(frame.slice(32, 39)).toEqual([0, 0, 0, 0, 0, 0, 0]); // PAR #1, incluido Color Macro
+  });
+
+  it("al quitarlo todo vuelve exactamente como estaba", () => {
+    const before = frameWith(liveValues, false);
+    frameWith(liveValues, true);
+    expect(frameWith(liveValues, false)).toEqual(before);
+  });
+
+  it("con el dimmer invertido, apagado es 255 y no 0", () => {
+    const definitions = seedDefinitions.map((d) => ({
+      ...d,
+      channels: d.channels.map((c) => (c.type === "DIMMER" ? { ...c, invert: true } : c)),
+    }));
+    expect(frameWith(liveValues, true, seedInstances, definitions)[5]).toBe(255);
+  });
+
+  it("un fixture sin dimmer ni color se apaga cerrando el shutter", () => {
+    const base = seedDefinitions[0];
+    const scanner: FixtureDefinition = {
+      ...base,
+      id: "scanner",
+      channels: base.channels.filter((c) => c.type === "PAN" || c.type === "STROBE").map((c, i) => ({ ...c, index: i + 1 })),
+    };
+    const instance = { ...orus, id: "scan", definitionId: "scanner", address: 100 };
+    const frame = frameWith({}, true, [instance], [scanner]);
+    expect(frame[99]).toBe(128); // Pan quieto
+    expect(frame[100]).toBe(0); // Shutter cerrado
+  });
+});
+
+describe("describePatch — choques de direcciones", () => {
+  it("el rig de fábrica no tiene choques", () => {
+    expect(describePatch(seedInstances, seedDefinitions).flatMap((r) => r.issues)).toEqual([]);
+  });
+
+  it("avisa en los dos fixtures cuando la cabeza ocupa más canales de los previstos", () => {
+    // El caso real pendiente: si las cabezas son de 26 canales y no de 16.
+    const definitions = seedDefinitions.map((d) =>
+      d.id === "def-orus-280"
+        ? { ...d, channels: Array.from({ length: 26 }, (_, i) => ({ ...d.channels[0], id: `x${i}`, index: i + 1 })) }
+        : d,
+    );
+    const rows = describePatch(seedInstances, definitions);
+    expect(rows[0].issues).toEqual(["Se pisa con BEAM 280 ORUS #2 (17–42)"]);
+    expect(rows[1].issues).toContain("Se pisa con BEAM 280 ORUS #1 (1–26)");
+    expect(rows[1].issues).toContain("Se pisa con LPC007 PAR #1 (33–39)");
+  });
+
+  it("avisa si se pasa del canal 512 o está en un universo que no se envía", () => {
+    const rows = describePatch(
+      [
+        { ...par1, id: "a", address: 510 },
+        { ...par1, id: "b", universe: 2 },
+      ],
+      seedDefinitions,
+    );
+    expect(rows[0].issues).toEqual(["Se pasa del canal 512"]);
+    expect(rows[1].issues).toEqual(["Universo 2: solo se envía el universo 1"]);
+  });
+});

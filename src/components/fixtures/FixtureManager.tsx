@@ -22,6 +22,7 @@ export function FixtureManager({ onOpenControl }: FixtureManagerProps) {
     updateInstance,
     removeInstance,
     addDefinition,
+    updateDefinition,
   } = useFixtureStore();
 
   const [query, setQuery] = useState("");
@@ -49,6 +50,7 @@ export function FixtureManager({ onOpenControl }: FixtureManagerProps) {
         definition={editingDef === "new" ? null : editingDef}
         onSave={(def) => {
           if (editingDef === "new") addDefinition(def);
+          else updateDefinition(def);
           setEditingDef(null);
         }}
         onCancel={() => setEditingDef(null)}

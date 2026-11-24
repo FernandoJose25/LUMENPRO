@@ -10,7 +10,8 @@ import { ChasesView } from "@/components/chases/ChasesView";
 import { LiveView } from "@/components/live/LiveView";
 
 function Debug() {
-  const { scenes, groups, instances, chases, effects, liveValues, runningEffectIds } = useFixtureStore();
+  const { scenes, groups, instances, chases, effects, liveValues, runningEffectIds, blackoutActive } =
+    useFixtureStore();
   return (
     <pre data-testid="debug">
       {JSON.stringify({
@@ -21,6 +22,7 @@ function Debug() {
         runningEffectIds,
         instances: instances.map((i) => ({ id: i.id, group: i.group })),
         liveValues,
+        blackoutActive,
       })}
     </pre>
   );
@@ -151,7 +153,7 @@ describe("LiveView — disparo de escenas, effects, grupos y blackout", () => {
     expect(Object.values(finalLive)).toContain(200);
   });
 
-  it("Blackout desde Live Mode pone todo el rig en 0 y detiene los effects corriendo", async () => {
+  it("Blackout desde Live Mode no pierde nada: valores y effects siguen ahí al volver a encender", async () => {
     const user = userEvent.setup();
     localStorage.clear();
     render(
@@ -182,8 +184,34 @@ describe("LiveView — disparo de escenas, effects, grupos y blackout", () => {
     await user.click(screen.getByRole("button", { name: "BLACKOUT" }));
     await user.click(screen.getByRole("button", { name: "CONFIRMAR" }));
 
-    expect(readDebug().runningEffectIds).toHaveLength(0);
-    expect(readDebug().liveValues[instanceId][channelId]).toBe(0);
+    // Qué canales se apagan en la salida lo cubre dmxFrame.test.ts.
+    expect(readDebug().blackoutActive).toBe(true);
+    expect(readDebug().runningEffectIds).toHaveLength(1);
+    expect(readDebug().liveValues[instanceId][channelId]).toBe(180);
+
+    await user.click(screen.getByRole("button", { name: "VOLVER A ENCENDER" }));
+    expect(readDebug().blackoutActive).toBe(false);
+  });
+
+  it("pedir una escena durante el Blackout lo quita", async () => {
+    const user = userEvent.setup();
+    localStorage.clear();
+    render(
+      <FixtureStoreProvider>
+        <FixtureControl />
+        <ScenesPanel />
+        <LiveView />
+        <Debug />
+      </FixtureStoreProvider>,
+    );
+    await saveSceneWithValue(user, 200, "Vals");
+    await user.click(screen.getByRole("button", { name: "BLACKOUT" }));
+    await user.click(screen.getByRole("button", { name: "CONFIRMAR" }));
+    expect(readDebug().blackoutActive).toBe(true);
+
+    const liveScenesPanel = screen.getByText("ESCENAS — LIVE").closest(".rounded-panel") as HTMLElement;
+    await user.click(within(liveScenesPanel).getByRole("button", { name: "Vals" }));
+    expect(readDebug().blackoutActive).toBe(false);
   });
 });
 

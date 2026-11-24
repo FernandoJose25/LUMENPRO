@@ -9,8 +9,8 @@ import { CommandPalette } from "@/components/command-palette/CommandPalette";
 import { SECTIONS } from "@/components/layout/Sidebar";
 
 function Debug() {
-  const { scenes, liveValues } = useFixtureStore();
-  return <pre data-testid="debug">{JSON.stringify({ scenes, liveValues })}</pre>;
+  const { scenes, liveValues, blackoutActive } = useFixtureStore();
+  return <pre data-testid="debug">{JSON.stringify({ scenes, liveValues, blackoutActive })}</pre>;
 }
 
 function readDebug() {
@@ -116,7 +116,7 @@ describe("CommandPalette", () => {
     expect(readDebug().liveValues[instanceId][channelId]).toBe(200);
   });
 
-  it("el comando Blackout apaga todo el rig", async () => {
+  it("el comando Blackout apaga el rig sin borrar los valores, y luego ofrece quitarlo", async () => {
     const user = userEvent.setup();
     localStorage.clear();
     render(
@@ -134,6 +134,13 @@ describe("CommandPalette", () => {
     await user.type(screen.getByPlaceholderText(OPEN_PLACEHOLDER), "Blackout");
     await user.click(screen.getByRole("button", { name: /BLACKOUT — apagar todo el rig/i }));
 
-    expect(readDebug().liveValues[instanceId][channelId]).toBe(0);
+    expect(readDebug().blackoutActive).toBe(true);
+    // Qué canales se apagan en la salida lo cubre dmxFrame.test.ts.
+    expect(readDebug().liveValues[instanceId][channelId]).toBe(180);
+
+    openPalette();
+    await user.type(screen.getByPlaceholderText(OPEN_PLACEHOLDER), "Blackout");
+    await user.click(screen.getByRole("button", { name: /Quitar BLACKOUT/i }));
+    expect(readDebug().blackoutActive).toBe(false);
   });
 });

@@ -31,8 +31,17 @@ const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigat
  * sigue disponible — llegar ahí y reproducir queda a un clic más.
  */
 export function CommandPalette({ sections, activeSection, onSelectSection }: CommandPaletteProps) {
-  const { scenes, recallScene, effects, runningEffectIds, startEffect, stopEffect, blackout } =
-    useFixtureStore();
+  const {
+    scenes,
+    recallScene,
+    effects,
+    runningEffectIds,
+    startEffect,
+    stopEffect,
+    blackoutActive,
+    blackout,
+    releaseBlackout,
+  } = useFixtureStore();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [highlighted, setHighlighted] = useState(0);
@@ -105,13 +114,13 @@ export function CommandPalette({ sections, activeSection, onSelectSection }: Com
 
     list.push({
       id: "blackout",
-      label: "BLACKOUT — apagar todo el rig",
+      label: blackoutActive ? "Quitar BLACKOUT — volver a encender" : "BLACKOUT — apagar todo el rig",
       group: "Acciones",
-      action: blackout,
+      action: blackoutActive ? releaseBlackout : blackout,
     });
 
     return list;
-  }, [sections, activeSection, onSelectSection, scenes, recallScene, effects, runningEffectIds, startEffect, stopEffect, blackout]);
+  }, [sections, activeSection, onSelectSection, scenes, recallScene, effects, runningEffectIds, startEffect, stopEffect, blackoutActive, blackout, releaseBlackout]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();

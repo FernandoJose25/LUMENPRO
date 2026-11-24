@@ -2,35 +2,48 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 //! Capa Tauri de LUMEN PRO. Envuelve `lumenpro_dmx` (crate `dmx-engine/`,
-//! ver AUDIT.md §8) en comandos invocables desde el frontend React.
+//! ver AUDIT.md §8) en comandos invocables desde el frontend React, y guarda
+//! el show en disco.
 //!
-//! Estado de este archivo: escrito como paso 3 del roadmap (PASOS-PENDIENTES.md),
-//! pero SIN verificar contra un build real — el sandbox donde se escribió no
-//! tenía los paquetes de sistema `libwebkit2gtk-4.1-dev` disponibles (fallo del
-//! mirror de Ubuntu, no del código), así que ni `cargo check` ni `cargo tauri dev`
-//! se pudieron correr aquí. Antes de confiar en esto, alguien con un entorno
-//! Tauri completo (o Windows, que es el target real) debe correr `cargo tauri dev`
-//! y arreglar lo que falle. Tampoco hay iconos reales todavía (ver `icons/README.md`).
+//! El frontend es la fuente de verdad de los valores: calcula los 512 canales
+//! (`src/lib/dmxFrame.ts`, incluido el Blackout) y los manda con `set_block`.
+//! Acá no hay un "blackout" propio a propósito: poner los 512 canales a 0
+//! también movería Pan/Tilt y las cabezas girarían de golpe.
 
-use lumenpro_dmx::{DmxEngine, DmxUniverse, EnttecUsbProOutput, MockOutput, CHANNEL_COUNT};
+mod show;
+
+use lumenpro_dmx::{
+    DmxEngine, DmxOutput, DmxOutputError, DmxUniverse, EngineState, EnttecUsbProOutput, MockOutput,
+    OpenDmxOutput, PortChip,
+};
 use serde::Serialize;
 use std::sync::Mutex;
 use tauri::State;
 
 /// Estado compartido de la app: un único universo DMX + el motor que lo
 /// saca por hardware. El universo vive separado del motor a propósito:
-/// los comandos de escritura de canal (`set_channel`, `set_block`,
-/// `blackout`) deben funcionar aunque el motor todavía no esté conectado
-/// a ningún output — el motor solo controla el hilo de salida, no es
-/// dueño de los datos (ver dmx-engine/src/universe.rs).
+/// `set_block` debe funcionar aunque el motor todavía no esté conectado a
+/// ningún output — el motor solo controla el hilo de salida, no es dueño de
+/// los datos (ver dmx-engine/src/universe.rs).
 struct DmxState {
     universe: DmxUniverse,
     engine: Mutex<DmxEngine>,
 }
 
 #[derive(Serialize)]
+struct SerialPort {
+    name: String,
+    chip: &'static str,
+    description: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct EngineStatus {
-    running: bool,
+    state: &'static str,
+    output: String,
+    last_error: Option<String>,
+    fps: u32,
 }
 
 fn poisoned() -> String {
@@ -38,72 +51,82 @@ fn poisoned() -> String {
         .to_string()
 }
 
-/// Lista los puertos serie disponibles, para que la UI le muestre al
-/// usuario un selector antes de conectar al Enttec DMX USB PRO real.
-#[tauri::command]
-fn list_serial_ports() -> Result<Vec<String>, String> {
-    EnttecUsbProOutput::list_ports().map_err(|e| e.to_string())
-}
-
-/// Conecta el motor a un output Mock (sin hardware). Útil para probar
-/// la UI de Scenes/Chases/Effects sin tener el Enttec ni la consola
-/// MAX 512 a mano (ver paso 1 pendiente en PASOS-PENDIENTES.md).
-#[tauri::command]
-fn connect_mock(state: State<DmxState>, fps: u32) -> Result<(), String> {
+/// Los comandos que abren o cierran puertos son `async`: corren fuera del
+/// hilo de la ventana, así un driver USB lento no congela la interfaz.
+fn start_engine<F>(state: &DmxState, fps: u32, open: F) -> Result<(), String>
+where
+    F: Fn() -> Result<Box<dyn DmxOutput>, DmxOutputError> + Send + 'static,
+{
     let mut engine = state.engine.lock().map_err(|_| poisoned())?;
-    engine.start(Box::new(MockOutput::new()), fps);
-    Ok(())
+    engine.start(open, fps).map_err(|e| e.to_string())
 }
 
-/// Conecta el motor a un Enttec DMX USB PRO real por el puerto serie
-/// indicado (uno de los que devuelve `list_serial_ports`).
-#[tauri::command]
-fn connect_enttec(state: State<DmxState>, port: String, fps: u32) -> Result<(), String> {
-    let output = EnttecUsbProOutput::open(&port).map_err(|e| e.to_string())?;
-    let mut engine = state.engine.lock().map_err(|_| poisoned())?;
-    engine.start(Box::new(output), fps);
-    Ok(())
+/// Lista los puertos serie disponibles, para que la UI muestre un selector
+/// y avise si el adaptador trae un chip que no es FTDI.
+#[tauri::command(async)]
+fn list_serial_ports() -> Result<Vec<SerialPort>, String> {
+    let ports = lumenpro_dmx::list_ports().map_err(|e| e.to_string())?;
+    Ok(ports
+        .into_iter()
+        .map(|p| SerialPort {
+            name: p.name,
+            chip: match p.chip {
+                PortChip::Ftdi => "ftdi",
+                PortChip::Ch340 => "ch340",
+                PortChip::Other => "other",
+            },
+            description: p.description,
+        })
+        .collect())
 }
 
-/// Detiene el hilo de salida (no borra el universo — para eso está `blackout`).
-#[tauri::command]
-fn disconnect(state: State<DmxState>) -> Result<(), String> {
+/// Conecta el motor a un output Mock (sin hardware), para ensayar un show
+/// sin tener el adaptador a mano.
+#[tauri::command(async)]
+fn connect_mock(state: State<'_, DmxState>, fps: u32) -> Result<(), String> {
+    start_engine(&state, fps, || Ok(Box::new(MockOutput::new())))
+}
+
+/// Cable FTDI barato (Open DMX): el timing lo genera la PC.
+#[tauri::command(async)]
+fn connect_open_dmx(state: State<'_, DmxState>, port: String, fps: u32) -> Result<(), String> {
+    start_engine(&state, fps, move || Ok(Box::new(OpenDmxOutput::open(&port)?)))
+}
+
+/// Enttec DMX USB PRO (o compatible): el timing lo genera el adaptador.
+#[tauri::command(async)]
+fn connect_enttec(state: State<'_, DmxState>, port: String, fps: u32) -> Result<(), String> {
+    start_engine(&state, fps, move || Ok(Box::new(EnttecUsbProOutput::open(&port)?)))
+}
+
+/// Detiene el hilo de salida (no borra el universo).
+#[tauri::command(async)]
+fn disconnect(state: State<'_, DmxState>) -> Result<(), String> {
     let mut engine = state.engine.lock().map_err(|_| poisoned())?;
     engine.stop();
     Ok(())
 }
 
-#[tauri::command]
-fn engine_status(state: State<DmxState>) -> Result<EngineStatus, String> {
-    let engine = state.engine.lock().map_err(|_| poisoned())?;
+#[tauri::command(async)]
+fn engine_status(state: State<'_, DmxState>) -> Result<EngineStatus, String> {
+    let status = state.engine.lock().map_err(|_| poisoned())?.status();
     Ok(EngineStatus {
-        running: engine.is_running(),
+        state: match status.state {
+            EngineState::Stopped => "stopped",
+            EngineState::Running => "running",
+            EngineState::Reconnecting => "reconnecting",
+        },
+        output: status.output,
+        last_error: status.last_error,
+        fps: status.fps,
     })
 }
 
+/// Escribe un bloque contiguo de canales. La UI manda el universo completo
+/// (start_channel = 1, 512 valores) en una sola llamada IPC.
 #[tauri::command]
-fn set_channel(state: State<DmxState>, channel: u16, value: u8) {
-    state.universe.set_channel(channel, value);
-}
-
-#[tauri::command]
-fn get_channel(state: State<DmxState>, channel: u16) -> u8 {
-    state.universe.get_channel(channel)
-}
-
-/// Escribe un bloque contiguo de canales (p.ej. el volcado completo de un
-/// fixture: address..address+channel_count) en una sola llamada IPC, en
-/// vez de una invocación por canal.
-#[tauri::command]
-fn set_block(state: State<DmxState>, start_channel: u16, values: Vec<u8>) {
+fn set_block(state: State<'_, DmxState>, start_channel: u16, values: Vec<u8>) {
     state.universe.set_block(start_channel, &values);
-}
-
-/// Blackout: pone los 512 canales a 0 sin tocar el hilo de salida ni
-/// la conexión al hardware.
-#[tauri::command]
-fn blackout(state: State<DmxState>) {
-    state.universe.set_block(1, &[0u8; CHANNEL_COUNT]);
 }
 
 fn main() {
@@ -115,13 +138,14 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             list_serial_ports,
             connect_mock,
+            connect_open_dmx,
             connect_enttec,
             disconnect,
             engine_status,
-            set_channel,
-            get_channel,
             set_block,
-            blackout,
+            show::load_show,
+            show::save_show,
+            show::export_show,
         ])
         .run(tauri::generate_context!())
         .expect("error corriendo la app de Tauri");

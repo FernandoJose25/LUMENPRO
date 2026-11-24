@@ -10,6 +10,9 @@ pub mod engine;
 pub mod output;
 pub mod universe;
 
-pub use engine::DmxEngine;
-pub use output::{DmxOutput, DmxOutputError, EnttecUsbProOutput, MockOutput};
+pub use engine::{DmxEngine, EngineState, EngineStatus};
+pub use output::{
+    list_ports, DmxOutput, DmxOutputError, EnttecUsbProOutput, MockOutput, OpenDmxOutput, PortChip,
+    PortInfo,
+};
 pub use universe::{DmxUniverse, CHANNEL_COUNT};

@@ -25,8 +25,17 @@ import { CHANNEL_TYPE_LABELS, type ChannelType } from "@/types/fixture";
  * resto del código, no una limitación nueva de esta vista.
  */
 export function LiveView() {
-  const { scenes, activeSceneId, recallScene, effects, runningEffectIds, groups, blackout } =
-    useFixtureStore();
+  const {
+    scenes,
+    activeSceneId,
+    recallScene,
+    effects,
+    runningEffectIds,
+    groups,
+    blackoutActive,
+    blackout,
+    releaseBlackout,
+  } = useFixtureStore();
 
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-2 p-2">
@@ -34,7 +43,9 @@ export function LiveView() {
         hasActiveScene={Boolean(activeSceneId)}
         runningEffectCount={runningEffectIds.length}
         groupCount={groups.length}
+        blackoutActive={blackoutActive}
         onBlackout={blackout}
+        onReleaseBlackout={releaseBlackout}
       />
 
       <PanelGroup direction="horizontal" className="min-h-0 flex-1 gap-2">
@@ -72,12 +83,16 @@ function LiveStatusBar({
   hasActiveScene,
   runningEffectCount,
   groupCount,
+  blackoutActive,
   onBlackout,
+  onReleaseBlackout,
 }: {
   hasActiveScene: boolean;
   runningEffectCount: number;
   groupCount: number;
+  blackoutActive: boolean;
   onBlackout: () => void;
+  onReleaseBlackout: () => void;
 }) {
   return (
     <div className="flex shrink-0 items-center gap-4 rounded-panel border border-border bg-panel px-3 py-2">
@@ -91,7 +106,7 @@ function LiveStatusBar({
       <div className="flex-1" />
       {/* Mismo componente y misma acción que el Blackout de la Topbar — una
        *  sola fuente de verdad (fixtureStore.blackout), no una copia local. */}
-      <BlackoutButton onBlackout={onBlackout} />
+      <BlackoutButton active={blackoutActive} onBlackout={onBlackout} onRelease={onReleaseBlackout} />
     </div>
   );
 }

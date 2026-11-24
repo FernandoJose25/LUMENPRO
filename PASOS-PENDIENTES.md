@@ -24,21 +24,33 @@
   build del frontend (`npm run build`, `npm run typecheck`) sigue pasando.
   **`cargo check` de `src-tauri` verificado en Windows con Rust 1.96**
   (2026-11-17), con los iconos generados desde `src-tauri/icons/logo.svg`.
-  El CI lo repite en `windows-latest` en cada push. Falta conectar la UI a
-  estos comandos (`invoke`) y probar `npm run tauri dev` contra hardware real.
+  El CI lo repite en `windows-latest` en cada push.
+- **Salida DMX conectada a la interfaz** (2026-11-24): driver del cable FTDI
+  (`OpenDmxOutput`: 250 kbaudios, 8N2, BREAK por software, 30 FPS), estado real
+  y reconexión automática en `DmxEngine`, sección "DMX Output" (puerto COM,
+  aviso de CH340, monitor de canales, choques de direcciones) y `dmxFrame.ts`
+  como único lugar donde los valores se vuelven canales. **Sin probar contra
+  hardware real.**
+- **Blackout en la salida**: ya no pone `liveValues` a 0. Apaga dimmer, color y
+  programas automáticos en `dmxFrame.ts`, sin mover Pan/Tilt; ningún chase o
+  effect lo pisa y al quitarlo todo vuelve igual. Pedir una escena lo quita.
+- **Show en disco** (`show.json` en AppData, escritura atómica) con exportar e
+  importar en "Settings". `npm run tauri build` genera el instalador.
 
 ## 🔲 Pendiente — Fase 3 (cerrar Fixtures)
 
 - [ ] **Confirmar direcciones DMX reales** de las 6 instancias sembradas
       (2x Orus 280W, 4x Big Dipper LPC007) contra la consola física MAX 512
       — hoy están secuenciales sin verificar
-- [ ] Verificar el orden de canales del Big Dipper LPC007 modo 7CH contra
-      la hoja oficial del fabricante (hoy es una plantilla estándar sin confirmar)
-- [ ] Verificar el layout de 16 canales del "Orus" 280W (marca no identificada
-      en manuales públicos — plantilla genérica sin confirmar)
+- [x] Orden de canales del Big Dipper LPC007 modo 7CH — coincide con el perfil
+      Betopper LPC-007 de QLC+. Falta probarlo contra la lámpara
+- [ ] Verificar el modo y los canales del "Orus" 280W en el menú del equipo:
+      hay documentos que dicen 16, 18 y 26/32. El estrobo por defecto es 255
+      (abierto) por analogía con dos cabezas 10R, sin confirmar
+- [ ] Agregar la barra LED móvil (modelo por identificar)
 - [ ] Control XY dedicado para Pan/Tilt (hoy usa `Fader` genérico)
 - [ ] Color wheel visual, selector de gobo con miniaturas, editor de curvas gráfico
-- [ ] Persistencia real (hoy `localStorage`, migrar a SQLite cuando exista Tauri)
+- [ ] Curvas de canal: se editan pero todavía no se aplican en la salida
 
 ## ✅ Fase 4 — Scenes / Groups / Chases / Effects (completa, ver detalle abajo)
 
@@ -204,18 +216,14 @@
 
 ## 🔲 Pendiente — Motor y hardware
 
-- [x] Motor DMX en Rust — hecho como crate independiente `dmx-engine/`
-      (ver AUDIT.md §8). Falta integrarlo a `src-tauri` cuando exista.
-- [x] Driver USB-DMX — implementado el protocolo Enttec DMX USB PRO
-      (label 6) sobre `serialport`. **Sin probar contra hardware real.**
-      Art-Net/sACN (para no depender de un widget USB) sigue sin hacer.
-- [ ] Empaquetado Tauri — **aquí es donde recién se genera el `.exe`**.
-      Andamiaje base ya en `src-tauri/` (`Cargo.toml`, `tauri.conf.json`,
-      `main.rs` con comandos IPC sobre `dmx-engine`), **pero sin `cargo tauri
-      dev`/`build` corrido con éxito todavía** — requiere Rust actualizado vía
-      `rustup` (no el 1.75 de `apt`), `libwebkit2gtk-4.1-dev` instalado, e
-      iconos reales generados con `cargo tauri icon`. Todo eso solo se puede
-      hacer/verificar fuera de este sandbox.
+- [x] Motor DMX en Rust — crate `dmx-engine/`, integrado a `src-tauri`.
+- [x] Drivers USB-DMX — cable FTDI (Open DMX) y Enttec DMX USB PRO sobre
+      `serialport`. Art-Net/sACN sigue sin hacer.
+- [ ] **Probar con el cable y las luces**: `cargo run --bin smoke_test COM5`
+      (en `dmx-engine/`) y luego la app. Revisar parpadeo.
+- [x] Empaquetado Tauri — `npm run tauri build` genera el `.exe`.
+- [ ] Momentos del evento con "Siguiente" (escena + effects en un botón)
+- [ ] Control por celular (página por WiFi local con PIN)
 - [ ] Doble monitor (depende de Tauri, gestión de ventanas nativas)
 
 ## 🔲 Pendiente — Visualizer y extras
@@ -262,10 +270,9 @@
       el contexto que él mismo está montando — mismo motivo por el que ya
       existía `EffectsEngineMount`.
 
-      Nota: `blackout()` no detiene un Chase en reproducción por su
-      cuenta (ese estado vive en el hook local de quien lo montó, no en
-      el store) — si hay un chase corriendo hay que pararlo aparte con el
-      botón Detener.
+      Nota: el Blackout descrito aquí se reemplazó el 2026-11-24 por uno
+      que apaga en la salida (ver "Completado"). Ya no hace falta detener
+      el Chase aparte.
 
       `npm run typecheck` y `npm run build` verificados OK. **Verificado
       con 5 tests de integración reales** (`src/test/live.test.tsx`):
@@ -310,11 +317,8 @@
 ## Orden recomendado
 
 1. Confirmar direcciones DMX y canales reales (bloquea todo lo demás con hardware)
-2. ~~Motor DMX en Rust + driver USB-DMX~~ — hecho como crate `dmx-engine/`,
-   sin probar contra hardware (paso 1 sigue pendiente y esto lo bloquea)
-3. Envolver en Tauri — andamiaje escrito (`src-tauri/`), **falta correr
-   `cargo tauri dev`/`build` con Rust actualizado y confirmar que compila**
-   antes de poder probar el `.exe` real
+2. ~~Motor DMX en Rust + driver USB-DMX~~ — hecho, sin probar contra hardware
+3. ~~Envolver en Tauri~~ — hecho, la interfaz envía DMX y genera el `.exe`
 4. Scenes (hecho) → Groups (hecho) → Chases (hecho) → Effects (hecho)
 5. Visualizer 2D (hecho, básico) → posicionamiento manual + 3D (pendientes)
 6. Live Mode (hecho) → Command Palette (hecho) → Audio Reactive, doble

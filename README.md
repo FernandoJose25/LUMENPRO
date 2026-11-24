@@ -8,7 +8,7 @@
 
 Software de escritorio para controlar luces de escenario por **DMX512**: cabezas móviles, PARs y otros equipos. Es una alternativa propia a consolas como MA o Chamsys, pensada para el equipo real de mi empresa de eventos (2× cabezas móviles Beam 280 y 4× PAR LED).
 
-> **English summary:** Desktop DMX512 lighting console. React + TypeScript UI (design system, resizable workspace, fixture control, scenes, groups, chases with crossfades, parametric effects, live 2D visualizer) plus a Rust DMX engine (512-channel universe, fixed-FPS output thread, Enttec DMX USB PRO driver and a mock driver) exposed to the UI through Tauri 2 commands. Integration tests with Vitest + Testing Library and unit tests in Rust.
+> **English summary:** Desktop DMX512 lighting console. React + TypeScript UI (design system, resizable workspace, fixture control, scenes, groups, chases with crossfades, parametric effects, live 2D visualizer) plus a Rust DMX engine (512-channel universe, fixed-FPS output thread with automatic reconnection, Open DMX (FTDI) and Enttec DMX USB PRO drivers plus a mock driver) connected to the UI through Tauri 2 commands. Integration tests with Vitest + Testing Library and unit tests in Rust.
 
 ![Dashboard de LUMEN PRO](docs/screenshots/dashboard.png)
 
@@ -29,19 +29,20 @@ Lo diseñé y desarrollé solo, a partir de un brief de producto propio de 37 se
 - **Motor DMX en Rust** (`dmx-engine/`):
   - universo de 512 canales thread-safe;
   - hilo de salida a FPS fijo;
-  - driver para **Enttec DMX USB PRO** por puerto serie;
+  - drivers para **cable FTDI (Open DMX)** y **Enttec DMX USB PRO** por puerto serie;
+  - reconexión automática si se suelta el cable;
   - driver Mock para desarrollar sin hardware.
-- **App de escritorio con Tauri 2** (`src-tauri/`): expone el motor como comandos (`connect_enttec`, `set_channel`, `set_block`, `blackout`, `list_serial_ports`…).
+- **App de escritorio con Tauri 2** (`src-tauri/`): expone el motor como comandos (`connect_open_dmx`, `connect_enttec`, `set_block`, `engine_status`, `list_serial_ports`…) y guarda el show en disco, con exportar e importar.
 
 ## Stack
 
 | Capa | Tecnologías |
 |---|---|
 | UI | React 18, TypeScript estricto, Vite, Tailwind CSS, react-resizable-panels |
-| Estado | Store propio con Context + persistencia en `localStorage` |
+| Estado | Store propio con Context; el show se guarda en `show.json` (app) o `localStorage` (navegador) |
 | Motor | Rust: crate `lumenpro_dmx`, hilos, `serialport` |
 | Escritorio | Tauri 2 |
-| Calidad | Vitest + Testing Library + jsdom (27 tests de integración), `cargo test` (8 tests), GitHub Actions |
+| Calidad | Vitest + Testing Library + jsdom (53 tests), `cargo test` (17 tests), GitHub Actions |
 
 ## Estructura
 
@@ -65,8 +66,9 @@ npm run build        # typecheck + build de producción
 cd dmx-engine && cargo test           # motor DMX
 cd src-tauri && cargo check           # app de escritorio
 npm run tauri dev                     # app de escritorio con la UI
+npm run tauri build                   # instalador .exe (src-tauri/target/release/bundle/nsis)
 ```
 
 ## Estado y siguiente paso
 
-UI de las fases 1–4 completa, y motor DMX y shell de Tauri compilando. El siguiente paso es conectar el store de la UI a los comandos de Tauri (`invoke`) para enviar DMX real desde la interfaz y probarlo con el hardware. El detalle está en [PASOS-PENDIENTES.md](PASOS-PENDIENTES.md).
+La interfaz ya envía los 512 canales al motor DMX y la app se empaqueta como `.exe`. Falta probarla con el adaptador y las luces reales; después siguen los momentos del evento y el control por celular. El detalle está en [PASOS-PENDIENTES.md](PASOS-PENDIENTES.md).

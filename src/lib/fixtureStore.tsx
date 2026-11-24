@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { FixtureDefinition, FixtureInstance } from "@/types/fixture";
 import type { Scene } from "@/types/scene";
 import type { Group } from "@/types/group";
@@ -6,12 +6,15 @@ import { GROUP_COLORS } from "@/types/group";
 import type { Chase, ChaseStep } from "@/types/chase";
 import type { Effect } from "@/types/effect";
 import { seedDefinitions, seedInstances } from "@/data/fixtureLibrary";
+import { STORAGE_KEY, writeShow } from "@/lib/showFile";
 
 function makeId(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-const STORAGE_KEY = "lumenpro.fixtures.v1";
+// Con un Effect corriendo el estado cambia 25 veces por segundo: se guarda
+// como mucho una vez por segundo en vez de escribir a disco en cada tick.
+const PERSIST_EVERY_MS = 1000;
 
 interface FixtureStoreState {
   definitions: FixtureDefinition[];
@@ -32,9 +35,12 @@ interface FixtureStoreState {
   effects: Effect[];
   /** Ids de Effect corriendo AHORA. Deliberadamente NO se persiste entre
    *  recargas de página (ver loadInitialState y el useEffect de guardado)
-   *  — al recargar, ningún efecto debería seguir "corriendo" porque no
-   *  hay nada real detrás todavía (sin motor DMX conectado al frontend). */
+   *  — al recargar, ningún efecto debería arrancar solo. */
   runningEffectIds: string[];
+  /** Blackout puesto. No toca liveValues: apaga en la salida (dmxFrame.ts),
+   *  así nada puede pisarlo y al quitarlo todo vuelve como estaba. Tampoco
+   *  se persiste. */
+  blackoutActive: boolean;
 }
 
 interface FixtureStoreValue extends FixtureStoreState {
@@ -83,78 +89,104 @@ interface FixtureStoreValue extends FixtureStoreState {
   updateEffect: (effectId: string, patch: Partial<Omit<Effect, "id" | "createdAt">>) => void;
   startEffect: (effectId: string) => void;
   stopEffect: (effectId: string) => void;
-  /** Blackout real (Live Mode + Topbar) — pone TODO canal de TODO fixture
-   *  patcheado a 0, no solo los canales ya tocados en liveValues (a
-   *  diferencia de captureSnapshot, que sí filtra por eso para Scenes).
-   *  También detiene todos los Effects corriendo (runningEffectIds), para
-   *  que el motor de Effects no vuelva a subir un valor en el próximo
-   *  tick. NO detiene un Chase reproduciéndose — ese estado vive en el
-   *  hook local de quien lo montó (ChasesView o LiveView), no en el
-   *  store; si un chase sigue corriendo, su próximo tick pisa el blackout.
-   *  Quien dispare blackout desde una vista con un chase activo debe
-   *  también llamar a `stop()` del chase player local (ver LiveView). */
+  /** Apaga la luz de todo el rig sin mover las cabezas (ver dmxFrame.ts).
+   *  Effects y Chases siguen corriendo por debajo, a oscuras. */
   blackout: () => void;
+  releaseBlackout: () => void;
+  /** Guarda ya mismo (el guardado automático corre solo). Rechaza si el
+   *  disco falla. */
+  saveShow: () => Promise<void>;
+  /** El show completo como JSON, para exportarlo. */
+  serializeShow: () => string;
+  /** Reemplaza el show por uno exportado. Lanza si el archivo no lo es. */
+  importShow: (json: string) => void;
+}
+
+function restoreState(parsed: Partial<FixtureStoreState>): FixtureStoreState {
+  // Migración suave: shows guardados antes de que existieran liveValues/
+  // scenes/... no deben romper el load, solo completan con vacío.
+  return {
+    definitions: parsed.definitions ?? seedDefinitions,
+    instances: parsed.instances ?? seedInstances,
+    selectedInstanceId: parsed.selectedInstanceId ?? seedInstances[0]?.id ?? null,
+    liveValues: parsed.liveValues ?? {},
+    scenes: parsed.scenes ?? [],
+    activeSceneId: parsed.activeSceneId ?? null,
+    groups: parsed.groups ?? [],
+    chases: parsed.chases ?? [],
+    effects: parsed.effects ?? [],
+    runningEffectIds: [], // nunca se restaura, ver comentario en el tipo
+    blackoutActive: false, // ídem
+  };
+}
+
+function serialize(state: FixtureStoreState): string {
+  const { runningEffectIds: _runningEffectIds, blackoutActive: _blackoutActive, ...persisted } = state;
+  return JSON.stringify(persisted);
 }
 
 function loadInitialState(): FixtureStoreState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as Partial<FixtureStoreState>;
-      // Migración suave: sesiones guardadas antes de que existieran
-      // liveValues/scenes no deben romper el load, solo completan con vacío.
-      return {
-        definitions: parsed.definitions ?? seedDefinitions,
-        instances: parsed.instances ?? seedInstances,
-        selectedInstanceId: parsed.selectedInstanceId ?? seedInstances[0]?.id ?? null,
-        liveValues: parsed.liveValues ?? {},
-        scenes: parsed.scenes ?? [],
-        activeSceneId: parsed.activeSceneId ?? null,
-        groups: parsed.groups ?? [],
-        chases: parsed.chases ?? [],
-        effects: parsed.effects ?? [],
-        runningEffectIds: [], // nunca se restaura desde localStorage, ver comentario en el tipo
-      };
-    }
+    if (raw) return restoreState(JSON.parse(raw) as Partial<FixtureStoreState>);
   } catch {
     // localStorage no disponible o dato corrupto — se recurre a la semilla.
   }
-  return {
-    definitions: seedDefinitions,
-    instances: seedInstances,
-    selectedInstanceId: seedInstances[0]?.id ?? null,
-    liveValues: {},
-    scenes: [],
-    activeSceneId: null,
-    groups: [],
-    chases: [],
-    effects: [],
-    runningEffectIds: [],
-  };
+  return restoreState({});
 }
 
 const FixtureStoreContext = createContext<FixtureStoreValue | null>(null);
 
 /**
- * Persistencia real vía localStorage — es un placeholder deliberado
- * (ver AUDIT.md §7): cuando exista el motor Tauri+SQLite, este hook se
- * reemplaza por comandos `invoke()` sin tocar los componentes que lo
- * consumen, porque la forma (definitions/instances/acciones) es la misma.
+ * Estado único de la app. Se persiste con showFile.ts: localStorage en el
+ * navegador y, en la app de escritorio, además el archivo show.json.
  */
 export function FixtureStoreProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<FixtureStoreState>(loadInitialState);
 
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  const persistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const saveShow = useCallback(() => {
+    if (persistTimer.current) clearTimeout(persistTimer.current);
+    persistTimer.current = null;
+    return writeShow(serialize(stateRef.current));
+  }, []);
+
   useEffect(() => {
+    if (persistTimer.current) return;
+    persistTimer.current = setTimeout(() => {
+      saveShow().catch((e) => console.error("No se pudo guardar el show", e));
+    }, PERSIST_EVERY_MS);
+  }, [saveShow, state]);
+
+  // Lo que haya quedado esperando el timer se guarda al cerrar.
+  useEffect(() => {
+    const flush = () => {
+      if (persistTimer.current) saveShow().catch(() => {});
+    };
+    window.addEventListener("pagehide", flush);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      flush();
+    };
+  }, [saveShow]);
+
+  const serializeShow = useCallback(() => serialize(stateRef.current), []);
+
+  const importShow = useCallback((json: string) => {
+    let parsed: Partial<FixtureStoreState> | null = null;
     try {
-      // runningEffectIds es deliberadamente efímero (ver comentario en el
-      // tipo) — se excluye para que localStorage no acumule ruido de una
-      // sesión de reproducción que ya terminó.
-      const { runningEffectIds: _runningEffectIds, ...persisted } = state;
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(persisted));
+      parsed = JSON.parse(json) as Partial<FixtureStoreState>;
     } catch {
-      // Si falla el guardado (modo privado, cuota llena), se sigue en memoria.
+      // Cae en el mismo mensaje que un JSON válido que no es un show.
     }
-  }, [state]);
+    if (!Array.isArray(parsed?.definitions) || !Array.isArray(parsed.instances)) {
+      throw new Error("El archivo no es un show de LUMEN PRO");
+    }
+    setState(restoreState(parsed));
+  }, []);
 
   const selectInstance = useCallback((instanceId: string | null) => {
     setState((s) => ({ ...s, selectedInstanceId: instanceId }));
@@ -292,7 +324,8 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
       for (const [instanceId, channels] of Object.entries(scene.values)) {
         liveValues[instanceId] = { ...liveValues[instanceId], ...channels };
       }
-      return { ...s, liveValues, activeSceneId: sceneId };
+      // Pedir una escena quita el Blackout: si no, el botón parecería roto.
+      return { ...s, liveValues, activeSceneId: sceneId, blackoutActive: false };
     });
   }, []);
 
@@ -513,20 +546,8 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
     setState((s) => ({ ...s, runningEffectIds: s.runningEffectIds.filter((id) => id !== effectId) }));
   }, []);
 
-  const blackout = useCallback(() => {
-    setState((s) => {
-      const liveValues: Record<string, Record<string, number>> = {};
-      for (const instance of s.instances) {
-        const def = s.definitions.find((d) => d.id === instance.definitionId);
-        if (!def) continue;
-        liveValues[instance.id] = {};
-        for (const channel of def.channels) {
-          liveValues[instance.id][channel.id] = 0;
-        }
-      }
-      return { ...s, liveValues, runningEffectIds: [] };
-    });
-  }, []);
+  const blackout = useCallback(() => setState((s) => ({ ...s, blackoutActive: true })), []);
+  const releaseBlackout = useCallback(() => setState((s) => ({ ...s, blackoutActive: false })), []);
 
   const selectedInstance = useMemo(
     () => state.instances.find((i) => i.id === state.selectedInstanceId) ?? null,
@@ -575,6 +596,10 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
     startEffect,
     stopEffect,
     blackout,
+    releaseBlackout,
+    saveShow,
+    serializeShow,
+    importShow,
   };
 
   return <FixtureStoreContext.Provider value={value}>{children}</FixtureStoreContext.Provider>;

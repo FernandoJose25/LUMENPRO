@@ -9,8 +9,11 @@ import { ScenesView } from "@/components/scenes/ScenesView";
 import { ChasesView } from "@/components/chases/ChasesView";
 import { EffectsView } from "@/components/effects/EffectsView";
 import { LiveView } from "@/components/live/LiveView";
+import { DmxOutputView } from "@/components/dmx/DmxOutputView";
+import { SettingsView } from "@/components/views/SettingsView";
 import { CommandPalette } from "@/components/command-palette/CommandPalette";
 import { useEffectsEngine } from "@/lib/effectEngine";
+import { useDmxOutput } from "@/lib/dmxOutput";
 import { PlaceholderView } from "@/components/views/PlaceholderView";
 
 // A qué fase del plan (sección 33 del brief) corresponde cada sección del
@@ -19,8 +22,6 @@ const PENDING_PHASE: Record<string, string> = {
   Timeline: "Fase 4 — Programming",
   "Audio Reactive": "Fase 5 — Live",
   Universes: "el motor DMX (fuera del alcance frontend de las Fases 1-6)",
-  "DMX Output": "el motor DMX (fuera del alcance frontend de las Fases 1-6)",
-  Settings: "una fase de configuración general aún no planificada",
 };
 
 /** Monta useEffectsEngine dentro del árbol de FixtureStoreProvider — no
@@ -48,18 +49,21 @@ export default function App() {
  *  así que su propio cuerpo todavía no puede leer ese contexto. */
 function AppShell() {
   const [section, setSection] = useState("Dashboard");
-  const { blackout } = useFixtureStore();
+  const { blackoutActive, blackout, releaseBlackout, saveShow } = useFixtureStore();
+  const dmx = useDmxOutput();
 
   return (
     <div className="flex h-screen flex-col bg-bg">
       <Topbar
         showName="Concierto 01"
-        dmxConnected={false}
+        dmx={dmx.status}
         universe={1}
         bpm={128}
         cpu={18}
-        fps={60}
+        onSave={saveShow}
+        blackoutActive={blackoutActive}
         onBlackout={blackout}
+        onReleaseBlackout={releaseBlackout}
       />
 
       <div className="flex min-h-0 flex-1">
@@ -72,6 +76,8 @@ function AppShell() {
         {section === "Scenes" ? <ScenesView /> : null}
         {section === "Chases" ? <ChasesView /> : null}
         {section === "Effects" ? <EffectsView /> : null}
+        {section === "DMX Output" ? <DmxOutputView dmx={dmx} /> : null}
+        {section === "Settings" ? <SettingsView /> : null}
         {PENDING_PHASE[section] ? (
           <PlaceholderView section={section} phase={PENDING_PHASE[section]} />
         ) : null}
