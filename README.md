@@ -24,6 +24,7 @@ Lo diseñé y desarrollé solo, a partir de un brief de producto propio de 37 se
 - **Scenes:** guardan una foto de los valores en vivo y luego se recuperan, re-graban o renombran.
 - **Groups:** agrupan fixtures para controlarlos por lote.
 - **Chases:** secuencias de escenas con fade y hold, en bucle o una sola vez.
+- **Momentos:** el evento en orden (Entrada, Vals, Fotos, Hora loca…). Cada uno junta escena, chase y effects en un botón, con "Siguiente", transición y avance automático opcional. Incluye una plantilla de quinceañera.
 - **Effects:** generadores paramétricos (seno, cuadrada…) aplicados sobre un grupo, con un único motor de intervalos global.
 - **Visualizer 2D en vivo** con el color y el brillo reales que se están enviando.
 - **Motor DMX en Rust** (`dmx-engine/`):
@@ -42,14 +43,14 @@ Lo diseñé y desarrollé solo, a partir de un brief de producto propio de 37 se
 | Estado | Store propio con Context; el show se guarda en `show.json` (app) o `localStorage` (navegador) |
 | Motor | Rust: crate `lumenpro_dmx`, hilos, `serialport` |
 | Escritorio | Tauri 2 |
-| Calidad | Vitest + Testing Library + jsdom (53 tests), `cargo test` (17 tests), GitHub Actions |
+| Calidad | Vitest + Testing Library + jsdom (76 tests), `cargo test` (17 tests), GitHub Actions |
 
 ## Estructura
 
 ```
 src/components/   ui/ (design system) · layout/ · fixtures/ · scenes/ · groups/ · chases/ · effects/ · visualizer/ · live/ · command-palette/
-src/lib/          fixtureStore (estado + persistencia), chasePlayer, effectEngine
-src/types/        Modelo de datos: fixture, scene, group, chase, effect
+src/lib/          fixtureStore (estado + persistencia), chasePlayer, effectEngine, momentsEngine, dmxFrame, dmxOutput
+src/types/        Modelo de datos: fixture, scene, group, chase, effect, moment
 src/test/         Tests de integración
 dmx-engine/       Motor DMX en Rust (crate independiente)
 src-tauri/        App de escritorio Tauri 2 que envuelve el motor
@@ -71,4 +72,4 @@ npm run tauri build                   # instalador .exe (src-tauri/target/releas
 
 ## Estado y siguiente paso
 
-La interfaz ya envía los 512 canales al motor DMX y la app se empaqueta como `.exe`. Falta probarla con el adaptador y las luces reales; después siguen los momentos del evento y el control por celular. El detalle está en [PASOS-PENDIENTES.md](PASOS-PENDIENTES.md).
+La interfaz ya envía los 512 canales al motor DMX y la app se empaqueta como `.exe`. Falta probarla con el adaptador y las luces reales; el siguiente paso es el control por celular. El detalle está en [PASOS-PENDIENTES.md](PASOS-PENDIENTES.md).

@@ -139,6 +139,7 @@ function ChaseEditor({
   const {
     chases,
     scenes,
+    definitions,
     getChannelValue,
     setChannelValue,
     addChaseStep,
@@ -149,7 +150,7 @@ function ChaseEditor({
   const chase = chases.find((c) => c.id === chaseId) ?? null;
   const [addingSceneId, setAddingSceneId] = useState("");
 
-  const { status, play, stop } = useChasePlayer({ chase, scenes, getChannelValue, setChannelValue });
+  const { status, play, stop } = useChasePlayer({ chase, scenes, definitions, getChannelValue, setChannelValue });
 
   if (!chase) {
     return (

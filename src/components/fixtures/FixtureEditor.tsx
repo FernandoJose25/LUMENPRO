@@ -45,21 +45,28 @@ export function FixtureEditor({ definition, onSave, onCancel }: FixtureEditorPro
   };
 
   const removeChannel = (id: string) => {
-    setChannels((cs) => cs.filter((c) => c.id !== id).map((c, i) => ({ ...c, index: i + 1 })));
+    setChannels((cs) => {
+      const removed = cs.find((c) => c.id === id)!.index;
+      return cs
+        .filter((c) => c.id !== id)
+        .map((c) => (c.index > removed ? { ...c, index: c.index - 1 } : c));
+    });
   };
 
   const addChannel = () => {
-    setChannels((cs) => [...cs, emptyChannel(cs.length + 1)]);
+    setChannels((cs) => [...cs, emptyChannel(Math.max(0, ...cs.map((c) => c.index)) + 1)]);
   };
 
-  const canSave = manufacturer.trim() && model.trim() && channels.every((c) => c.name.trim());
+  const repeated = channels.find((c) => channels.some((o) => o !== c && o.index === c.index));
+  const canSave =
+    manufacturer.trim() && model.trim() && channels.every((c) => c.name.trim() && c.index >= 1) && !repeated;
 
   const handleSave = () => {
     onSave({
       id: definition?.id ?? `def-${crypto.randomUUID()}`,
       manufacturer: manufacturer.trim(),
       model: model.trim(),
-      channels,
+      channels: [...channels].sort((a, b) => a.index - b.index),
       panLimit: definition?.panLimit,
       tiltLimit: definition?.tiltLimit,
       verified: definition?.verified ?? false,
@@ -109,7 +116,19 @@ export function FixtureEditor({ definition, onSave, onCancel }: FixtureEditorPro
           <tbody>
             {channels.map((ch) => (
               <tr key={ch.id} className="border-b border-border last:border-0 hover:bg-panel2/50">
-                <td className="px-2 py-1.5 font-mono text-text-secondary">{ch.index}</td>
+                <td className="px-2 py-1.5">
+                  {/* Cambiar el número mueve la función entera: las escenas
+                      guardan el id del canal, no su posición. */}
+                  <input
+                    type="number"
+                    min={1}
+                    max={512}
+                    aria-label={`Número de canal de ${ch.name}`}
+                    value={ch.index || ""}
+                    onChange={(e) => updateChannel(ch.id, { index: Number(e.target.value) })}
+                    className="w-12 rounded border border-border bg-panel2 px-1 py-1 text-center font-mono text-text-primary"
+                  />
+                </td>
                 <td className="px-2 py-1.5">
                   <input
                     value={ch.name}
@@ -209,7 +228,12 @@ export function FixtureEditor({ definition, onSave, onCancel }: FixtureEditorPro
         + Agregar canal
       </Button>
 
-      <div className="mt-4 flex justify-end gap-2 border-t border-border pt-3">
+      <div className="mt-4 flex items-center justify-end gap-2 border-t border-border pt-3">
+        {repeated ? (
+          <p role="alert" className="flex-1 text-xs text-state-warn">
+            El canal {repeated.index} está repetido. Cada función necesita su propio número.
+          </p>
+        ) : null}
         <Button variant="ghost" onClick={onCancel}>
           Cancelar
         </Button>

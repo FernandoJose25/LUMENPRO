@@ -131,6 +131,16 @@ describe("describePatch — choques de direcciones", () => {
     expect(rows[1].issues).toContain("Se pisa con LPC007 PAR #1 (33–39)");
   });
 
+  it("un perfil con huecos ocupa hasta su número de canal más alto", () => {
+    const definitions = seedDefinitions.map((d) =>
+      d.id === "def-lpc007"
+        ? { ...d, channels: d.channels.map((c) => (c.type === "STROBE" ? { ...c, index: 12 } : c)) }
+        : d,
+    );
+    const row = describePatch([par1], definitions)[0];
+    expect([row.first, row.last]).toEqual([33, 44]);
+  });
+
   it("avisa si se pasa del canal 512 o está en un universo que no se envía", () => {
     const rows = describePatch(
       [

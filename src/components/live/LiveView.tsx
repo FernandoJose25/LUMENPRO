@@ -7,6 +7,7 @@ import { BlackoutButton } from "@/components/layout/BlackoutButton";
 import { cn } from "@/lib/utils";
 import { useFixtureStore } from "@/lib/fixtureStore";
 import { useChasePlayer } from "@/lib/chasePlayer";
+import { LiveMoments } from "./LiveMoments";
 import { CHANNEL_TYPE_LABELS, type ChannelType } from "@/types/fixture";
 
 /**
@@ -47,6 +48,8 @@ export function LiveView() {
         onBlackout={blackout}
         onReleaseBlackout={releaseBlackout}
       />
+
+      <LiveMoments />
 
       <PanelGroup direction="horizontal" className="min-h-0 flex-1 gap-2">
         <ResizablePanel defaultSize={55} minSize={30}>
@@ -147,7 +150,7 @@ function LiveScenes({
 }
 
 function LiveChases() {
-  const { chases, scenes, getChannelValue, setChannelValue } = useFixtureStore();
+  const { chases, scenes, definitions, getChannelValue, setChannelValue } = useFixtureStore();
   const [selectedChaseId, setSelectedChaseId] = useState<string | null>(chases[0]?.id ?? null);
 
   useEffect(() => {
@@ -160,6 +163,7 @@ function LiveChases() {
   const { status, play, stop } = useChasePlayer({
     chase: selectedChase,
     scenes,
+    definitions,
     getChannelValue,
     setChannelValue,
   });

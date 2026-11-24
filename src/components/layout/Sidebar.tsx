@@ -6,12 +6,12 @@ import { cn } from "@/lib/utils";
 export const SECTIONS = [
   "Dashboard",
   "Live",
+  "Momentos",
   "Fixtures",
   "Groups",
   "Scenes",
   "Chases",
   "Effects",
-  "Timeline",
   "Audio Reactive",
   "Universes",
   "DMX Output",

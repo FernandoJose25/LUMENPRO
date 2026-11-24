@@ -5,7 +5,10 @@ import type { Group } from "@/types/group";
 import { GROUP_COLORS } from "@/types/group";
 import type { Chase, ChaseStep } from "@/types/chase";
 import type { Effect } from "@/types/effect";
+import type { Moment } from "@/types/moment";
 import { seedDefinitions, seedInstances } from "@/data/fixtureLibrary";
+import { buildQuinceTemplate } from "@/data/quinceTemplate";
+import type { ChannelValues } from "@/lib/fade";
 import { STORAGE_KEY, writeShow } from "@/lib/showFile";
 
 function makeId(prefix: string): string {
@@ -41,6 +44,14 @@ interface FixtureStoreState {
    *  así nada puede pisarlo y al quitarlo todo vuelve como estaba. Tampoco
    *  se persiste. */
   blackoutActive: boolean;
+  /** En el orden del evento. */
+  moments: Moment[];
+  /** Último momento lanzado. Se persiste: si la app se cierra a mitad del
+   *  evento, "Siguiente" retoma desde ahí. */
+  activeMomentId: string | null;
+  /** Arranque en curso de activeMomentId (ver lib/momentsEngine.ts), o null
+   *  si está detenido. No se persiste: al abrir, nada arranca solo. */
+  momentRun: { nonce: number; startedAt: number } | null;
 }
 
 interface FixtureStoreValue extends FixtureStoreState {
@@ -58,6 +69,8 @@ interface FixtureStoreValue extends FixtureStoreState {
    *  useState local de FixtureControl). */
   getChannelValue: (instanceId: string, channelId: string, fallback: number) => number;
   setChannelValue: (instanceId: string, channelId: string, value: number) => void;
+  /** Varios canales en una sola actualización (merge). */
+  setChannelValues: (values: ChannelValues) => void;
   saveScene: (name: string) => Scene;
   updateSceneValues: (sceneId: string) => void;
   renameScene: (sceneId: string, name: string) => void;
@@ -93,6 +106,20 @@ interface FixtureStoreValue extends FixtureStoreState {
    *  Effects y Chases siguen corriendo por debajo, a oscuras. */
   blackout: () => void;
   releaseBlackout: () => void;
+  addMoment: (name: string) => Moment;
+  updateMoment: (momentId: string, patch: Partial<Omit<Moment, "id">>) => void;
+  removeMoment: (momentId: string) => void;
+  moveMoment: (momentId: string, direction: -1 | 1) => void;
+  /** Agrega los momentos de una quinceañera armados sobre el rig actual. */
+  addQuinceTemplate: () => void;
+  /** Lanza un momento: corta los effects del anterior y quita el Blackout. */
+  startMoment: (momentId: string) => void;
+  /** Pasa al siguiente (1) o vuelve al anterior (-1). Sin ninguno lanzado,
+   *  "siguiente" es el primero. */
+  stepMoment: (direction: -1 | 1) => void;
+  /** Corta el chase, los effects y el avance automático del momento; las
+   *  luces quedan como están. */
+  stopMoment: () => void;
   /** Guarda ya mismo (el guardado automático corre solo). Rechaza si el
    *  disco falla. */
   saveShow: () => Promise<void>;
@@ -117,11 +144,19 @@ function restoreState(parsed: Partial<FixtureStoreState>): FixtureStoreState {
     effects: parsed.effects ?? [],
     runningEffectIds: [], // nunca se restaura, ver comentario en el tipo
     blackoutActive: false, // ídem
+    moments: parsed.moments ?? [],
+    activeMomentId: parsed.activeMomentId ?? null,
+    momentRun: null, // ídem
   };
 }
 
 function serialize(state: FixtureStoreState): string {
-  const { runningEffectIds: _runningEffectIds, blackoutActive: _blackoutActive, ...persisted } = state;
+  const {
+    runningEffectIds: _runningEffectIds,
+    blackoutActive: _blackoutActive,
+    momentRun: _momentRun,
+    ...persisted
+  } = state;
   return JSON.stringify(persisted);
 }
 
@@ -246,6 +281,16 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
     }));
   }, []);
 
+  const setChannelValues = useCallback((values: ChannelValues) => {
+    setState((s) => {
+      const liveValues = { ...s.liveValues };
+      for (const [instanceId, channels] of Object.entries(values)) {
+        liveValues[instanceId] = { ...liveValues[instanceId], ...channels };
+      }
+      return { ...s, liveValues };
+    });
+  }, []);
+
   /** Captura TODOS los canales con valor conocido de TODOS los fixtures que
    *  tengan al menos un canal tocado en liveValues (fixtures nunca tocados
    *  se omiten: guardar sus defaults no aporta nada y solo infla la escena). */
@@ -311,6 +356,7 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
       ...s,
       scenes: s.scenes.filter((sc) => sc.id !== sceneId),
       activeSceneId: s.activeSceneId === sceneId ? null : s.activeSceneId,
+      moments: s.moments.map((m) => (m.sceneId === sceneId ? { ...m, sceneId: null } : m)),
     }));
   }, []);
 
@@ -414,7 +460,11 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
   }, []);
 
   const removeChase = useCallback((chaseId: string) => {
-    setState((s) => ({ ...s, chases: s.chases.filter((c) => c.id !== chaseId) }));
+    setState((s) => ({
+      ...s,
+      chases: s.chases.filter((c) => c.id !== chaseId),
+      moments: s.moments.map((m) => (m.chaseId === chaseId ? { ...m, chaseId: null } : m)),
+    }));
   }, []);
 
   const setChaseLoop = useCallback((chaseId: string, loop: boolean) => {
@@ -524,6 +574,7 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
       ...s,
       effects: s.effects.filter((e) => e.id !== effectId),
       runningEffectIds: s.runningEffectIds.filter((id) => id !== effectId),
+      moments: s.moments.map((m) => ({ ...m, effectIds: m.effectIds.filter((id) => id !== effectId) })),
     }));
   }, []);
 
@@ -549,6 +600,90 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
   const blackout = useCallback(() => setState((s) => ({ ...s, blackoutActive: true })), []);
   const releaseBlackout = useCallback(() => setState((s) => ({ ...s, blackoutActive: false })), []);
 
+  const addMoment = useCallback(
+    (name: string): Moment => {
+      const created: Moment = {
+        id: makeId("moment"),
+        name: name.trim() || `Momento ${state.moments.length + 1}`,
+        sceneId: null,
+        chaseId: null,
+        effectIds: [],
+        fadeMs: 2000,
+        durationSec: null,
+      };
+      setState((s) => ({ ...s, moments: [...s.moments, created] }));
+      return created;
+    },
+    [state.moments.length],
+  );
+
+  const updateMoment = useCallback((momentId: string, patch: Partial<Omit<Moment, "id">>) => {
+    setState((s) => ({
+      ...s,
+      moments: s.moments.map((m) => (m.id === momentId ? { ...m, ...patch } : m)),
+    }));
+  }, []);
+
+  const removeMoment = useCallback((momentId: string) => {
+    setState((s) => ({
+      ...s,
+      moments: s.moments.filter((m) => m.id !== momentId),
+      ...(s.activeMomentId === momentId ? { activeMomentId: null, momentRun: null, runningEffectIds: [] } : {}),
+    }));
+  }, []);
+
+  const moveMoment = useCallback((momentId: string, direction: -1 | 1) => {
+    setState((s) => {
+      const index = s.moments.findIndex((m) => m.id === momentId);
+      const target = index + direction;
+      if (index === -1 || target < 0 || target >= s.moments.length) return s;
+      const moments = [...s.moments];
+      [moments[index], moments[target]] = [moments[target], moments[index]];
+      return { ...s, moments };
+    });
+  }, []);
+
+  const addQuinceTemplate = useCallback(() => {
+    const t = buildQuinceTemplate(stateRef.current, makeId);
+    setState((s) => ({
+      ...s,
+      instances: t.instances,
+      groups: t.groups,
+      scenes: [...s.scenes, ...t.scenes],
+      effects: [...s.effects, ...t.effects],
+      moments: [...s.moments, ...t.moments],
+    }));
+  }, []);
+
+  const startMoment = useCallback((momentId: string) => {
+    const startedAt = Date.now();
+    setState((s) => {
+      const moment = s.moments.find((m) => m.id === momentId);
+      if (!moment) return s;
+      return {
+        ...s,
+        activeMomentId: momentId,
+        momentRun: { nonce: (s.momentRun?.nonce ?? startedAt) + 1, startedAt },
+        activeSceneId: moment.sceneId ?? s.activeSceneId,
+        runningEffectIds: [],
+        blackoutActive: false,
+      };
+    });
+  }, []);
+
+  const stepMoment = useCallback(
+    (direction: -1 | 1) => {
+      const { moments, activeMomentId } = stateRef.current;
+      const next = moments[moments.findIndex((m) => m.id === activeMomentId) + direction];
+      if (next) startMoment(next.id);
+    },
+    [startMoment],
+  );
+
+  const stopMoment = useCallback(() => {
+    setState((s) => ({ ...s, momentRun: null, runningEffectIds: [] }));
+  }, []);
+
   const selectedInstance = useMemo(
     () => state.instances.find((i) => i.id === state.selectedInstanceId) ?? null,
     [state.instances, state.selectedInstanceId],
@@ -571,6 +706,7 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
     removeInstance,
     getChannelValue,
     setChannelValue,
+    setChannelValues,
     saveScene,
     updateSceneValues,
     renameScene,
@@ -597,6 +733,14 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
     stopEffect,
     blackout,
     releaseBlackout,
+    addMoment,
+    updateMoment,
+    removeMoment,
+    moveMoment,
+    addQuinceTemplate,
+    startMoment,
+    stepMoment,
+    stopMoment,
     saveShow,
     serializeShow,
     importShow,

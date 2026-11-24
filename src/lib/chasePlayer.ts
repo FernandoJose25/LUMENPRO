@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { fadeValue, snapChannelIds } from "@/lib/fade";
 import type { Chase } from "@/types/chase";
+import type { FixtureDefinition } from "@/types/fixture";
 import type { Scene } from "@/types/scene";
 
 interface UseChasePlayerArgs {
   chase: Chase | null;
   scenes: Scene[];
+  definitions: FixtureDefinition[];
   getChannelValue: (instanceId: string, channelId: string, fallback: number) => number;
   setChannelValue: (instanceId: string, channelId: string, value: number) => void;
 }
@@ -32,15 +35,17 @@ const TICK_MS = 40;
  * mientras el chase corría, el siguiente fade sigue siendo suave en vez
  * de saltar.
  */
-export function useChasePlayer({ chase, scenes, getChannelValue, setChannelValue }: UseChasePlayerArgs) {
+export function useChasePlayer({ chase, scenes, definitions, getChannelValue, setChannelValue }: UseChasePlayerArgs) {
   const [status, setStatus] = useState<ChasePlaybackStatus>(IDLE_STATUS);
 
   const chaseRef = useRef(chase);
   const scenesRef = useRef(scenes);
+  const definitionsRef = useRef(definitions);
   const getChannelValueRef = useRef(getChannelValue);
   const setChannelValueRef = useRef(setChannelValue);
   chaseRef.current = chase;
   scenesRef.current = scenes;
+  definitionsRef.current = definitions;
   getChannelValueRef.current = getChannelValue;
   setChannelValueRef.current = setChannelValue;
 
@@ -104,10 +109,11 @@ export function useChasePlayer({ chase, scenes, getChannelValue, setChannelValue
       const dur = Math.max(step.fadeMs, 1);
       const t = Math.min(1, elapsed / dur);
       if (scene) {
+        const snap = snapChannelIds(definitionsRef.current);
         for (const [instanceId, channels] of Object.entries(scene.values)) {
           for (const [channelId, target] of Object.entries(channels)) {
             const from = fadeFromRef.current[instanceId]?.[channelId] ?? target;
-            setChannelValueRef.current(instanceId, channelId, Math.round(from + (target - from) * t));
+            setChannelValueRef.current(instanceId, channelId, fadeValue(from, target, t, snap.has(channelId)));
           }
         }
       }

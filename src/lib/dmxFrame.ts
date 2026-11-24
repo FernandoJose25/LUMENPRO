@@ -60,7 +60,9 @@ export interface PatchRow {
 export function describePatch(instances: FixtureInstance[], definitions: FixtureDefinition[]): PatchRow[] {
   const rows = instances
     .map((instance): PatchRow => {
-      const count = definitions.find((d) => d.id === instance.definitionId)?.channels.length ?? 0;
+      // El número más alto y no la cantidad: un perfil puede tener huecos.
+      const channels = definitions.find((d) => d.id === instance.definitionId)?.channels ?? [];
+      const count = Math.max(0, ...channels.map((c) => c.index));
       return { instance, first: instance.address, last: instance.address + count - 1, issues: [] };
     })
     .sort((a, b) => a.instance.universe - b.instance.universe || a.first - b.first);

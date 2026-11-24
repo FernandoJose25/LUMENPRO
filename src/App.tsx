@@ -10,16 +10,17 @@ import { ChasesView } from "@/components/chases/ChasesView";
 import { EffectsView } from "@/components/effects/EffectsView";
 import { LiveView } from "@/components/live/LiveView";
 import { DmxOutputView } from "@/components/dmx/DmxOutputView";
+import { MomentsView } from "@/components/moments/MomentsView";
 import { SettingsView } from "@/components/views/SettingsView";
 import { CommandPalette } from "@/components/command-palette/CommandPalette";
 import { useEffectsEngine } from "@/lib/effectEngine";
 import { useDmxOutput } from "@/lib/dmxOutput";
+import { useMomentsEngine } from "@/lib/momentsEngine";
 import { PlaceholderView } from "@/components/views/PlaceholderView";
 
 // A qué fase del plan (sección 33 del brief) corresponde cada sección del
 // Sidebar que todavía no está implementada.
 const PENDING_PHASE: Record<string, string> = {
-  Timeline: "Fase 4 — Programming",
   "Audio Reactive": "Fase 5 — Live",
   Universes: "el motor DMX (fuera del alcance frontend de las Fases 1-6)",
 };
@@ -34,10 +35,18 @@ function EffectsEngineMount() {
   return null;
 }
 
+/** Ídem para los Momentos. Los dos van en componentes propios para que cada
+ *  uno se re-renderice solo con lo suyo. */
+function MomentsEngineMount() {
+  useMomentsEngine();
+  return null;
+}
+
 export default function App() {
   return (
     <FixtureStoreProvider>
       <EffectsEngineMount />
+      <MomentsEngineMount />
       <AppShell />
     </FixtureStoreProvider>
   );
@@ -71,6 +80,7 @@ function AppShell() {
 
         {section === "Dashboard" ? <DashboardView /> : null}
         {section === "Live" ? <LiveView /> : null}
+        {section === "Momentos" ? <MomentsView /> : null}
         {section === "Fixtures" ? <FixturesView /> : null}
         {section === "Groups" ? <GroupsView /> : null}
         {section === "Scenes" ? <ScenesView /> : null}

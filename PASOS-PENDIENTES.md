@@ -34,6 +34,14 @@
 - **Blackout en la salida**: ya no pone `liveValues` a 0. Apaga dimmer, color y
   programas automáticos en `dmxFrame.ts`, sin mover Pan/Tilt; ningún chase o
   effect lo pisa y al quitarlo todo vuelve igual. Pedir una escena lo quita.
+- **Momentos del evento** (2026-11-24): `types/moment.ts`, `lib/momentsEngine.ts`
+  (montado una vez en App, sigue al cambiar de sección), sección "Momentos",
+  barra en Live con Siguiente/Anterior/Detener, AvPág/RePág (pasador de
+  diapositivas) y plantilla de quinceañera por tipo de canal. Al entrar, lo que
+  la escena no define vuelve a su default; los effects arrancan al terminar el
+  fade. En los fades, estrobo/gobo/rueda de color saltan (`lib/fade.ts`).
+- **Número de canal editable** en Fixture Editor: mueve la función sin romper
+  escenas (guardan el id del canal, no su posición).
 - **Show en disco** (`show.json` en AppData, escritura atómica) con exportar e
   importar en "Settings". `npm run tauri build` genera el instalador.
 
@@ -222,7 +230,8 @@
 - [ ] **Probar con el cable y las luces**: `cargo run --bin smoke_test COM5`
       (en `dmx-engine/`) y luego la app. Revisar parpadeo.
 - [x] Empaquetado Tauri — `npm run tauri build` genera el `.exe`.
-- [ ] Momentos del evento con "Siguiente" (escena + effects en un botón)
+- [x] Momentos del evento con "Siguiente" (escena + chase + effects en un botón)
+- [ ] Buscador de canales (subir de a uno para identificar un equipo sin manual)
 - [ ] Control por celular (página por WiFi local con PIN)
 - [ ] Doble monitor (depende de Tauri, gestión de ventanas nativas)
 
