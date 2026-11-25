@@ -1867,6 +1867,7 @@ dependencies = [
  "getrandom 0.4.3",
  "if-addrs",
  "lumenpro_dmx",
+ "lumenpro_show",
  "qrcodegen",
  "serde",
  "serde_json",
@@ -1883,6 +1884,14 @@ dependencies = [
  "serialport",
  "thiserror 1.0.69",
  "unescaper",
+]
+
+[[package]]
+name = "lumenpro_show"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

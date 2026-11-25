@@ -3,7 +3,6 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import App from "@/App";
 import { followBand, gateDb, setAudioFeed, SILENT_BAND, type AudioFeed } from "@/lib/audioInput";
 import { createBeatTracker } from "@/lib/beatTracker";
-import { useEffectsEngine } from "@/lib/effectEngine";
 import { FixtureStoreProvider, useFixtureStore } from "@/lib/fixtureStore";
 import type { Effect } from "@/types/effect";
 
@@ -129,8 +128,7 @@ describe("Effects que siguen la música", () => {
   let store: Store;
   function Engine() {
     store = useFixtureStore();
-    useEffectsEngine();
-    return null;
+      return null;
   }
 
   beforeEach(() => {
@@ -150,6 +148,7 @@ describe("Effects que siguen la música", () => {
   const feed = (levels: Partial<AudioFeed["levels"]>, beats: number | null): AudioFeed => ({
     levels: { bass: 0, mid: 0, treble: 0, ...levels },
     beats: () => beats,
+    bpm: () => null,
   });
 
   function run(patch: Partial<Effect>) {

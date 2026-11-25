@@ -8,9 +8,12 @@ import type { Effect } from "@/types/effect";
 import type { Moment } from "@/types/moment";
 import { seedDefinitions, seedInstances } from "@/data/fixtureLibrary";
 import { buildQuinceTemplate } from "@/data/quinceTemplate";
+import { closeWindow, createEngineLink, type EngineHost, type EngineLink } from "@/lib/engineLink";
+import { askChoice } from "@/lib/dialogs";
 import type { ChannelValues } from "@/lib/fade";
-import { docOf, EMPTY_HISTORY, recordChange, sameDoc, travel } from "@/lib/history";
+import { docOf, EMPTY_HISTORY, recordChange, sameDoc, travel, type ShowDoc } from "@/lib/history";
 import { STORAGE_KEY, writeShow } from "@/lib/showFile";
+import type { EngineChanges, EngineMessage, Playback } from "@/types/engine";
 
 function makeId(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -20,50 +23,33 @@ function makeId(prefix: string): string {
 // como mucho una vez por segundo en vez de escribir a disco en cada tick.
 const PERSIST_EVERY_MS = 1000;
 
-const IDENTIFY_MS = 3000;
-
-interface FixtureStoreState {
-  definitions: FixtureDefinition[];
-  instances: FixtureInstance[];
+/**
+ * Lo programado (ShowDoc) es de la interfaz y se le manda al motor; lo que está
+ * pasando (Playback y liveValues) es del motor y acá hay un espejo para
+ * mostrarlo (ver lib/engineLink.ts).
+ */
+interface FixtureStoreState extends ShowDoc, Playback {
   selectedInstanceId: string | null;
-  /** Valores de canal "en vivo" (lo que hoy estaría saliendo por DMX si
-   *  hubiera un motor conectado — ver AUDIT.md). instanceId -> channelId -> valor.
-   *  Antes de esto vivía como useState local dentro de FixtureControl y se
-   *  perdía al cambiar de fixture seleccionado; ahora es la fuente de verdad
-   *  única, para que Scenes pueda capturarlo y recuperarlo. */
-  liveValues: Record<string, Record<string, number>>;
-  scenes: Scene[];
-  /** Última escena recuperada con éxito — solo para resaltar el botón activo
-   *  en la UI; no es una garantía de que nada se haya movido desde entonces. */
-  activeSceneId: string | null;
-  groups: Group[];
-  chases: Chase[];
-  effects: Effect[];
-  /** Ids de Effect corriendo AHORA. Deliberadamente NO se persiste entre
-   *  recargas de página (ver loadInitialState y el useEffect de guardado)
-   *  — al recargar, ningún efecto debería arrancar solo. */
-  runningEffectIds: string[];
-  /** Blackout puesto. No toca liveValues: apaga en la salida (dmxFrame.ts),
-   *  así nada puede pisarlo y al quitarlo todo vuelve como estaba. Tampoco
-   *  se persiste. */
-  blackoutActive: boolean;
-  /** Intensidad general 0–100 y estrobo general: se aplican en la salida
-   *  (dmxFrame.ts) sobre lo que esté sonando. No se persisten. */
-  master: number;
-  strobeActive: boolean;
-  /** Fixture que se está identificando (ver identify), o null. */
-  identifyId: string | null;
-  /** En el orden del evento. */
-  moments: Moment[];
-  /** Último momento lanzado. Se persiste: si la app se cierra a mitad del
-   *  evento, "Siguiente" retoma desde ahí. */
-  activeMomentId: string | null;
-  /** Arranque en curso de activeMomentId (ver lib/momentsEngine.ts), o null
-   *  si está detenido. No se persiste: al abrir, nada arranca solo. */
-  momentRun: { nonce: number; startedAt: number } | null;
+  /** Valores de canal en vivo: instanceId -> channelId -> valor. Blackout,
+   *  intensidad y estrobo generales NO los tocan: se aplican en la salida, así
+   *  nada puede pisarlos y al quitarlos todo vuelve como estaba. */
+  liveValues: ChannelValues;
 }
 
+/** Lo que no se guarda con el show: al abrir, nada arranca solo. La excepción
+ *  son activeSceneId y activeMomentId ("Siguiente" retoma desde ahí). */
+const IDLE: Omit<Playback, "activeSceneId" | "activeMomentId"> = {
+  runningEffectIds: [],
+  blackoutActive: false,
+  master: 100,
+  strobeActive: false,
+  identifyId: null,
+  momentRun: null,
+  chase: null,
+};
+
 interface FixtureStoreValue extends FixtureStoreState {
+  engine: EngineLink;
   selectedInstance: FixtureInstance | null;
   selectedDefinition: FixtureDefinition | null;
   selectInstance: (instanceId: string | null) => void;
@@ -111,6 +97,9 @@ interface FixtureStoreValue extends FixtureStoreState {
   updateEffect: (effectId: string, patch: Partial<Omit<Effect, "id" | "createdAt">>) => void;
   startEffect: (effectId: string) => void;
   stopEffect: (effectId: string) => void;
+  /** Uno a la vez: reproducir otro reemplaza al que esté sonando. */
+  playChase: (chaseId: string) => void;
+  stopChase: () => void;
   /** Apaga la luz de todo el rig sin mover las cabezas (ver dmxFrame.ts).
    *  Effects y Chases siguen corriendo por debajo, a oscuras. */
   blackout: () => void;
@@ -161,28 +150,30 @@ function restoreState(parsed: Partial<FixtureStoreState>): FixtureStoreState {
     groups: parsed.groups ?? [],
     chases: parsed.chases ?? [],
     effects: (parsed.effects ?? []).map((fx) => ({ ...fx, source: fx.source ?? "clock", beatsPerCycle: fx.beatsPerCycle ?? 1 })),
-    runningEffectIds: [], // nunca se restaura, ver comentario en el tipo
-    blackoutActive: false, // ídem
-    master: 100, // ídem
-    strobeActive: false, // ídem
-    identifyId: null, // ídem
     moments: parsed.moments ?? [],
     activeMomentId: parsed.activeMomentId ?? null,
-    momentRun: null, // ídem
+    ...IDLE,
   };
 }
 
 function serialize(state: FixtureStoreState): string {
-  const {
-    runningEffectIds: _runningEffectIds,
-    blackoutActive: _blackoutActive,
-    master: _master,
-    strobeActive: _strobeActive,
-    identifyId: _identifyId,
-    momentRun: _momentRun,
-    ...persisted
-  } = state;
-  return JSON.stringify(persisted);
+  return JSON.stringify(Object.fromEntries(Object.entries(state).filter(([key]) => !(key in IDLE))));
+}
+
+/** El show del disco, o el que el motor ya tenía en marcha. */
+function initialState(engine: EngineLink): FixtureStoreState {
+  const saved = loadInitialState();
+  if (!engine.resumed) return saved;
+  const { doc, live, playback } = engine.resumed;
+  return { ...saved, ...doc, liveValues: live, ...playback };
+}
+
+function mergeValues(into: ChannelValues, values: ChannelValues): ChannelValues {
+  const merged = { ...into };
+  for (const [instanceId, channels] of Object.entries(values)) {
+    merged[instanceId] = { ...merged[instanceId], ...channels };
+  }
+  return merged;
 }
 
 function loadInitialState(): FixtureStoreState {
@@ -195,6 +186,11 @@ function loadInitialState(): FixtureStoreState {
   return restoreState({});
 }
 
+function resetMessage(s: FixtureStoreState): EngineMessage {
+  const { liveValues: live, activeSceneId, activeMomentId } = s;
+  return { type: "reset", doc: docOf(s), live, activeSceneId, activeMomentId };
+}
+
 const FixtureStoreContext = createContext<FixtureStoreValue | null>(null);
 
 /**
@@ -202,10 +198,47 @@ const FixtureStoreContext = createContext<FixtureStoreValue | null>(null);
  * navegador y, en la app de escritorio, además el archivo show.json.
  */
 export function FixtureStoreProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<FixtureStoreState>(loadInitialState);
+  const [engine] = useState(createEngineLink);
+  const [state, publish] = useState<FixtureStoreState>(() => initialState(engine));
 
+  // Siempre al día, también entre dos cambios del mismo evento, cuando React
+  // todavía no volvió a pintar.
   const stateRef = useRef(state);
-  stateRef.current = state;
+  const setState = useCallback(
+    (change: FixtureStoreState | ((s: FixtureStoreState) => FixtureStoreState)) => {
+      const before = stateRef.current;
+      const next = typeof change === "function" ? change(before) : change;
+      if (next === before) return;
+      stateRef.current = next;
+      publish(next);
+      if (!sameDoc(before, next)) engine.send({ type: "doc", doc: docOf(next) });
+    },
+    [engine],
+  );
+
+  useEffect(() => {
+    const host: EngineHost = {
+      onChanges: ({ full, values, playback }: EngineChanges) => {
+        const s = stateRef.current;
+        const liveValues = full ? values : mergeValues(s.liveValues, values);
+        stateRef.current = { ...s, ...playback, liveValues };
+        publish(stateRef.current);
+      },
+      resetMessage: () => resetMessage(stateRef.current),
+      docMessage: () => ({ type: "doc", doc: docOf(stateRef.current) }),
+      onCloseAsked: () =>
+        askChoice({
+          title: "Las luces están encendidas",
+          text: "¿Qué hago con ellas al cerrar la ventana? Si las dejas, siguen con el show y con el celular; para volver, abre LUMEN PRO otra vez.",
+          options: [
+            { label: "Dejar las luces y cerrar", onSelect: () => closeWindow(true) },
+            { label: "Apagar todo y salir", variant: "danger", onSelect: () => closeWindow(false) },
+          ],
+        }),
+    };
+    return engine.start(host);
+  }, [engine]);
+
   const persistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const saveShow = useCallback(() => {
@@ -251,16 +284,8 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
     historyRef.current = step.history;
     setHistory(step.history);
     lastDoc.current = step.doc; // para que el efecto de arriba no lo tome por un cambio nuevo
-    setState((s) => {
-      const momentExists = step.doc.moments.some((m) => m.id === s.activeMomentId);
-      return {
-        ...s,
-        ...step.doc,
-        runningEffectIds: s.runningEffectIds.filter((id) => step.doc.effects.some((e) => e.id === id)),
-        ...(momentExists ? {} : { activeMomentId: null, momentRun: null }),
-      };
-    });
-  }, []);
+    setState((s) => ({ ...s, ...step.doc }));
+  }, [setState]);
   const undo = useCallback(() => timeTravel(-1), [timeTravel]);
   const redo = useCallback(() => timeTravel(1), [timeTravel]);
 
@@ -277,22 +302,23 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
       throw new Error("El archivo no es un show de LUMEN PRO");
     }
     setState(restoreState(parsed));
-  }, []);
+    engine.send(resetMessage(stateRef.current));
+  }, [engine, setState]);
 
   const selectInstance = useCallback((instanceId: string | null) => {
     setState((s) => ({ ...s, selectedInstanceId: instanceId }));
-  }, []);
+  }, [setState]);
 
   const addDefinition = useCallback((def: FixtureDefinition) => {
     setState((s) => ({ ...s, definitions: [...s.definitions, def] }));
-  }, []);
+  }, [setState]);
 
   const updateDefinition = useCallback((def: FixtureDefinition) => {
     setState((s) => ({
       ...s,
       definitions: s.definitions.map((d) => (d.id === def.id ? def : d)),
     }));
-  }, []);
+  }, [setState]);
 
   const removeDefinition = useCallback((defId: string) => {
     setState((s) => ({
@@ -300,18 +326,18 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
       definitions: s.definitions.filter((d) => d.id !== defId),
       instances: s.instances.filter((i) => i.definitionId !== defId),
     }));
-  }, []);
+  }, [setState]);
 
   const addInstance = useCallback((instance: FixtureInstance) => {
     setState((s) => ({ ...s, instances: [...s.instances, instance] }));
-  }, []);
+  }, [setState]);
 
   const updateInstance = useCallback((instance: FixtureInstance) => {
     setState((s) => ({
       ...s,
       instances: s.instances.map((i) => (i.id === instance.id ? instance : i)),
     }));
-  }, []);
+  }, [setState]);
 
   const removeInstance = useCallback((instanceId: string) => {
     setState((s) => ({
@@ -319,7 +345,7 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
       instances: s.instances.filter((i) => i.id !== instanceId),
       selectedInstanceId: s.selectedInstanceId === instanceId ? null : s.selectedInstanceId,
     }));
-  }, []);
+  }, [setState]);
 
   const getChannelValue = useCallback(
     (instanceId: string, channelId: string, fallback: number) =>
@@ -327,25 +353,18 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
     [state.liveValues],
   );
 
-  const setChannelValue = useCallback((instanceId: string, channelId: string, value: number) => {
-    setState((s) => ({
-      ...s,
-      liveValues: {
-        ...s.liveValues,
-        [instanceId]: { ...s.liveValues[instanceId], [channelId]: value },
-      },
-    }));
-  }, []);
-
-  const setChannelValues = useCallback((values: ChannelValues) => {
-    setState((s) => {
-      const liveValues = { ...s.liveValues };
-      for (const [instanceId, channels] of Object.entries(values)) {
-        liveValues[instanceId] = { ...liveValues[instanceId], ...channels };
-      }
-      return { ...s, liveValues };
-    });
-  }, []);
+  // Se ven al instante, sin esperar a que el motor conteste.
+  const setChannelValues = useCallback(
+    (values: ChannelValues) => {
+      setState((s) => ({ ...s, liveValues: mergeValues(s.liveValues, values) }));
+      engine.send({ type: "values", values });
+    },
+    [engine, setState],
+  );
+  const setChannelValue = useCallback(
+    (instanceId: string, channelId: string, value: number) => setChannelValues({ [instanceId]: { [channelId]: value } }),
+    [setChannelValues],
+  );
 
   /** Captura TODOS los canales con valor conocido de TODOS los fixtures que
    *  tengan al menos un canal tocado en liveValues (fixtures nunca tocados
@@ -362,26 +381,18 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
 
   const saveScene = useCallback(
     (name: string): Scene => {
-      // La escena se construye completa ANTES de llamar a setState — no
-      // dentro del updater. React no garantiza que el updater corra de
-      // forma síncrona (es una optimización interna, no un contrato
-      // público); cuando ya hay otras actualizaciones de estado pendientes
-      // en el mismo tick (p. ej. moviste un fader justo antes), esa
-      // suposición falla y el valor devuelto queda a medio construir.
-      // `state` (closure del último render) es suficientemente reciente
-      // para esto — no es una operación que necesite el estado "del
-      // futuro" que solo existe dentro del updater.
       const scene: Scene = {
         id: makeId("scene"),
         name: name.trim() || "Sin nombre",
-        values: captureSnapshot(state),
+        values: captureSnapshot(stateRef.current),
         createdAt: Date.now(),
         updatedAt: Date.now(),
       };
       setState((s) => ({ ...s, scenes: [...s.scenes, scene], activeSceneId: scene.id }));
+      engine.send({ type: "activeScene", id: scene.id });
       return scene;
     },
-    [captureSnapshot, state],
+    [captureSnapshot, engine, setState],
   );
 
   /** Re-graba una escena existente con el estado actual del rig — "actualizar
@@ -405,31 +416,19 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
         sc.id === sceneId ? { ...sc, name: name.trim() || sc.name, updatedAt: Date.now() } : sc,
       ),
     }));
-  }, []);
+  }, [setState]);
 
   const removeScene = useCallback((sceneId: string) => {
     setState((s) => ({
       ...s,
       scenes: s.scenes.filter((sc) => sc.id !== sceneId),
-      activeSceneId: s.activeSceneId === sceneId ? null : s.activeSceneId,
       moments: s.moments.map((m) => (m.sceneId === sceneId ? { ...m, sceneId: null } : m)),
     }));
-  }, []);
+  }, [setState]);
 
   /** Recall = merge, no blackout (ver comentario en types/scene.ts): solo
    *  pisa los instanceId/channelId que la escena capturó. */
-  const recallScene = useCallback((sceneId: string) => {
-    setState((s) => {
-      const scene = s.scenes.find((sc) => sc.id === sceneId);
-      if (!scene) return s;
-      const liveValues: Record<string, Record<string, number>> = { ...s.liveValues };
-      for (const [instanceId, channels] of Object.entries(scene.values)) {
-        liveValues[instanceId] = { ...liveValues[instanceId], ...channels };
-      }
-      // Pedir una escena quita el Blackout: si no, el botón parecería roto.
-      return { ...s, liveValues, activeSceneId: sceneId, blackoutActive: false };
-    });
-  }, []);
+  const recallScene = useCallback((sceneId: string) => engine.send({ type: "recallScene", id: sceneId }), [engine]);
 
   const addGroup = useCallback(
     (name: string): Group => {
@@ -449,7 +448,7 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
       ...s,
       groups: s.groups.map((g) => (g.id === groupId ? { ...g, name: name.trim() || g.name } : g)),
     }));
-  }, []);
+  }, [setState]);
 
   const removeGroup = useCallback((groupId: string) => {
     setState((s) => ({
@@ -459,14 +458,14 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
       // de dejarlos apuntando a un group.id que ya no existe.
       instances: s.instances.map((i) => (i.group === groupId ? { ...i, group: undefined } : i)),
     }));
-  }, []);
+  }, [setState]);
 
   const setInstanceGroup = useCallback((instanceId: string, groupId: string | null) => {
     setState((s) => ({
       ...s,
       instances: s.instances.map((i) => (i.id === instanceId ? { ...i, group: groupId ?? undefined } : i)),
     }));
-  }, []);
+  }, [setState]);
 
   /** Aplica un valor a todo canal de tipo `channelType` en todo fixture del
    *  grupo — cada fixture puede tener ese tipo de canal en un índice DMX
@@ -474,21 +473,21 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
    *  canal fijo. Si un fixture del grupo no tiene ese tipo de canal, se
    *  omite silenciosamente (p. ej. subir "Gobo" en un grupo mixto que
    *  incluye PARs sin gobo). */
-  const setGroupChannelByType = useCallback((groupId: string, channelType: string, value: number) => {
-    setState((s) => {
-      const liveValues: Record<string, Record<string, number>> = { ...s.liveValues };
-      for (const instance of s.instances) {
+  const setGroupChannelByType = useCallback(
+    (groupId: string, channelType: string, value: number) => {
+      const { instances, definitions } = stateRef.current;
+      const values: ChannelValues = {};
+      for (const instance of instances) {
         if (instance.group !== groupId) continue;
-        const def = s.definitions.find((d) => d.id === instance.definitionId);
-        if (!def) continue;
-        for (const channel of def.channels) {
-          if (channel.type !== channelType) continue;
-          liveValues[instance.id] = { ...liveValues[instance.id], [channel.id]: value };
-        }
+        const channels = definitions.find((d) => d.id === instance.definitionId)?.channels ?? [];
+        values[instance.id] = Object.fromEntries(
+          channels.filter((c) => c.type === channelType).map((c) => [c.id, value]),
+        );
       }
-      return { ...s, liveValues };
-    });
-  }, []);
+      setChannelValues(values);
+    },
+    [setChannelValues],
+  );
 
   const addChase = useCallback(
     (name: string): Chase => {
@@ -513,7 +512,7 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
         c.id === chaseId ? { ...c, name: name.trim() || c.name, updatedAt: Date.now() } : c,
       ),
     }));
-  }, []);
+  }, [setState]);
 
   const removeChase = useCallback((chaseId: string) => {
     setState((s) => ({
@@ -521,14 +520,14 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
       chases: s.chases.filter((c) => c.id !== chaseId),
       moments: s.moments.map((m) => (m.chaseId === chaseId ? { ...m, chaseId: null } : m)),
     }));
-  }, []);
+  }, [setState]);
 
   const setChaseLoop = useCallback((chaseId: string, loop: boolean) => {
     setState((s) => ({
       ...s,
       chases: s.chases.map((c) => (c.id === chaseId ? { ...c, loop, updatedAt: Date.now() } : c)),
     }));
-  }, []);
+  }, [setState]);
 
   /** Agrega un step al final referenciando una Scene existente, con
    *  tiempos por defecto razonables (1s de fade, 3s de hold) que el
@@ -546,7 +545,7 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
           : c,
       ),
     }));
-  }, []);
+  }, [setState]);
 
   const removeChaseStep = useCallback((chaseId: string, stepId: string) => {
     setState((s) => ({
@@ -557,7 +556,7 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
           : c,
       ),
     }));
-  }, []);
+  }, [setState]);
 
   const updateChaseStep = useCallback(
     (chaseId: string, stepId: string, patch: Partial<Omit<ChaseStep, "id">>) => {
@@ -590,7 +589,7 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
         return { ...c, steps, updatedAt: Date.now() };
       }),
     }));
-  }, []);
+  }, [setState]);
 
   const addEffect = useCallback(
     (name: string): Effect => {
@@ -625,50 +624,32 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
         e.id === effectId ? { ...e, name: name.trim() || e.name, updatedAt: Date.now() } : e,
       ),
     }));
-  }, []);
+  }, [setState]);
 
   const removeEffect = useCallback((effectId: string) => {
     setState((s) => ({
       ...s,
       effects: s.effects.filter((e) => e.id !== effectId),
-      runningEffectIds: s.runningEffectIds.filter((id) => id !== effectId),
       moments: s.moments.map((m) => ({ ...m, effectIds: m.effectIds.filter((id) => id !== effectId) })),
     }));
-  }, []);
+  }, [setState]);
 
   const updateEffect = useCallback((effectId: string, patch: Partial<Omit<Effect, "id" | "createdAt">>) => {
     setState((s) => ({
       ...s,
       effects: s.effects.map((e) => (e.id === effectId ? { ...e, ...patch, updatedAt: Date.now() } : e)),
     }));
-  }, []);
+  }, [setState]);
 
-  const startEffect = useCallback((effectId: string) => {
-    setState((s) =>
-      s.runningEffectIds.includes(effectId)
-        ? s
-        : { ...s, runningEffectIds: [...s.runningEffectIds, effectId] },
-    );
-  }, []);
-
-  const stopEffect = useCallback((effectId: string) => {
-    setState((s) => ({ ...s, runningEffectIds: s.runningEffectIds.filter((id) => id !== effectId) }));
-  }, []);
-
-  const blackout = useCallback(() => setState((s) => ({ ...s, blackoutActive: true })), []);
-  const releaseBlackout = useCallback(() => setState((s) => ({ ...s, blackoutActive: false })), []);
-
-  const setMaster = useCallback((value: number) => {
-    setState((s) => ({ ...s, master: Math.max(0, Math.min(100, Math.round(value))) }));
-  }, []);
-  const setStrobe = useCallback((on: boolean) => setState((s) => ({ ...s, strobeActive: on })), []);
-
-  const identifyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const identify = useCallback((instanceId: string) => {
-    if (identifyTimer.current) clearTimeout(identifyTimer.current);
-    setState((s) => ({ ...s, identifyId: instanceId }));
-    identifyTimer.current = setTimeout(() => setState((s) => ({ ...s, identifyId: null })), IDENTIFY_MS);
-  }, []);
+  const startEffect = useCallback((id: string) => engine.send({ type: "startEffect", id }), [engine]);
+  const stopEffect = useCallback((id: string) => engine.send({ type: "stopEffect", id }), [engine]);
+  const playChase = useCallback((id: string) => engine.send({ type: "playChase", id }), [engine]);
+  const stopChase = useCallback(() => engine.send({ type: "stopChase" }), [engine]);
+  const blackout = useCallback(() => engine.send({ type: "blackout", on: true }), [engine]);
+  const releaseBlackout = useCallback(() => engine.send({ type: "blackout", on: false }), [engine]);
+  const setMaster = useCallback((value: number) => engine.send({ type: "master", value }), [engine]);
+  const setStrobe = useCallback((on: boolean) => engine.send({ type: "strobe", on }), [engine]);
+  const identify = useCallback((id: string) => engine.send({ type: "identify", id }), [engine]);
 
   const addMoment = useCallback(
     (name: string): Moment => {
@@ -692,15 +673,14 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
       ...s,
       moments: s.moments.map((m) => (m.id === momentId ? { ...m, ...patch } : m)),
     }));
-  }, []);
+  }, [setState]);
 
   const removeMoment = useCallback((momentId: string) => {
     setState((s) => ({
       ...s,
       moments: s.moments.filter((m) => m.id !== momentId),
-      ...(s.activeMomentId === momentId ? { activeMomentId: null, momentRun: null, runningEffectIds: [] } : {}),
     }));
-  }, []);
+  }, [setState]);
 
   const moveMoment = useCallback((momentId: string, direction: -1 | 1) => {
     setState((s) => {
@@ -711,7 +691,7 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
       [moments[index], moments[target]] = [moments[target], moments[index]];
       return { ...s, moments };
     });
-  }, []);
+  }, [setState]);
 
   const addQuinceTemplate = useCallback(() => {
     const t = buildQuinceTemplate(stateRef.current, makeId);
@@ -723,37 +703,11 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
       effects: [...s.effects, ...t.effects],
       moments: [...s.moments, ...t.moments],
     }));
-  }, []);
+  }, [setState]);
 
-  const startMoment = useCallback((momentId: string) => {
-    const startedAt = Date.now();
-    setState((s) => {
-      const moment = s.moments.find((m) => m.id === momentId);
-      if (!moment) return s;
-      return {
-        ...s,
-        activeMomentId: momentId,
-        momentRun: { nonce: (s.momentRun?.nonce ?? startedAt) + 1, startedAt },
-        activeSceneId: moment.sceneId ?? s.activeSceneId,
-        runningEffectIds: [],
-        blackoutActive: false,
-        strobeActive: false,
-      };
-    });
-  }, []);
-
-  const stepMoment = useCallback(
-    (direction: -1 | 1) => {
-      const { moments, activeMomentId } = stateRef.current;
-      const next = moments[moments.findIndex((m) => m.id === activeMomentId) + direction];
-      if (next) startMoment(next.id);
-    },
-    [startMoment],
-  );
-
-  const stopMoment = useCallback(() => {
-    setState((s) => ({ ...s, momentRun: null, runningEffectIds: [] }));
-  }, []);
+  const startMoment = useCallback((id: string) => engine.send({ type: "startMoment", id }), [engine]);
+  const stepMoment = useCallback((direction: -1 | 1) => engine.send({ type: "stepMoment", direction }), [engine]);
+  const stopMoment = useCallback(() => engine.send({ type: "stopMoment" }), [engine]);
 
   const selectedInstance = useMemo(
     () => state.instances.find((i) => i.id === state.selectedInstanceId) ?? null,
@@ -766,6 +720,7 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
 
   const value: FixtureStoreValue = {
     ...state,
+    engine,
     selectedInstance,
     selectedDefinition,
     selectInstance,
@@ -802,6 +757,8 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
     updateEffect,
     startEffect,
     stopEffect,
+    playChase,
+    stopChase,
     blackout,
     releaseBlackout,
     setMaster,

@@ -2,10 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import App from "@/App";
 import { LiveMoments } from "@/components/live/LiveMoments";
-import { buildFrame } from "@/lib/dmxFrame";
-import { useEffectsEngine } from "@/lib/effectEngine";
+import { buildFrame } from "./frame";
 import { FixtureStoreProvider, useFixtureStore } from "@/lib/fixtureStore";
-import { useMomentsEngine } from "@/lib/momentsEngine";
 import { STORAGE_KEY } from "@/lib/showFile";
 import type { ChannelType } from "@/types/fixture";
 
@@ -14,8 +12,6 @@ let store: Store;
 
 function Engines() {
   store = useFixtureStore();
-  useEffectsEngine();
-  useMomentsEngine();
   return null;
 }
 

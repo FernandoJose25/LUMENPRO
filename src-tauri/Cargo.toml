@@ -22,9 +22,10 @@ getrandom = "0.4"
 # por path, no por versión publicada: es un crate interno del monorepo,
 # no algo que vaya a crates.io.
 lumenpro_dmx = { path = "../dmx-engine" }
+lumenpro_show = { path = "../show-engine" }
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", features = ["Win32_System_Power"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Diagnostics_ToolHelp", "Win32_System_Power", "Win32_System_Threading", "Win32_UI_WindowsAndMessaging"] }
 
 [[bin]]
 name = "lumenpro"

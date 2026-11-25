@@ -7,10 +7,14 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Manager};
 
-fn show_path(app: &AppHandle) -> Result<PathBuf, String> {
+fn data_path(app: &AppHandle, file: &str) -> Result<PathBuf, String> {
     let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    Ok(dir.join("show.json"))
+    Ok(dir.join(file))
+}
+
+fn show_path(app: &AppHandle) -> Result<PathBuf, String> {
+    data_path(app, "show.json")
 }
 
 /// Escribe a un temporal y lo renombra: si se corta la luz a mitad del
@@ -47,6 +51,17 @@ pub fn load_show(app: AppHandle) -> Result<Option<String>, String> {
 #[tauri::command(async)]
 pub fn save_show(app: AppHandle, json: String) -> Result<(), String> {
     write_atomic(&show_path(&app)?, &json).map_err(|e| e.to_string())
+}
+
+/// Preferencias de esta PC (src/lib/settings.ts).
+#[tauri::command(async)]
+pub fn load_settings(app: AppHandle) -> Result<Option<String>, String> {
+    Ok(fs::read_to_string(data_path(&app, "settings.json")?).ok())
+}
+
+#[tauri::command(async)]
+pub fn save_settings(app: AppHandle, json: String) -> Result<(), String> {
+    write_atomic(&data_path(&app, "settings.json")?, &json).map_err(|e| e.to_string())
 }
 
 /// Guarda una copia en Documentos\LUMEN PRO y devuelve la ruta.

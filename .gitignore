@@ -16,3 +16,6 @@ Cargo.lock.tmp
 # build` (preexistente, no depende de estos cambios) — no son fuente.
 vite.config.js
 vite.config.d.ts
+
+# Motor del show compilado para el navegador (npm run wasm)
+src/engine/*.wasm

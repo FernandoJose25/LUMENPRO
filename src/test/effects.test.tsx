@@ -4,12 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { FixtureStoreProvider, useFixtureStore } from "@/lib/fixtureStore";
 import { GroupsView } from "@/components/groups/GroupsView";
 import { EffectsView } from "@/components/effects/EffectsView";
-import { useEffectsEngine } from "@/lib/effectEngine";
-
-function EffectsEngineMount() {
-  useEffectsEngine();
-  return null;
-}
+import { willAnswer } from "./dialogs";
 
 function Debug() {
   const { effects, groups, instances, liveValues, runningEffectIds } = useFixtureStore();
@@ -30,7 +25,6 @@ function setup() {
   localStorage.clear();
   return render(
     <FixtureStoreProvider>
-      <EffectsEngineMount />
       <GroupsView />
       <EffectsView />
       <Debug />
@@ -43,7 +37,7 @@ function readDebug() {
 }
 
 async function createGroupWithFirstFixture(user: ReturnType<typeof userEvent.setup>) {
-  vi.spyOn(window, "prompt").mockReturnValueOnce("Grupo Test");
+  willAnswer("Grupo Test");
   await user.click(screen.getByRole("button", { name: /\+ Nuevo grupo/i }));
   const checkboxes = screen.getAllByRole("checkbox");
   await user.click(checkboxes[0]);
@@ -51,7 +45,7 @@ async function createGroupWithFirstFixture(user: ReturnType<typeof userEvent.set
 }
 
 async function createEffect(user: ReturnType<typeof userEvent.setup>, name: string) {
-  vi.spyOn(window, "prompt").mockReturnValueOnce(name);
+  willAnswer(name);
   await user.click(screen.getByRole("button", { name: /\+ Nuevo effect/i }));
 }
 
@@ -99,7 +93,7 @@ describe("EffectsView — edición de parámetros", () => {
     await user.click(screen.getByRole("button", { name: /▶ Reproducir/i }));
     expect(readDebug().runningEffectIds).toHaveLength(1);
 
-    vi.spyOn(window, "confirm").mockReturnValue(true);
+    willAnswer(true);
     await user.click(screen.getByTitle("Borrar effect"));
 
     expect(readDebug().effects).toHaveLength(0);
@@ -129,19 +123,18 @@ describe("EffectsView — reproducción real (timers controlados)", () => {
     localStorage.clear();
     render(
       <FixtureStoreProvider>
-        <EffectsEngineMount />
-        <GroupsView />
+          <GroupsView />
         <EffectsView />
         <Debug />
       </FixtureStoreProvider>,
     );
 
-    vi.spyOn(window, "prompt").mockReturnValueOnce("Grupo Test");
+    willAnswer("Grupo Test");
     fireEvent.click(screen.getByRole("button", { name: /\+ Nuevo grupo/i }));
     fireEvent.click(screen.getAllByRole("checkbox")[0]);
     const groupId = readDebug().groups[0].id as string;
 
-    vi.spyOn(window, "prompt").mockReturnValueOnce("Effect Test");
+    willAnswer("Effect Test");
     fireEvent.click(screen.getByRole("button", { name: /\+ Nuevo effect/i }));
 
     const groupSelect = screen.getAllByRole("combobox")[0];

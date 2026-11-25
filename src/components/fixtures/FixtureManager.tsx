@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
+import { askText } from "@/lib/dialogs";
 import { useFixtureStore } from "@/lib/fixtureStore";
 import type { FixtureDefinition, FixtureInstance } from "@/types/fixture";
 import { nextFreeAddress } from "@/lib/dmxFrame";
@@ -49,10 +50,16 @@ export function FixtureManager({ onOpenControl }: FixtureManagerProps) {
 
   /** Un equipo del que solo se sabe cuántos canales usa. */
   function addUnknown() {
-    const model = window.prompt("Nombre del equipo:", "Barra LED")?.trim();
-    if (!model) return;
-    const count = Number(window.prompt("¿Cuántos canales usa? (en su menú: 16CH, 26CH…)", "16"));
-    if (!Number.isInteger(count) || count < 1 || count > 512) return;
+    askText("Nombre del equipo", "Barra LED", (model) => {
+      if (!model) return;
+      askText("¿Cuántos canales usa? (en su menú: 16CH, 26CH…)", "16", (text) => {
+        const count = Number(text);
+        if (Number.isInteger(count) && count >= 1 && count <= 512) createUnknown(model, count);
+      });
+    });
+  }
+
+  function createUnknown(model: string, count: number) {
     const definitionId = `def-${crypto.randomUUID()}`;
     const instanceId = `inst-${crypto.randomUUID()}`;
     addDefinition({

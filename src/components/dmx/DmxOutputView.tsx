@@ -3,7 +3,7 @@ import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
 import { StatusIndicator } from "@/components/ui/StatusIndicator";
 import { describePatch } from "@/lib/dmxFrame";
-import { DEFAULT_FPS, type DmxAdapter, type DmxOutput } from "@/lib/dmxOutput";
+import { DEFAULT_FPS, useOutputFrame, type DmxAdapter, type DmxOutput } from "@/lib/dmxOutput";
 import { useFixtureStore } from "@/lib/fixtureStore";
 
 const ADAPTERS: { id: DmxAdapter; label: string }[] = [
@@ -36,7 +36,7 @@ export function DmxOutputView({ dmx }: { dmx: DmxOutput }) {
         </Panel>
       </div>
       <div className="min-w-0 flex-1">
-        <OutputMonitor frame={dmx.frame} />
+        <OutputMonitor />
       </div>
     </div>
   );
@@ -59,7 +59,12 @@ function Connection({ dmx }: { dmx: DmxOutput }) {
   return (
     <div className="flex flex-col gap-3 text-xs text-text-secondary">
       {state === "running" ? (
-        <StatusIndicator status="ok" label={output} detail={`${dmx.status.fps} FPS`} />
+        <>
+          <StatusIndicator status="ok" label={output} detail={`${dmx.status.fps} FPS`} />
+          <span title="Desde que se conectó. A 30 FPS lo normal son unos 35 ms; más de 100 es un corte.">
+            Pausa más larga: {dmx.status.worstGapMs} ms
+          </span>
+        </>
       ) : state === "reconnecting" ? (
         <StatusIndicator status="warn" label={output} detail="reconectando…" />
       ) : (
@@ -151,7 +156,8 @@ function Connection({ dmx }: { dmx: DmxOutput }) {
   );
 }
 
-function OutputMonitor({ frame }: { frame: number[] }) {
+function OutputMonitor() {
+  const frame = useOutputFrame(1);
   const { instances, definitions, identifyId, identify } = useFixtureStore();
 
   return (

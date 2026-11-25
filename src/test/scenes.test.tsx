@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { FixtureStoreProvider, useFixtureStore } from "@/lib/fixtureStore";
 import { FixtureControl } from "@/components/fixtures/FixtureControl";
 import { ScenesPanel } from "@/components/scenes/ScenesPanel";
+import { willAnswer } from "./dialogs";
 
 function Debug() {
   const { scenes, liveValues, selectedInstance } = useFixtureStore();
@@ -38,7 +39,7 @@ describe("Scenes — flujo real de usuario (guardar → cambiar → recuperar)",
   });
 
   it("guardar una escena captura el valor actual del canal en liveValues", async () => {
-    vi.spyOn(window, "prompt").mockReturnValue("Escena A");
+    willAnswer("Escena A");
     const user = userEvent.setup();
     setup();
 
@@ -58,7 +59,7 @@ describe("Scenes — flujo real de usuario (guardar → cambiar → recuperar)",
     "recuperar una escena restaura el valor del canal, aunque se haya " +
       "movido el fader después de guardar (merge, no pisa lo no capturado)",
     async () => {
-      vi.spyOn(window, "prompt").mockReturnValue("Escena A");
+      willAnswer("Escena A");
       const user = userEvent.setup();
       setup();
 
@@ -77,7 +78,7 @@ describe("Scenes — flujo real de usuario (guardar → cambiar → recuperar)",
   );
 
   it("re-grabar (⟳) actualiza la escena existente con el valor actual", async () => {
-    vi.spyOn(window, "prompt").mockReturnValue("Escena A");
+    willAnswer("Escena A");
     const user = userEvent.setup();
     setup();
 
@@ -94,8 +95,8 @@ describe("Scenes — flujo real de usuario (guardar → cambiar → recuperar)",
   });
 
   it("borrar una escena la quita de la lista y no puede recuperarse más", async () => {
-    vi.spyOn(window, "prompt").mockReturnValue("Escena A");
-    vi.spyOn(window, "confirm").mockReturnValue(true);
+    willAnswer("Escena A");
+    willAnswer(true);
     const user = userEvent.setup();
     setup();
 

@@ -61,7 +61,9 @@ function applyCurve(channel: FixtureChannel, value: number): number {
 }
 
 /** Lo que vale un canal una vez aplicados intensidad, estrobo, identificar y
- *  Blackout y la curva. Antes de invertir: es lo que ve el simulador. */
+ *  Blackout y la curva. Antes de invertir: es lo que ve el simulador. Lo que
+ *  sale por el cable lo arma el motor (show-engine/src/frame.rs) con las
+ *  mismas reglas; dmxFrame.test.ts comprueba que coincidan. */
 export function effectiveValue(
   instance: FixtureInstance,
   definition: FixtureDefinition,
@@ -78,35 +80,6 @@ export function effectiveValue(
   }
   if (input.blackoutActive && goesDarkOnBlackout(channel, definition)) return 0;
   return applyCurve(channel, value);
-}
-
-function isInverted(instance: FixtureInstance, channel: FixtureChannel): boolean {
-  const byMount =
-    (instance.panInvert === true && (channel.type === "PAN" || channel.type === "PAN_FINE")) ||
-    (instance.tiltInvert === true && (channel.type === "TILT" || channel.type === "TILT_FINE"));
-  return channel.invert !== byMount;
-}
-
-/** Los 512 canales tal como salen por el cable (índice 0 = canal DMX 1). */
-export function buildFrame(input: FrameInput): number[] {
-  const frame = new Array<number>(DMX_CHANNELS).fill(0);
-
-  for (const instance of input.instances) {
-    if (instance.universe !== OUTPUT_UNIVERSE) continue;
-    const definition = input.definitions.find((d) => d.id === instance.definitionId);
-    if (!definition) continue;
-
-    for (const channel of definition.channels) {
-      const address = instance.address + channel.index - 1;
-      if (address < 1 || address > DMX_CHANNELS) continue;
-
-      const value = effectiveValue(instance, definition, channel, input);
-      const output = isInverted(instance, channel) ? channel.dmxMin + channel.dmxMax - value : value;
-      frame[address - 1] = Math.max(0, Math.min(255, Math.round(output)));
-    }
-  }
-
-  return frame;
 }
 
 export interface PatchRow {

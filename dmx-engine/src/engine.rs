@@ -34,6 +34,9 @@ pub struct EngineStatus {
     pub last_error: Option<String>,
     /// Frames por segundo reales del último segundo, no los configurados.
     pub fps: u32,
+    /// La pausa más larga entre dos frames desde que se conectó: lo que dice
+    /// si la señal se cortó alguna vez.
+    pub worst_gap: Duration,
 }
 
 pub struct DmxEngine {
@@ -104,6 +107,7 @@ impl DmxEngine {
             let mut last_attempt = Instant::now();
             let mut window_start = Instant::now();
             let mut window_frames = 0u32;
+            let mut last_frame = Instant::now();
 
             while running.load(Ordering::SeqCst) {
                 let tick_start = Instant::now();
@@ -113,6 +117,9 @@ impl DmxEngine {
                         Ok(()) => {
                             consecutive_errors = 0;
                             window_frames += 1;
+                            let gap = last_frame.elapsed();
+                            last_frame = Instant::now();
+                            set_status(&|s| s.worst_gap = s.worst_gap.max(gap));
                         }
                         Err(err) => {
                             consecutive_errors += 1;
@@ -293,5 +300,6 @@ mod tests {
         let status = engine.status();
         assert_eq!(status.state, EngineState::Running);
         assert_eq!(status.last_error, None);
+        assert!(status.worst_gap >= Duration::from_secs(1), "el corte queda registrado: {:?}", status.worst_gap);
     }
 }

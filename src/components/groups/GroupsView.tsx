@@ -5,6 +5,7 @@ import { Fader } from "@/components/ui/Fader";
 import { ColorSwatches } from "@/components/fixtures/ColorSwatches";
 import { PanTiltPad } from "@/components/fixtures/PanTiltPad";
 import { cn } from "@/lib/utils";
+import { askConfirm, askText } from "@/lib/dialogs";
 import { useFixtureStore } from "@/lib/fixtureStore";
 import { CHANNEL_TYPE_LABELS, type ChannelType } from "@/types/fixture";
 
@@ -41,10 +42,9 @@ export function GroupsView() {
   const selectedGroup = groups.find((g) => g.id === selectedGroupId) ?? null;
 
   function handleCreate() {
-    const name = window.prompt("Nombre del grupo (p. ej. \"Cabezas móviles\"):", `Grupo ${groups.length + 1}`);
-    if (name === null) return;
-    const created = addGroup(name);
-    setSelectedGroupId(created.id);
+    askText('Nombre del grupo (p. ej. "Cabezas móviles")', `Grupo ${groups.length + 1}`, (name) =>
+      setSelectedGroupId(addGroup(name).id),
+    );
   }
 
   function startRename(groupId: string, currentName: string) {
@@ -58,9 +58,9 @@ export function GroupsView() {
   }
 
   function handleDelete(groupId: string, name: string) {
-    if (window.confirm(`¿Borrar el grupo "${name}"? Los fixtures quedan sin grupo (no se borran).`)) {
-      removeGroup(groupId);
-    }
+    askConfirm(`¿Borrar el grupo "${name}"? Los fixtures quedan sin grupo (no se borran).`, "Borrar", () =>
+      removeGroup(groupId),
+    );
   }
 
   return (

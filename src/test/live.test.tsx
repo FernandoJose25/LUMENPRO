@@ -8,6 +8,7 @@ import { GroupsView } from "@/components/groups/GroupsView";
 import { EffectsView } from "@/components/effects/EffectsView";
 import { ChasesView } from "@/components/chases/ChasesView";
 import { LiveView } from "@/components/live/LiveView";
+import { willAnswer } from "./dialogs";
 
 function Debug() {
   const { scenes, groups, instances, chases, effects, liveValues, runningEffectIds, blackoutActive } =
@@ -42,12 +43,12 @@ function firstFaderNumberInput() {
 
 async function saveSceneWithValue(user: ReturnType<typeof userEvent.setup>, value: number, name: string) {
   fireEvent.change(firstFaderNumberInput(), { target: { value: String(value) } });
-  vi.spyOn(window, "prompt").mockReturnValueOnce(name);
+  willAnswer(name);
   await user.click(screen.getByRole("button", { name: /\+ Guardar escena/i }));
 }
 
 async function createGroupWithFirstFixture(user: ReturnType<typeof userEvent.setup>, name: string) {
-  vi.spyOn(window, "prompt").mockReturnValueOnce(name);
+  willAnswer(name);
   await user.click(screen.getByRole("button", { name: /\+ Nuevo grupo/i }));
   const checkboxes = screen.getAllByRole("checkbox");
   await user.click(checkboxes[0]);
@@ -55,13 +56,13 @@ async function createGroupWithFirstFixture(user: ReturnType<typeof userEvent.set
 }
 
 async function createGroupWithoutMembers(user: ReturnType<typeof userEvent.setup>, name: string) {
-  vi.spyOn(window, "prompt").mockReturnValueOnce(name);
+  willAnswer(name);
   await user.click(screen.getByRole("button", { name: /\+ Nuevo grupo/i }));
   return readDebug().groups[readDebug().groups.length - 1].id as string;
 }
 
 async function createEffect(user: ReturnType<typeof userEvent.setup>, name: string) {
-  vi.spyOn(window, "prompt").mockReturnValueOnce(name);
+  willAnswer(name);
   await user.click(screen.getByRole("button", { name: /\+ Nuevo effect/i }));
 }
 
@@ -243,7 +244,7 @@ describe("LiveView — reproducción de chases", () => {
     );
 
     await saveSceneWithValue(user, 200, "Escena A");
-    vi.spyOn(window, "prompt").mockReturnValueOnce("Chase Test");
+    willAnswer("Chase Test");
     await user.click(screen.getByRole("button", { name: /\+ Nuevo chase/i }));
     await user.selectOptions(screen.getByRole("combobox"), "Escena A");
     await user.click(screen.getByRole("button", { name: /\+ Agregar step/i }));

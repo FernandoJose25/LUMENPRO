@@ -1,0 +1,18 @@
+[package]
+name = "lumenpro_show"
+version = "0.1.0"
+edition = "2021"
+description = "Motor del show de LUMEN PRO: momentos, chases, effects y los canales DMX que salen de ellos. Sin hilos ni reloj propios: corre en el proceso del motor (escritorio) y en WASM (navegador y tests de la interfaz)."
+
+[lib]
+crate-type = ["rlib", "cdylib"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+opt-level = "s"
+lto = true
+strip = true
+panic = "abort"

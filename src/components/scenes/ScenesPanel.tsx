@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
+import { askConfirm, askText } from "@/lib/dialogs";
 import { useFixtureStore } from "@/lib/fixtureStore";
 
 /**
@@ -22,9 +23,7 @@ export function ScenesPanel() {
   const touchedInstanceCount = Object.values(liveValues).filter((ch) => Object.keys(ch).length > 0).length;
 
   function handleSaveNew() {
-    const name = window.prompt("Nombre de la nueva escena:", `Escena ${scenes.length + 1}`);
-    if (name === null) return; // cancelado
-    saveScene(name);
+    askText("Nombre de la nueva escena", `Escena ${scenes.length + 1}`, saveScene);
   }
 
   function startRename(sceneId: string, currentName: string) {
@@ -38,9 +37,7 @@ export function ScenesPanel() {
   }
 
   function handleDelete(sceneId: string, name: string) {
-    if (window.confirm(`¿Borrar la escena "${name}"? Esto no se puede deshacer.`)) {
-      removeScene(sceneId);
-    }
+    askConfirm(`¿Borrar la escena "${name}"?`, "Borrar", () => removeScene(sceneId));
   }
 
   return (

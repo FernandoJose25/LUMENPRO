@@ -3,6 +3,7 @@ import { render, screen, within, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { FixtureStoreProvider, useFixtureStore } from "@/lib/fixtureStore";
 import { GroupsView } from "@/components/groups/GroupsView";
+import { willAnswer } from "./dialogs";
 
 /** Componente de solo lectura para poder inspeccionar el estado interno
  *  del store desde el test, sin exportar internals que no deberían ser
@@ -40,7 +41,7 @@ describe("GroupsView — flujo real de usuario", () => {
   });
 
   it("crea un grupo nuevo con el prompt de nombre", async () => {
-    vi.spyOn(window, "prompt").mockReturnValue("Cabezas móviles");
+    willAnswer("Cabezas móviles");
     const user = userEvent.setup();
     setup();
 
@@ -51,7 +52,7 @@ describe("GroupsView — flujo real de usuario", () => {
   });
 
   it("no crea un grupo si se cancela el prompt (regresa null)", async () => {
-    vi.spyOn(window, "prompt").mockReturnValue(null);
+    willAnswer(null);
     const user = userEvent.setup();
     setup();
 
@@ -61,7 +62,7 @@ describe("GroupsView — flujo real de usuario", () => {
   });
 
   it("asignar un fixture por checkbox actualiza su group.id, y desmarcar lo desagrupa", async () => {
-    vi.spyOn(window, "prompt").mockReturnValue("Grupo Test");
+    willAnswer("Grupo Test");
     const user = userEvent.setup();
     setup();
 
@@ -86,7 +87,7 @@ describe("GroupsView — flujo real de usuario", () => {
     "mover el fader numérico de Group Control escribe el valor en liveValues " +
       "del fixture miembro, para el tipo de canal correspondiente",
     async () => {
-      vi.spyOn(window, "prompt").mockReturnValue("Grupo Test");
+      willAnswer("Grupo Test");
       const user = userEvent.setup();
       setup();
 
@@ -113,8 +114,8 @@ describe("GroupsView — flujo real de usuario", () => {
   );
 
   it("borrar un grupo desagrupa a sus fixtures en vez de borrarlos", async () => {
-    vi.spyOn(window, "prompt").mockReturnValue("Grupo Test");
-    vi.spyOn(window, "confirm").mockReturnValue(true);
+    willAnswer("Grupo Test");
+    willAnswer(true);
     const user = userEvent.setup();
     setup();
 

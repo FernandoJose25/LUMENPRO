@@ -1,11 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import App from "@/App";
-import { buildFrame, nextFreeAddress } from "@/lib/dmxFrame";
+import { nextFreeAddress } from "@/lib/dmxFrame";
 import { FixtureStoreProvider, useFixtureStore } from "@/lib/fixtureStore";
 import { seedDefinitions, seedInstances } from "@/data/fixtureLibrary";
 import { STORAGE_KEY } from "@/lib/showFile";
 import { ColorSwatches } from "@/components/fixtures/ColorSwatches";
+import { willAnswer } from "./dialogs";
+import { buildFrame } from "./frame";
 
 type Store = ReturnType<typeof useFixtureStore>;
 let store: Store;
@@ -90,6 +92,7 @@ describe("Identificar una luz", () => {
     go("DMX Output");
     const before = [monitor(6), monitor(33), monitor(34)];
     go("Identificar LPC007 PAR #1");
+    advance(120);
     expect([monitor(33), monitor(34), monitor(35), monitor(36)]).toEqual(["255", "255", "255", "255"]);
     expect(monitor(41)).toBe("000"); // el PAR #2 no
     advance(3100);
@@ -157,7 +160,7 @@ describe("Equipo sin manual", () => {
   function addBar(channels = "10") {
     render(<App />);
     go("Fixtures");
-    vi.spyOn(window, "prompt").mockReturnValueOnce("Barra LED").mockReturnValueOnce(channels);
+    willAnswer("Barra LED", channels);
     go("+ Equipo sin manual");
   }
 
@@ -220,7 +223,7 @@ describe("Equipo sin manual", () => {
     fireEvent.change(screen.getAllByRole("spinbutton")[2], { target: { value: "200" } });
     go("Usar como valor inicial del canal 3");
     expect(screen.getByRole("button", { name: "Usar como valor inicial del canal 3" })).toHaveTextContent("Inicial: 200");
-    vi.spyOn(window, "prompt").mockReturnValueOnce("Abierto barra");
+    willAnswer("Abierto barra");
     go("Guardar preset del canal 3");
     expect(screen.getByText("Abierto barra")).toBeInTheDocument();
     go("Listo");
@@ -232,7 +235,7 @@ describe("Equipo sin manual", () => {
   it("un preset se puede borrar y, en la rueda de color, darle color", () => {
     addBar();
     fireEvent.change(screen.getByLabelText("Función del canal 1"), { target: { value: "COLOR_WHEEL" } });
-    vi.spyOn(window, "prompt").mockReturnValueOnce("Azul");
+    willAnswer("Azul");
     go("Guardar preset del canal 1");
     fireEvent.change(screen.getByLabelText("Color de Azul"), { target: { value: "#0000ff" } });
     expect(screen.getByLabelText("Color de Azul")).toHaveValue("#0000ff");

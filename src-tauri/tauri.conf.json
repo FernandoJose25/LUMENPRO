@@ -12,12 +12,13 @@
   "app": {
     "windows": [
       {
+        "create": false,
         "title": "LUMEN PRO",
         "width": 1440,
         "height": 900,
         "minWidth": 1024,
         "minHeight": 700,
-        "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,CalculateNativeWinOcclusion --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-renderer-backgrounding"
+        "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,CalculateNativeWinOcclusion --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-renderer-backgrounding --autoplay-policy=no-user-gesture-required"
       }
     ],
     "security": {

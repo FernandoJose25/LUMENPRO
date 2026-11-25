@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
+import { askConfirm } from "@/lib/dialogs";
 import { useFixtureStore } from "@/lib/fixtureStore";
 import { exportShowFile } from "@/lib/showFile";
 
@@ -18,10 +19,12 @@ export function SettingsView() {
     }
   };
 
-  const handleImport = async (file: File) => {
-    if (!window.confirm(`¿Reemplazar el show actual por "${file.name}"? Exporta antes si quieres conservarlo.`)) {
-      return;
-    }
+  const handleImport = (file: File) =>
+    askConfirm(`¿Reemplazar el show actual por "${file.name}"? Exporta antes si quieres conservarlo.`, "Reemplazar", () =>
+      void importFile(file),
+    );
+
+  const importFile = async (file: File) => {
     try {
       importShow(await file.text());
       setMessage({ text: `Show importado: ${file.name}`, isError: false });
@@ -52,7 +55,7 @@ export function SettingsView() {
               const file = e.target.files?.[0];
               // Permite volver a elegir el mismo archivo.
               e.target.value = "";
-              if (file) void handleImport(file);
+              if (file) handleImport(file);
             }}
           />
         </div>

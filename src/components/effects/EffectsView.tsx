@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
+import { askConfirm, askText } from "@/lib/dialogs";
 import { useFixtureStore } from "@/lib/fixtureStore";
 import { EFFECT_SOURCE_LABELS, WAVEFORM_LABELS, type EffectSource, type WaveformType } from "@/types/effect";
 import { CHANNEL_TYPE_LABELS, type ChannelType } from "@/types/fixture";
@@ -12,9 +13,9 @@ const CHANNEL_TYPES = Object.keys(CHANNEL_TYPE_LABELS) as ChannelType[];
 
 /**
  * Fase 4 — Effects: generadores paramétricos (ver types/effect.ts), a
- * diferencia de Chases que reproducen escenas fijas. El motor real vive
- * en lib/effectEngine.ts, montado una sola vez en App.tsx — esta vista
- * solo edita la configuración y hace start/stop.
+ * diferencia de Chases que reproducen escenas fijas. Los mueve
+ * el motor (show-engine/) — esta vista solo edita la configuración y hace
+ * start/stop.
  */
 export function EffectsView() {
   const { effects, groups, addEffect, renameEffect, removeEffect } = useFixtureStore();
@@ -23,10 +24,7 @@ export function EffectsView() {
   const [draftName, setDraftName] = useState("");
 
   function handleCreate() {
-    const name = window.prompt("Nombre del effect:", `Effect ${effects.length + 1}`);
-    if (name === null) return;
-    const created = addEffect(name);
-    setSelectedEffectId(created.id);
+    askText("Nombre del effect", `Effect ${effects.length + 1}`, (name) => setSelectedEffectId(addEffect(name).id));
   }
 
   function startRename(id: string, currentName: string) {
@@ -40,10 +38,10 @@ export function EffectsView() {
   }
 
   function handleDelete(id: string, name: string) {
-    if (window.confirm(`¿Borrar el effect "${name}"?`)) {
+    askConfirm(`¿Borrar el effect "${name}"?`, "Borrar", () => {
       removeEffect(id);
       if (selectedEffectId === id) setSelectedEffectId(null);
-    }
+    });
   }
 
   return (

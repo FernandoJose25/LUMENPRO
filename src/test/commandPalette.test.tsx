@@ -7,6 +7,7 @@ import { FixtureControl } from "@/components/fixtures/FixtureControl";
 import { ScenesPanel } from "@/components/scenes/ScenesPanel";
 import { CommandPalette } from "@/components/command-palette/CommandPalette";
 import { SECTIONS } from "@/components/layout/Sidebar";
+import { willAnswer } from "./dialogs";
 
 function Debug() {
   const { scenes, liveValues, blackoutActive } = useFixtureStore();
@@ -101,7 +102,7 @@ describe("CommandPalette", () => {
     );
 
     fireEvent.change(firstFaderNumberInput(), { target: { value: "200" } });
-    vi.spyOn(window, "prompt").mockReturnValueOnce("Escena A");
+    willAnswer("Escena A");
     await user.click(screen.getByRole("button", { name: /\+ Guardar escena/i }));
     fireEvent.change(firstFaderNumberInput(), { target: { value: "0" } });
 

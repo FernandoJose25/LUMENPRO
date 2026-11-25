@@ -5,6 +5,7 @@ import { FixtureStoreProvider, useFixtureStore } from "@/lib/fixtureStore";
 import { FixtureControl } from "@/components/fixtures/FixtureControl";
 import { ScenesPanel } from "@/components/scenes/ScenesPanel";
 import { ChasesView } from "@/components/chases/ChasesView";
+import { willAnswer } from "./dialogs";
 
 function Debug() {
   const { chases, scenes, liveValues, selectedInstance } = useFixtureStore();
@@ -41,12 +42,12 @@ function firstFaderNumberInput() {
 
 async function saveSceneWithValue(user: ReturnType<typeof userEvent.setup>, value: number, name: string) {
   fireEvent.change(firstFaderNumberInput(), { target: { value: String(value) } });
-  vi.spyOn(window, "prompt").mockReturnValueOnce(name);
+  willAnswer(name);
   await user.click(screen.getByRole("button", { name: /\+ Guardar escena/i }));
 }
 
 async function createChase(user: ReturnType<typeof userEvent.setup>, name: string) {
-  vi.spyOn(window, "prompt").mockReturnValueOnce(name);
+  willAnswer(name);
   await user.click(screen.getByRole("button", { name: /\+ Nuevo chase/i }));
 }
 
@@ -130,7 +131,9 @@ describe("ChasesView — reproducción real (timers controlados)", () => {
   });
 
   it("reproducir interpola liveValues desde el valor actual hacia el de cada step, y detener congela el valor", async () => {
-    const user = userEvent.setup();
+    // Antes de montar: el motor registra su intervalo al montarse.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     setup();
 
     // Escena A = 200, Escena B = 250, ambas sobre el mismo canal del
@@ -150,7 +153,6 @@ describe("ChasesView — reproducción real (timers controlados)", () => {
     const channelId = Object.keys(stateBefore.scenes[0].values[instanceId])[0];
     const readChannel = () => readDebug().liveValues[instanceId][channelId];
 
-    vi.useFakeTimers();
     fireEvent.click(screen.getByRole("button", { name: /▶ Reproducir/i }));
 
     // A mitad del fade del step 1 (fade=1000ms) el valor debe estar

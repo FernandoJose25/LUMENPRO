@@ -16,10 +16,9 @@ import { RemoteView } from "@/components/remote/RemoteView";
 import { StageView } from "@/components/stage/StageView";
 import { SettingsView } from "@/components/views/SettingsView";
 import { CommandPalette } from "@/components/command-palette/CommandPalette";
+import { DialogHost } from "@/components/ui/DialogHost";
 import { useAudioInput } from "@/lib/audioInput";
-import { useEffectsEngine } from "@/lib/effectEngine";
 import { useDmxOutput } from "@/lib/dmxOutput";
-import { useMomentsEngine } from "@/lib/momentsEngine";
 import { useRemoteControl } from "@/lib/remoteControl";
 import { useStagePublisher } from "@/lib/stageMirror";
 import { PlaceholderView } from "@/components/views/PlaceholderView";
@@ -30,43 +29,22 @@ const PENDING_PHASE: Record<string, string> = {
   Universes: "el motor DMX (fuera del alcance frontend de las Fases 1-6)",
 };
 
-/** Monta useEffectsEngine dentro del árbol de FixtureStoreProvider — no
- *  puede llamarse en App() directamente porque el contexto todavía no
- *  existe en ese punto (App es quien renderiza el Provider, no un hijo
- *  suyo). Así el motor corre siempre, sin importar qué sección del
- *  Sidebar esté abierta — ver comentario en lib/effectEngine.ts. */
-function EffectsEngineMount() {
-  useEffectsEngine();
-  return null;
-}
-
-/** Ídem para los Momentos. Los dos van en componentes propios para que cada
- *  uno se re-renderice solo con lo suyo. */
-function MomentsEngineMount() {
-  useMomentsEngine();
-  return null;
-}
-
 export default function App() {
   return (
     <FixtureStoreProvider>
-      <EffectsEngineMount />
-      <MomentsEngineMount />
       <AppShell />
     </FixtureStoreProvider>
   );
 }
 
-/** Todo lo que necesita leer del fixtureStore (Blackout real de la Topbar,
- *  Command Palette) vive aquí en vez de en App() — mismo motivo que
- *  EffectsEngineMount: App() es quien renderiza <FixtureStoreProvider>,
- *  así que su propio cuerpo todavía no puede leer ese contexto. */
+/** Todo lo que necesita leer del fixtureStore va aquí y no en App(), que es
+ *  quien renderiza el Provider: en su cuerpo el contexto todavía no existe. */
 function AppShell() {
   const [section, setSection] = useState("Dashboard");
-  const { blackoutActive, blackout, releaseBlackout, saveShow } = useFixtureStore();
+  const { engine, blackoutActive, blackout, releaseBlackout, saveShow } = useFixtureStore();
   const dmx = useDmxOutput();
-  const audio = useAudioInput();
-  const remote = useRemoteControl(dmx.status.state);
+  const audio = useAudioInput(engine.wasListening);
+  const remote = useRemoteControl();
   useStagePublisher();
 
   return (
@@ -103,6 +81,7 @@ function AppShell() {
       </div>
 
       <CommandPalette sections={SECTIONS} activeSection={section} onSelectSection={setSection} />
+      <DialogHost />
     </div>
   );
 }

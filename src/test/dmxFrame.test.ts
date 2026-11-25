@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { buildFrame, describePatch } from "@/lib/dmxFrame";
+import { describePatch, effectiveValue, type FrameInput } from "@/lib/dmxFrame";
+import { buildFrame } from "./frame";
 import { seedDefinitions, seedInstances } from "@/data/fixtureLibrary";
 import type { ChannelType, FixtureDefinition, FixtureInstance } from "@/types/fixture";
 
@@ -196,6 +197,46 @@ describe("Intensidad y estrobo generales", () => {
   it("el Blackout le gana a la intensidad y al estrobo", () => {
     const frame = buildFrame({ ...base, strobeActive: true, blackoutActive: true });
     expect([frame[5], frame[32], frame[33]]).toEqual([0, 0, 0]);
+  });
+});
+
+describe("El simulador ve lo mismo que sale por el cable", () => {
+  const random = (seed: number) => () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+
+  it.each([1, 2, 3, 4, 5, 6])("rig, valores y botones al azar (%i)", (seed) => {
+    const rand = random(seed * 7919);
+    const pick = <T,>(items: T[]) => items[Math.floor(rand() * items.length)];
+    const definitions = seedDefinitions.map((d) => ({
+      ...d,
+      channels: d.channels.map((c) => ({ ...c, curve: pick(["linear", "log", "s-curve"] as const) })),
+    }));
+    const input: FrameInput = {
+      instances: seedInstances,
+      definitions,
+      liveValues: Object.fromEntries(
+        seedInstances.map((i) => [
+          i.id,
+          Object.fromEntries(
+            definitions
+              .find((d) => d.id === i.definitionId)!
+              .channels.filter(() => rand() < 0.8)
+              .map((c) => [c.id, Math.floor(rand() * 256)]),
+          ),
+        ]),
+      ),
+      blackoutActive: rand() < 0.3,
+      master: Math.floor(rand() * 101),
+      strobeActive: rand() < 0.5,
+      identifyId: rand() < 0.5 ? pick(seedInstances).id : null,
+    };
+    const frame = buildFrame(input);
+    for (const instance of seedInstances) {
+      const definition = definitions.find((d) => d.id === instance.definitionId)!;
+      for (const channel of definition.channels) {
+        const expected = Math.round(effectiveValue(instance, definition, channel, input));
+        expect(frame[instance.address + channel.index - 2], `${instance.label} ${channel.name}`).toBe(expected);
+      }
+    }
   });
 });
 

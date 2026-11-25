@@ -1,37 +1,23 @@
 // Evita la consola extra en Windows para builds release. NO QUITAR.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-//! Capa Tauri de LUMEN PRO. Envuelve `lumenpro_dmx` (crate `dmx-engine/`,
-//! ver AUDIT.md §8) en comandos invocables desde el frontend React, y guarda
-//! el show en disco.
-//!
-//! El frontend es la fuente de verdad de los valores: calcula los 512 canales
-//! (`src/lib/dmxFrame.ts`, incluido el Blackout) y los manda con `set_block`.
-//! Acá no hay un "blackout" propio a propósito: poner los 512 canales a 0
-//! también movería Pan/Tilt y las cabezas girarían de golpe.
+//! LUMEN PRO son dos programas en un mismo `.exe`: la ventana (Tauri, este
+//! archivo y `link.rs`) y el motor (`engine/`), que corre en otro proceso para
+//! que las luces no dependan de la ventana. La ventana además guarda el show
+//! en disco (`show.rs`).
 
-mod remote;
+mod engine;
+mod link;
 mod show;
 mod stage_window;
+mod webview_dir;
 
-use lumenpro_dmx::{
-    DmxEngine, DmxOutput, DmxOutputError, DmxUniverse, EngineState, EnttecUsbProOutput, MockOutput,
-    OpenDmxOutput, PortChip,
-};
+use engine::process;
+use lumenpro_dmx::PortChip;
 use serde::Serialize;
-use std::sync::Mutex;
+use std::path::{Path, PathBuf};
 use tauri::webview::{PermissionKind, PermissionResponse};
-use tauri::{AppHandle, Manager, State};
-
-/// Estado compartido de la app: un único universo DMX + el motor que lo
-/// saca por hardware. El universo vive separado del motor a propósito:
-/// `set_block` debe funcionar aunque el motor todavía no esté conectado a
-/// ningún output — el motor solo controla el hilo de salida, no es dueño de
-/// los datos (ver dmx-engine/src/universe.rs).
-struct DmxState {
-    universe: DmxUniverse,
-    engine: Mutex<DmxEngine>,
-}
+use tauri::{AppHandle, Manager, WebviewWindowBuilder};
 
 #[derive(Serialize)]
 struct SerialPort {
@@ -39,51 +25,6 @@ struct SerialPort {
     chip: &'static str,
     description: String,
 }
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct EngineStatus {
-    state: &'static str,
-    output: String,
-    last_error: Option<String>,
-    fps: u32,
-}
-
-fn poisoned() -> String {
-    "el lock del motor DMX está envenenado (un hilo entró en pánico mientras lo tenía tomado)"
-        .to_string()
-}
-
-/// Los comandos que abren o cierran puertos son `async`: corren fuera del
-/// hilo de la ventana, así un driver USB lento no congela la interfaz.
-fn start_engine<F>(app: &AppHandle, state: &DmxState, fps: u32, open: F) -> Result<(), String>
-where
-    F: Fn() -> Result<Box<dyn DmxOutput>, DmxOutputError> + Send + 'static,
-{
-    let mut engine = state.engine.lock().map_err(|_| poisoned())?;
-    let started = engine.start(open, fps).map_err(|e| e.to_string());
-    keep_awake(app, started.is_ok());
-    started
-}
-
-/// Mientras sale DMX, Windows no suspende ni apaga la pantalla: con el show
-/// manejado desde el celular nadie toca la laptop y se dormiría a mitad del
-/// evento. (Cerrar la tapa la suspende igual.)
-#[cfg(windows)]
-fn keep_awake(app: &AppHandle, on: bool) {
-    use windows_sys::Win32::System::Power::{
-        SetThreadExecutionState, ES_CONTINUOUS, ES_DISPLAY_REQUIRED, ES_SYSTEM_REQUIRED,
-    };
-    let flags = if on { ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED } else { ES_CONTINUOUS };
-    // El pedido dura lo que viva el hilo que lo hace, por eso el principal.
-    let _ = app.run_on_main_thread(move || {
-        // SAFETY: función de Win32 sin punteros ni condiciones previas.
-        unsafe { SetThreadExecutionState(flags) };
-    });
-}
-
-#[cfg(not(windows))]
-fn keep_awake(_: &AppHandle, _: bool) {}
 
 /// Lista los puertos serie disponibles, para que la UI muestre un selector
 /// y avise si el adaptador trae un chip que no es FTDI.
@@ -104,68 +45,34 @@ fn list_serial_ports() -> Result<Vec<SerialPort>, String> {
         .collect())
 }
 
-/// Conecta el motor a un output Mock (sin hardware), para ensayar un show
-/// sin tener el adaptador a mano.
-#[tauri::command(async)]
-fn connect_mock(app: AppHandle, state: State<'_, DmxState>, fps: u32) -> Result<(), String> {
-    start_engine(&app, &state, fps, || Ok(Box::new(MockOutput::new())))
-}
-
-/// Cable FTDI barato (Open DMX): el timing lo genera la PC.
-#[tauri::command(async)]
-fn connect_open_dmx(app: AppHandle, state: State<'_, DmxState>, port: String, fps: u32) -> Result<(), String> {
-    start_engine(&app, &state, fps, move || Ok(Box::new(OpenDmxOutput::open(&port)?)))
-}
-
-/// Enttec DMX USB PRO (o compatible): el timing lo genera el adaptador.
-#[tauri::command(async)]
-fn connect_enttec(app: AppHandle, state: State<'_, DmxState>, port: String, fps: u32) -> Result<(), String> {
-    start_engine(&app, &state, fps, move || Ok(Box::new(EnttecUsbProOutput::open(&port)?)))
-}
-
-/// Detiene el hilo de salida (no borra el universo).
-#[tauri::command(async)]
-fn disconnect(app: AppHandle, state: State<'_, DmxState>) -> Result<(), String> {
-    let mut engine = state.engine.lock().map_err(|_| poisoned())?;
-    engine.stop();
-    keep_awake(&app, false);
+/// Se crea a mano (`"create": false` en tauri.conf.json) para no mostrar nada
+/// si ya hay otra copia abierta.
+fn open_main_window(app: &AppHandle) -> tauri::Result<()> {
+    let config = app.config().app.windows.first().expect("la ventana principal está en tauri.conf.json");
+    let dir = webview_dir::pick(&app.path().app_local_data_dir()?);
+    WebviewWindowBuilder::from_config(app, config)?.data_directory(dir.clone()).build()?;
+    app.manage(WebviewDir(dir));
     Ok(())
 }
 
-#[tauri::command(async)]
-fn engine_status(state: State<'_, DmxState>) -> Result<EngineStatus, String> {
-    let status = state.engine.lock().map_err(|_| poisoned())?.status();
-    Ok(EngineStatus {
-        state: match status.state {
-            EngineState::Stopped => "stopped",
-            EngineState::Running => "running",
-            EngineState::Reconnecting => "reconnecting",
-        },
-        output: status.output,
-        last_error: status.last_error,
-        fps: status.fps,
-    })
-}
+/// Donde está el navegador de la ventana: todas tienen que usar el mismo.
+pub struct WebviewDir(pub PathBuf);
 
-/// Escribe un bloque contiguo de canales. La UI manda el universo completo
-/// (start_channel = 1, 512 valores) en una sola llamada IPC.
-#[tauri::command]
-fn set_block(state: State<'_, DmxState>, start_channel: u16, values: Vec<u8>) {
-    state.universe.set_block(start_channel, &values);
-}
-
-fn main() {
-    let universe = DmxUniverse::new();
-    let engine = Mutex::new(DmxEngine::new(universe.clone()));
-
+fn window() {
     tauri::Builder::default()
-        .manage(DmxState { universe, engine })
         .setup(|app| {
-            let remote = remote::RemoteState::load(app.handle())?;
-            app.manage(remote);
+            let dir = link::data_dir(app.handle())?;
+            if link::yield_to_open_window(&dir) {
+                std::process::exit(0);
+            }
+            app.manage(link::Link::new(dir));
+            open_main_window(app.handle())?;
             Ok(())
         })
-        .on_window_event(stage_window::close_with_main)
+        .on_window_event(|window, event| {
+            link::on_close(window, event);
+            stage_window::close_with_main(window, event);
+        })
         // Solo se pide al pulsar "Escuchar" (src/lib/audioInput.ts). Con el
         // aviso de WebView2, un "Bloquear" por error queda guardado y no hay
         // dónde deshacerlo. El permiso de Windows sigue mandando.
@@ -175,22 +82,29 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             list_serial_ports,
-            connect_mock,
-            connect_open_dmx,
-            connect_enttec,
-            disconnect,
-            engine_status,
-            set_block,
+            link::engine_attach,
+            link::engine_call,
+            link::close_window,
+            link::focus_window,
             show::load_show,
             show::save_show,
             show::export_show,
+            show::load_settings,
+            show::save_settings,
             stage_window::open_stage_window,
-            remote::remote_attach,
-            remote::remote_status,
-            remote::remote_set_enabled,
-            remote::remote_new_pin,
-            remote::remote_publish,
         ])
         .run(tauri::generate_context!())
         .expect("error corriendo la app de Tauri");
+}
+
+fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    // El directorio es siempre el último argumento (ver engine/process.rs).
+    let dir = Path::new(args.last().expect("el primero es el propio programa"));
+    match args.get(1).map(String::as_str) {
+        Some(process::LAUNCH) => process::launch(dir),
+        Some(process::GUARD) => process::guard(dir),
+        Some(process::ENGINE) => process::engine(dir, &args),
+        _ => window(),
+    }
 }

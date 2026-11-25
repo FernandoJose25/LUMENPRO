@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { StatusIndicator } from "@/components/ui/StatusIndicator";
-import type { EngineStatus } from "@/lib/dmxOutput";
 import { useFixtureStore } from "@/lib/fixtureStore";
+import type { EngineStatus } from "@/types/engine";
 import { BlackoutButton } from "./BlackoutButton";
 
 interface TopbarProps {

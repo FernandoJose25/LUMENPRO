@@ -25,6 +25,16 @@
   **`cargo check` de `src-tauri` verificado en Windows con Rust 1.96**
   (2026-11-17), con los iconos generados desde `src-tauri/icons/logo.svg`.
   El CI lo repite en `windows-latest` en cada push.
+- **Motor independiente** (2026-11-25): momentos, chases, effects, fades y los
+  canales que salen están en Rust (`show-engine/`), sin hilos ni reloj propios.
+  En la app corren en otro proceso (`src-tauri/src/engine/`: motor, guardián que
+  lo levanta si se cae, celular y vigilancia de la ventana); en el navegador y
+  en los tests, el mismo código en WASM. La ventana (`lib/engineLink.ts`) es un
+  espejo: si se traba 15 s o se cae con luces encendidas, el motor abre otra.
+  Al cerrarla con luces pregunta si dejarlas. Si se cae el motor, retoma de
+  `session.json`. Probado con el `.exe`: ventana trabada, matada y cerrada en
+  plena hora loca, señal sin pausas de más de 34 ms y celular andando.
+- **Diálogos propios** (`lib/dialogs.ts`): los de Windows congelaban la interfaz.
 - **Salida DMX conectada a la interfaz** (2026-11-24): driver del cable FTDI
   (`OpenDmxOutput`: 250 kbaudios, 8N2, BREAK por software, 30 FPS), estado real
   y reconexión automática en `DmxEngine`, sección "DMX Output" (puerto COM,
@@ -34,16 +44,14 @@
 - **Blackout en la salida**: ya no pone `liveValues` a 0. Apaga dimmer, color y
   programas automáticos en `dmxFrame.ts`, sin mover Pan/Tilt; ningún chase o
   effect lo pisa y al quitarlo todo vuelve igual. Pedir una escena lo quita.
-- **Momentos del evento** (2026-11-24): `types/moment.ts`, `lib/momentsEngine.ts`
-  (montado una vez en App, sigue al cambiar de sección), sección "Momentos",
+- **Momentos del evento** (2026-11-24): `types/moment.ts`, sección "Momentos",
   barra en Live con Siguiente/Anterior/Detener, AvPág/RePág (pasador de
   diapositivas) y plantilla de quinceañera por tipo de canal. Al entrar, lo que
   la escena no define vuelve a su default; los effects arrancan al terminar el
   fade. En los fades, estrobo/gobo/rueda de color saltan (`lib/fade.ts`).
-- **Control por celular** (2026-11-24): `src-tauri/src/remote.rs` (HTTP en el
-  puerto 8777, PIN con bloqueo por intentos, token persistente en `remote.json`)
-  sirve `remote.html` y hace de relevo; `lib/remoteControl.ts` ejecuta las
-  órdenes. Sección "Celular" con QR. Apagado por defecto. Va sin cifrar: usar
+- **Control por celular** (2026-11-24): `src-tauri/src/engine/remote.rs` (HTTP
+  en el puerto 8777, PIN con bloqueo por intentos, token persistente en
+  `remote.json`) sirve `remote.html` y le pasa las órdenes al motor. Sección "Celular" con QR. Apagado por defecto. Va sin cifrar: usar
   una WiFi propia. **Sin probar con un celular real** (sí con Chromium móvil).
 - **Intensidad y estrobo generales** en la salida (`dmxFrame.ts`), en Live y en el
   celular. El estrobo usa el preset "Estrobo" de cada canal; en cabezas sin ese

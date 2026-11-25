@@ -19,6 +19,7 @@ pub fn open_stage_window(app: AppHandle) -> Result<(), String> {
 fn create(app: &AppHandle) -> tauri::Result<()> {
     let mut builder = WebviewWindowBuilder::new(app, STAGE, WebviewUrl::App("index.html#escenario".into()))
         .title("LUMEN PRO — Escenario")
+        .data_directory(app.state::<crate::WebviewDir>().0.clone())
         .inner_size(1280.0, 720.0)
         .visible(false);
     // WebView2 no abre una segunda ventana si los argumentos no son idénticos

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createBeatTracker, type BeatTracker } from "@/lib/beatTracker";
+import { readSetting, writeSetting } from "@/lib/settings";
 
 export type Band = "bass" | "mid" | "treble";
 
@@ -9,15 +10,15 @@ export const BAND_NAMES = Object.keys(BANDS) as Band[];
 
 const TICK_MS = 20;
 const BPM_REFRESH_MS = 500;
-const SETTINGS_KEY = "lumenpro.audio";
 
 /** Lo que se está oyendo ahora. Vive fuera de React: cambia 50 veces por
- *  segundo y lo leen el motor de effects y los medidores. */
+ *  segundo y lo leen los medidores y el enlace con el motor. */
 export interface AudioFeed {
   /** 0–1 por banda, ya ajustado al volumen del local. */
   levels: Record<Band, number>;
   /** Golpes contados, con decimales; null si no se reconoce un ritmo. */
   beats: () => number | null;
+  bpm: () => number | null;
 }
 
 let feed: AudioFeed | null = null;
@@ -91,6 +92,7 @@ function listen(stream: MediaStream, sensitivity: () => number): Session {
   const audioFeed: AudioFeed = {
     levels: { bass: 0, mid: 0, treble: 0 },
     beats: () => tracker.beats(performance.now()),
+    bpm: () => tracker.bpm(),
   };
   let before: Record<Band, number> | null = null;
   let last = performance.now();
@@ -141,12 +143,7 @@ interface AudioSettings {
 }
 
 function loadSettings(): AudioSettings {
-  const defaults: AudioSettings = { deviceId: "", sensitivity: 60 };
-  try {
-    return { ...defaults, ...(JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "{}") as Partial<AudioSettings>) };
-  } catch {
-    return defaults;
-  }
+  return { deviceId: "", sensitivity: 60, ...readSetting<Partial<AudioSettings>>("audio") };
 }
 
 export interface AudioInput {
@@ -164,8 +161,8 @@ export interface AudioInput {
 }
 
 /** Escucha la música. Se monta una sola vez (AppShell), así sigue al cambiar
- *  de sección. */
-export function useAudioInput(): AudioInput {
+ *  de sección. `autoStart`: la ventana se reabrió sola y ya se escuchaba. */
+export function useAudioInput(autoStart = false): AudioInput {
   const [settings, setSettings] = useState(loadSettings);
   const [listening, setListening] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -176,11 +173,7 @@ export function useAudioInput(): AudioInput {
   const changeSettings = useCallback((patch: Partial<AudioSettings>) => {
     settingsRef.current = { ...settingsRef.current, ...patch };
     setSettings(settingsRef.current);
-    try {
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settingsRef.current));
-    } catch {
-      // Sin localStorage la elección dura lo que la ventana.
-    }
+    writeSetting("audio", settingsRef.current);
   }, []);
 
   const refreshDevices = useCallback(async () => {
@@ -250,6 +243,10 @@ export function useAudioInput(): AudioInput {
       if (mine === attempt.current) setError(explain(e));
     }
   }, [refreshDevices, stop]);
+
+  useEffect(() => {
+    if (autoStart) void start();
+  }, [autoStart, start]);
 
   useEffect(() => {
     if (!listening) return;

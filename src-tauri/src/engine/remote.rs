@@ -1,7 +1,7 @@
 //! Control por celular: un servidor HTTP mínimo en la red local que sirve una
-//! página (`remote.html`) y hace de relevo. No sabe de luces: recibe del
-//! frontend una foto del estado (`remote_publish`) y le reenvía las órdenes
-//! por un `Channel`. La fuente de verdad sigue siendo `fixtureStore`.
+//! página (`remote.html`). No sabe de luces: le pide una foto del estado al
+//! motor y le pasa las órdenes. Corre en el proceso del motor, así que anda
+//! aunque la ventana esté trabada o cerrada.
 //!
 //! Va por HTTP sin cifrar, así que el PIN protege de curiosos, no de alguien
 //! espiando una WiFi abierta: se usa en una red propia con contraseña.
@@ -14,13 +14,11 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::Read;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use tauri::ipc::Channel;
-use tauri::{AppHandle, Manager, State};
 use tiny_http::{Header, Method, Request, Response, Server};
 
 /// Fijo para que la dirección del celular no cambie entre eventos.
@@ -53,7 +51,11 @@ impl Config {
     }
 }
 
-type Sink = Box<dyn Fn(Value) + Send>;
+/// De dónde sale lo que muestra el celular y a dónde van sus órdenes.
+pub struct Source {
+    pub snapshot: Box<dyn Fn() -> String + Send + Sync>,
+    pub command: Box<dyn Fn(Value) + Send + Sync>,
+}
 
 struct Reply {
     status: u16,
@@ -73,10 +75,10 @@ impl Reply {
 
 struct Hub {
     config: Mutex<Config>,
-    /// Versión y JSON de la última foto publicada por el frontend.
+    source: Source,
+    /// Versión y JSON de la última foto.
     snapshot: Mutex<(u64, String)>,
     fails: Mutex<HashMap<IpAddr, (u32, Instant)>>,
-    sink: Mutex<Option<Sink>>,
 }
 
 fn unix_millis() -> u64 {
@@ -84,20 +86,15 @@ fn unix_millis() -> u64 {
 }
 
 impl Hub {
-    fn new(config: Config) -> Self {
+    fn new(config: Config, source: Source) -> Self {
         Self {
             config: Mutex::new(config),
+            source,
             // Arranca en la hora actual para que, tras reiniciar la app, un
             // celular con una versión vieja no crea que ya la tiene.
             snapshot: Mutex::new((unix_millis(), "null".into())),
             fails: Mutex::new(HashMap::new()),
-            sink: Mutex::new(None),
         }
-    }
-
-    fn publish(&self, state: String) {
-        let mut snapshot = self.snapshot.lock().unwrap();
-        *snapshot = (snapshot.0 + 1, state);
     }
 
     fn handle(&self, method: &Method, url: &str, bearer: Option<&str>, ip: IpAddr, body: &str) -> Reply {
@@ -145,7 +142,11 @@ impl Hub {
 
     /// 204 si el celular ya tiene la última versión.
     fn state(&self, query: &str) -> Reply {
-        let snapshot = self.snapshot.lock().unwrap();
+        let current = (self.source.snapshot)();
+        let mut snapshot = self.snapshot.lock().unwrap();
+        if snapshot.1 != current {
+            *snapshot = (snapshot.0 + 1, current);
+        }
         if query.strip_prefix("v=").and_then(|v| v.parse().ok()) == Some(snapshot.0) {
             return Reply::empty(204);
         }
@@ -160,13 +161,8 @@ impl Hub {
         let Ok(command) = serde_json::from_str::<Value>(body) else {
             return Reply::empty(400);
         };
-        match self.sink.lock().unwrap().as_ref() {
-            Some(sink) => {
-                sink(command);
-                Reply::empty(204)
-            }
-            None => Reply::empty(503),
-        }
+        (self.source.command)(command);
+        Reply::empty(204)
     }
 }
 
@@ -247,11 +243,7 @@ fn respond(hub: &Hub, mut request: Request) {
     let _ = request.respond(response);
 }
 
-// ---------------------------------------------------------------------
-// Comandos Tauri
-// ---------------------------------------------------------------------
-
-pub struct RemoteState {
+pub struct Remote {
     hub: Arc<Hub>,
     config_path: PathBuf,
     running: Mutex<Option<Running>>,
@@ -276,21 +268,19 @@ struct Address {
     qr_path: String,
 }
 
-impl RemoteState {
-    pub fn load(app: &AppHandle) -> Result<Self, Box<dyn std::error::Error>> {
-        let dir = app.path().app_data_dir()?;
-        fs::create_dir_all(&dir)?;
+impl Remote {
+    pub fn load(dir: &Path, source: Source) -> Self {
         let config_path = dir.join("remote.json");
         let config = fs::read_to_string(&config_path)
             .ok()
             .and_then(|json| serde_json::from_str(&json).ok())
             .unwrap_or_else(|| Config::generate(false));
-        Ok(Self {
-            hub: Arc::new(Hub::new(config)),
+        Self {
+            hub: Arc::new(Hub::new(config, source)),
             config_path,
             running: Mutex::new(None),
             error: Mutex::new(None),
-        })
+        }
     }
 
     fn save_config(&self) -> Result<(), String> {
@@ -299,7 +289,7 @@ impl RemoteState {
     }
 
     /// Pone el servidor como diga la configuración.
-    fn apply(&self) {
+    pub fn apply(&self) {
         let enabled = self.hub.config.lock().unwrap().enabled;
         let mut running = self.running.lock().unwrap();
         let mut error = self.error.lock().unwrap();
@@ -322,7 +312,23 @@ impl RemoteState {
         }
     }
 
-    fn status(&self) -> RemoteStatus {
+    pub fn set_enabled(&self, enabled: bool) -> Result<(), String> {
+        self.hub.config.lock().unwrap().enabled = enabled;
+        self.save_config()?;
+        self.apply();
+        Ok(())
+    }
+
+    /// PIN y token nuevos: desconecta a todos los celulares.
+    pub fn new_pin(&self) -> Result<(), String> {
+        {
+            let mut config = self.hub.config.lock().unwrap();
+            *config = Config::generate(config.enabled);
+        }
+        self.save_config()
+    }
+
+    pub fn status(&self) -> RemoteStatus {
         let pin = self.hub.config.lock().unwrap().pin.clone();
         RemoteStatus {
             running: self.running.lock().unwrap().is_some(),
@@ -368,45 +374,6 @@ fn local_ipv4() -> Vec<Ipv4Addr> {
     ips
 }
 
-/// Conecta el frontend: por `on_command` le llegan las órdenes del celular.
-#[tauri::command(async)]
-pub fn remote_attach(state: State<'_, RemoteState>, on_command: Channel<Value>) -> RemoteStatus {
-    *state.hub.sink.lock().unwrap() = Some(Box::new(move |command| {
-        let _ = on_command.send(command);
-    }));
-    state.apply();
-    state.status()
-}
-
-#[tauri::command(async)]
-pub fn remote_status(state: State<'_, RemoteState>) -> RemoteStatus {
-    state.status()
-}
-
-#[tauri::command(async)]
-pub fn remote_set_enabled(state: State<'_, RemoteState>, enabled: bool) -> Result<RemoteStatus, String> {
-    state.hub.config.lock().unwrap().enabled = enabled;
-    state.save_config()?;
-    state.apply();
-    Ok(state.status())
-}
-
-/// PIN y token nuevos: desconecta a todos los celulares.
-#[tauri::command(async)]
-pub fn remote_new_pin(state: State<'_, RemoteState>) -> Result<RemoteStatus, String> {
-    {
-        let mut config = state.hub.config.lock().unwrap();
-        *config = Config::generate(config.enabled);
-    }
-    state.save_config()?;
-    Ok(state.status())
-}
-
-#[tauri::command]
-pub fn remote_publish(state: State<'_, RemoteState>, snapshot: String) {
-    state.hub.publish(snapshot);
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -416,8 +383,32 @@ mod tests {
     const IP: IpAddr = IpAddr::V4(Ipv4Addr::new(192, 168, 1, 50));
     const OTHER_IP: IpAddr = IpAddr::V4(Ipv4Addr::new(192, 168, 1, 51));
 
+    /// Un motor de mentira: la foto que se le ponga y las órdenes que recibió.
+    #[derive(Clone)]
+    struct Fake {
+        snapshot: Arc<Mutex<String>>,
+        commands: Arc<Mutex<Vec<Value>>>,
+    }
+
+    impl Fake {
+        fn new() -> Self {
+            Self { snapshot: Arc::new(Mutex::new("null".into())), commands: Arc::default() }
+        }
+
+        fn hub(&self) -> Hub {
+            let (snapshot, commands) = (self.snapshot.clone(), self.commands.clone());
+            Hub::new(
+                Config { enabled: true, pin: "123456".into(), token: "tok".into() },
+                Source {
+                    snapshot: Box::new(move || snapshot.lock().unwrap().clone()),
+                    command: Box::new(move |c| commands.lock().unwrap().push(c)),
+                },
+            )
+        }
+    }
+
     fn hub() -> Hub {
-        Hub::new(Config { enabled: true, pin: "123456".into(), token: "tok".into() })
+        Fake::new().hub()
     }
 
     fn login(hub: &Hub, ip: IpAddr, pin: &str) -> Reply {
@@ -465,29 +456,27 @@ mod tests {
 
     #[test]
     fn state_is_sent_once_per_version() {
-        let hub = hub();
-        hub.publish(r#"{"a":1}"#.into());
+        let fake = Fake::new();
+        let hub = fake.hub();
+        let set = |json: &str| *fake.snapshot.lock().unwrap() = json.into();
+        set(r#"{"a":1}"#);
         let reply: Value =
             serde_json::from_str(&hub.handle(&Method::Get, "/api/state?v=1", Some("tok"), IP, "").body).unwrap();
         assert_eq!(reply["state"]["a"], 1);
         let seen = format!("/api/state?v={}", reply["version"]);
         assert_eq!(hub.handle(&Method::Get, &seen, Some("tok"), IP, "").status, 204);
-        hub.publish(r#"{"a":2}"#.into());
+        set(r#"{"a":2}"#);
         assert_eq!(hub.handle(&Method::Get, &seen, Some("tok"), IP, "").status, 200);
     }
 
     #[test]
-    fn commands_reach_the_frontend_and_fail_loudly_if_it_is_not_there() {
-        let hub = hub();
+    fn commands_reach_the_engine() {
+        let fake = Fake::new();
+        let hub = fake.hub();
         let send = |body| hub.handle(&Method::Post, "/api/command", Some("tok"), IP, body).status;
-        assert_eq!(send(r#"{"type":"next"}"#), 503);
-
-        let received = Arc::new(Mutex::new(Vec::new()));
-        let for_sink = received.clone();
-        *hub.sink.lock().unwrap() = Some(Box::new(move |c| for_sink.lock().unwrap().push(c)));
         assert_eq!(send(r#"{"type":"next"}"#), 204);
         assert_eq!(send("no es json"), 400);
-        assert_eq!(*received.lock().unwrap(), vec![json!({ "type": "next" })]);
+        assert_eq!(*fake.commands.lock().unwrap(), vec![json!({ "type": "next" })]);
     }
 
     #[test]
@@ -517,11 +506,8 @@ mod tests {
 
     #[test]
     fn real_server_serves_the_page_logs_in_and_relays_commands() {
-        let hub = Arc::new(hub());
-        let received = Arc::new(Mutex::new(Vec::new()));
-        let for_sink = received.clone();
-        *hub.sink.lock().unwrap() = Some(Box::new(move |c| for_sink.lock().unwrap().push(c)));
-        let running = serve(hub, (Ipv4Addr::LOCALHOST, 0).into()).unwrap();
+        let fake = Fake::new();
+        let running = serve(Arc::new(fake.hub()), (Ipv4Addr::LOCALHOST, 0).into()).unwrap();
         let at = running.address;
 
         let page = http(at, "GET / HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n");
@@ -533,7 +519,7 @@ mod tests {
         let auth = "Authorization: Bearer tok\r\n";
         assert!(http(at, &post("/api/command", auth, r#"{"type":"next"}"#)).starts_with("HTTP/1.1 204"));
         assert!(http(at, &post("/api/command", auth, &"x".repeat(5000))).starts_with("HTTP/1.1 413"));
-        assert_eq!(received.lock().unwrap().len(), 1);
+        assert_eq!(fake.commands.lock().unwrap().len(), 1);
 
         // Al apagarlo se libera el puerto: si no, no se podría volver a encender.
         drop(running);

@@ -14,6 +14,14 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: show-engine
+      - run: cargo test
+        working-directory: show-engine
       - run: npm ci
       - run: npm test
       - run: npm run build
@@ -38,5 +46,5 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
-      - run: cargo check
+      - run: cargo test
         working-directory: src-tauri

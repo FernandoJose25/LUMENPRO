@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
+import { askConfirm, askText } from "@/lib/dialogs";
 import { useFixtureStore } from "@/lib/fixtureStore";
 import type { Moment } from "@/types/moment";
 
@@ -15,12 +16,13 @@ export function MomentsView() {
   const selected = moments.find((m) => m.id === selectedId) ?? moments[0];
 
   function handleCreate() {
-    const name = window.prompt("Nombre del momento:", `Momento ${moments.length + 1}`);
-    if (name !== null) setSelectedId(addMoment(name).id);
+    askText("Nombre del momento", `Momento ${moments.length + 1}`, (name) => setSelectedId(addMoment(name).id));
   }
 
   function handleDelete(m: Moment) {
-    if (window.confirm(`¿Borrar el momento "${m.name}"? No borra su escena ni sus effects.`)) removeMoment(m.id);
+    askConfirm(`¿Borrar el momento "${m.name}"? No borra su escena ni sus effects.`, "Borrar", () =>
+      removeMoment(m.id),
+    );
   }
 
   return (

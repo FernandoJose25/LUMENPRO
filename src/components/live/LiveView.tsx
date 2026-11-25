@@ -6,7 +6,6 @@ import { Fader } from "@/components/ui/Fader";
 import { BlackoutButton } from "@/components/layout/BlackoutButton";
 import { cn } from "@/lib/utils";
 import { useFixtureStore } from "@/lib/fixtureStore";
-import { useChasePlayer } from "@/lib/chasePlayer";
 import { ColorSwatches } from "@/components/fixtures/ColorSwatches";
 import { PanTiltPad } from "@/components/fixtures/PanTiltPad";
 import { LiveMoments } from "./LiveMoments";
@@ -15,17 +14,9 @@ import { CHANNEL_TYPE_LABELS, type ChannelType } from "@/types/fixture";
 /**
  * Live Mode (pendiente del roadmap — ver LUMENPRO-que-sigue.md) — pantalla
  * de OPERACIÓN, no de edición: sin crear/renombrar/borrar, sin ajustar
- * fade/hold de un chase ni parámetros de un effect. Todo lo que hay aquí
- * ya existía como lógica real en fixtureStore/chasePlayer/effectEngine
- * (Fase 4); esta vista solo la expone con controles grandes ("sección 1",
- * ver comentario de tamaños en ui/Button.tsx) pensados para tocarse rápido
- * durante un show, no para configurar con calma.
- *
- * Limitación conocida, igual que en ChasesView: solo hay UN motor de
- * chase activo a la vez (un solo `useChasePlayer` montado aquí). Elegir
- * otro chase mientras uno está sonando no lo detiene automáticamente por
- * sí solo — hay que presionar Detener primero. Esto es consistente con el
- * resto del código, no una limitación nueva de esta vista.
+ * fade/hold de un chase ni parámetros de un effect. Controles grandes
+ * ("sección 1", ver comentario de tamaños en ui/Button.tsx) pensados para
+ * tocarse rápido durante un show, no para configurar con calma.
  */
 export function LiveView() {
   const {
@@ -163,7 +154,7 @@ function LiveScenes({
 }
 
 function LiveChases() {
-  const { chases, scenes, definitions, getChannelValue, setChannelValue } = useFixtureStore();
+  const { chases, chase: playing, playChase, stopChase } = useFixtureStore();
   const [selectedChaseId, setSelectedChaseId] = useState<string | null>(chases[0]?.id ?? null);
 
   useEffect(() => {
@@ -173,13 +164,7 @@ function LiveChases() {
   }, [chases, selectedChaseId]);
 
   const selectedChase = chases.find((c) => c.id === selectedChaseId) ?? null;
-  const { status, play, stop } = useChasePlayer({
-    chase: selectedChase,
-    scenes,
-    definitions,
-    getChannelValue,
-    setChannelValue,
-  });
+  const status = playing?.id === selectedChaseId ? playing : null;
 
   return (
     <Panel title="CHASES — LIVE" className="h-full">
@@ -194,12 +179,10 @@ function LiveChases() {
                 size="lg"
                 variant="secondary"
                 selected={c.id === selectedChaseId}
-                onClick={() => {
-                  if (c.id !== selectedChaseId) stop();
-                  setSelectedChaseId(c.id);
-                }}
+                onClick={() => setSelectedChaseId(c.id)}
                 className={cn(c.id === selectedChaseId && "bg-accent/15 text-accent")}
               >
+                {c.id === playing?.id ? "▶ " : ""}
                 {c.name}
               </Button>
             ))}
@@ -209,13 +192,13 @@ function LiveChases() {
             <div className="mt-3 flex items-center gap-2 border-t border-border pt-3">
               <Button
                 size="lg"
-                variant={status.playing ? "danger" : "primary"}
-                onClick={status.playing ? stop : play}
+                variant={status ? "danger" : "primary"}
+                onClick={() => (status ? stopChase() : playChase(selectedChase.id))}
                 disabled={selectedChase.steps.length === 0}
               >
-                {status.playing ? "■ Detener" : "▶ Reproducir"}
+                {status ? "■ Detener" : "▶ Reproducir"}
               </Button>
-              {status.playing ? (
+              {status ? (
                 <span className="font-mono text-[11px] text-text-secondary">
                   step {status.stepIndex + 1}/{selectedChase.steps.length} · {status.phase}{" "}
                   {Math.round(status.progress * 100)}%

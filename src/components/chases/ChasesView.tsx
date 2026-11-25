@@ -2,17 +2,15 @@ import { useEffect, useState } from "react";
 import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
+import { askConfirm, askText } from "@/lib/dialogs";
 import { useFixtureStore } from "@/lib/fixtureStore";
-import { useChasePlayer } from "@/lib/chasePlayer";
 
 /**
  * Fase 4 — Chases. Un chase es una secuencia de Scenes (ya guardadas en
  * ScenesPanel) con tiempos de fade/hold entre ellas — reutiliza toda la
  * infraestructura de Scenes en vez de duplicar valores de canal (ver
- * comentario en types/chase.ts). Reproducir corre en el navegador
- * (lib/chasePlayer.ts) y anima liveValues del fixtureStore — no hay
- * motor DMX conectado al frontend todavía, así que "reproducir" mueve
- * los faders/valores en pantalla, no sale nada por un cable DMX real.
+ * comentario en types/chase.ts). Lo reproduce el motor: sigue sonando
+ * aunque se cambie de sección.
  */
 export function ChasesView() {
   const { chases, scenes, addChase, renameChase, removeChase, setChaseLoop } = useFixtureStore();
@@ -30,10 +28,7 @@ export function ChasesView() {
   void selectedChase; // no se usa directamente aquí — ChaseEditor resuelve el chase por id
 
   function handleCreate() {
-    const name = window.prompt("Nombre del chase:", `Chase ${chases.length + 1}`);
-    if (name === null) return;
-    const created = addChase(name);
-    setSelectedChaseId(created.id);
+    askText("Nombre del chase", `Chase ${chases.length + 1}`, (name) => setSelectedChaseId(addChase(name).id));
   }
 
   function startRename(id: string, currentName: string) {
@@ -47,9 +42,7 @@ export function ChasesView() {
   }
 
   function handleDelete(id: string, name: string) {
-    if (window.confirm(`¿Borrar el chase "${name}"? Esto no borra las escenas que usa.`)) {
-      removeChase(id);
-    }
+    askConfirm(`¿Borrar el chase "${name}"? Esto no borra las escenas que usa.`, "Borrar", () => removeChase(id));
   }
 
   return (
@@ -139,9 +132,9 @@ function ChaseEditor({
   const {
     chases,
     scenes,
-    definitions,
-    getChannelValue,
-    setChannelValue,
+    chase: playing,
+    playChase,
+    stopChase,
     addChaseStep,
     removeChaseStep,
     updateChaseStep,
@@ -150,7 +143,7 @@ function ChaseEditor({
   const chase = chases.find((c) => c.id === chaseId) ?? null;
   const [addingSceneId, setAddingSceneId] = useState("");
 
-  const { status, play, stop } = useChasePlayer({ chase, scenes, definitions, getChannelValue, setChannelValue });
+  const status = playing?.id === chaseId ? playing : null;
 
   if (!chase) {
     return (
@@ -169,11 +162,11 @@ function ChaseEditor({
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <Button
           size="md"
-          variant={status.playing ? "danger" : "primary"}
-          onClick={status.playing ? stop : play}
+          variant={status ? "danger" : "primary"}
+          onClick={() => (status ? stopChase() : playChase(chase.id))}
           disabled={chase.steps.length === 0}
         >
-          {status.playing ? "■ Detener" : "▶ Reproducir"}
+          {status ? "■ Detener" : "▶ Reproducir"}
         </Button>
         <label className="flex items-center gap-1.5 text-xs text-text-secondary">
           <input
@@ -184,7 +177,7 @@ function ChaseEditor({
           />
           Loop
         </label>
-        {status.playing ? (
+        {status ? (
           <span className="font-mono text-[11px] text-text-secondary">
             step {status.stepIndex + 1}/{chase.steps.length} · {status.phase}{" "}
             {Math.round(status.progress * 100)}%
@@ -200,7 +193,7 @@ function ChaseEditor({
         ) : null}
         {chase.steps.map((step, index) => {
           const scene = scenes.find((s) => s.id === step.sceneId);
-          const isCurrent = status.playing && status.stepIndex === index;
+          const isCurrent = status?.stepIndex === index;
           return (
             <div
               key={step.id}

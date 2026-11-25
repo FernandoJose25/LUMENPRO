@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
 import { Fader } from "@/components/ui/Fader";
+import { askText } from "@/lib/dialogs";
 import { useFixtureStore } from "@/lib/fixtureStore";
 import { CHANNEL_TYPE_LABELS, type ChannelType, type FixtureChannel } from "@/types/fixture";
 
@@ -57,11 +58,12 @@ export function ChannelFinder({ instanceId, onClose }: { instanceId: string; onC
   }
 
   function addPreset(c: FixtureChannel) {
-    const label = window.prompt('Nombre de este valor (por ejemplo "Rojo", "Abierto" o "Estrobo"):')?.trim();
-    if (!label) return;
     const value = valueOf(c);
-    patch(c.id, {
-      presets: [...c.presets, { id: `pr-${crypto.randomUUID()}`, label, dmxFrom: value, dmxTo: value }],
+    askText('Nombre de este valor (por ejemplo "Rojo", "Abierto" o "Estrobo")', "", (label) => {
+      if (!label) return;
+      patch(c.id, {
+        presets: [...c.presets, { id: `pr-${crypto.randomUUID()}`, label, dmxFrom: value, dmxTo: value }],
+      });
     });
   }
 

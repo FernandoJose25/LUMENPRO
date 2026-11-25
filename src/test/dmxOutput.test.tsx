@@ -4,47 +4,11 @@ import userEvent from "@testing-library/user-event";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import App from "@/App";
 import { STORAGE_KEY } from "@/lib/showFile";
+import { DMX_STOPPED } from "@/types/engine";
+import { willAnswer } from "./dialogs";
+import { fakeEngine } from "./fakeEngine";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(), isTauri: vi.fn(), Channel: class {} }));
-
-type Args = Record<string, unknown>;
-const STOPPED = { state: "stopped", output: "", lastError: null, fps: 0 };
-
-/** Motor de Rust falso: responde lo mismo que los comandos de main.rs. */
-function fakeEngine(overrides: Record<string, (args: Args) => unknown> = {}) {
-  let status: unknown = STOPPED;
-  const handlers: Record<string, (args: Args) => unknown> = {
-    list_serial_ports: () => [
-      { name: "COM1", chip: "other", description: "" },
-      { name: "COM5", chip: "ftdi", description: "USB Serial Port (COM5)" },
-    ],
-    engine_status: () => status,
-    connect_open_dmx: ({ port }) => {
-      status = { state: "running", output: `Cable FTDI (${port})`, lastError: null, fps: 30 };
-    },
-    connect_mock: () => {
-      status = { state: "running", output: "Mock (sin hardware)", lastError: null, fps: 30 };
-    },
-    disconnect: () => {
-      status = STOPPED;
-    },
-    ...overrides,
-  };
-  vi.mocked(invoke).mockImplementation(async (cmd, args) => handlers[cmd]?.((args ?? {}) as Args));
-  return { setStatus: (s: unknown) => (status = s) };
-}
-
-function sentFrames() {
-  return vi
-    .mocked(invoke)
-    .mock.calls.filter(([cmd]) => cmd === "set_block")
-    .map(([, args]) => args as { startChannel: number; values: number[] });
-}
-
-function lastFrame() {
-  const frames = sentFrames();
-  return frames[frames.length - 1].values;
-}
 
 async function openSection(user: ReturnType<typeof userEvent.setup>, name: string) {
   await user.click(screen.getByRole("button", { name }));
@@ -59,70 +23,76 @@ beforeEach(() => {
 describe("Salida DMX desde la interfaz", () => {
   it("propone el puerto FTDI, conecta y la barra superior pasa a Conectado", async () => {
     const user = userEvent.setup();
-    fakeEngine();
+    const engine = fakeEngine();
     render(<App />);
     await openSection(user, "DMX Output");
 
     await waitFor(() => expect(screen.getByLabelText(/Puerto/)).toHaveValue("COM5"));
     await user.click(screen.getByRole("button", { name: "Conectar" }));
 
-    expect(invoke).toHaveBeenCalledWith("connect_open_dmx", { port: "COM5", fps: 30 });
+    expect(engine.sent("connect")).toEqual([{ cmd: "connect", adapter: "open_dmx", port: "COM5", fps: 30 }]);
     expect(await screen.findByText("Cable FTDI (COM5)")).toBeInTheDocument();
     expect(screen.getByText("Conectado")).toBeInTheDocument();
+    expect(screen.getByText("Pausa más larga: 35 ms")).toBeInTheDocument();
   });
 
-  it("manda los 512 canales y los vuelve a mandar cuando cambia algo", async () => {
+  it("lo que se mueve en pantalla llega al motor", async () => {
     const user = userEvent.setup();
-    fakeEngine();
+    const engine = fakeEngine();
     render(<App />);
-    await waitFor(() => expect(sentFrames().length).toBeGreaterThan(0));
-    expect(sentFrames()[0].startChannel).toBe(1);
-    expect(sentFrames()[0].values).toHaveLength(512);
-    expect(sentFrames()[0].values[32]).toBe(255); // Master Dimmer del PAR #1
+    await waitFor(() => expect(engine.frame()[32]).toBe(255)); // Master Dimmer del PAR #1
 
     const pan = screen.getAllByRole("spinbutton")[0];
     await user.clear(pan);
     await user.type(pan, "77");
-    await waitFor(() => expect(lastFrame()[0]).toBe(77));
+    await waitFor(() => expect(engine.frame()[0]).toBe(77));
   });
 
   it("Blackout apaga la salida sin mover Pan, y volver a encender la restaura", async () => {
     const user = userEvent.setup();
-    fakeEngine();
+    const engine = fakeEngine();
     render(<App />);
-    await waitFor(() => expect(sentFrames().length).toBeGreaterThan(0));
-    const before = lastFrame();
+    await waitFor(() => expect(engine.frame()[32]).toBe(255));
+    const before = engine.frame();
 
     await user.click(screen.getByRole("button", { name: "BLACKOUT" }));
     await user.click(screen.getByRole("button", { name: "CONFIRMAR" }));
-    await waitFor(() => expect(lastFrame()[32]).toBe(0));
-    expect(lastFrame()[0]).toBe(before[0]);
+    await waitFor(() => expect(engine.frame()[32]).toBe(0));
+    expect(engine.frame()[0]).toBe(before[0]);
 
-    await user.click(screen.getByRole("button", { name: "VOLVER A ENCENDER" }));
-    await waitFor(() => expect(lastFrame()).toEqual(before));
+    await user.click(await screen.findByRole("button", { name: "VOLVER A ENCENDER" }));
+    await waitFor(() => expect(engine.frame()).toEqual(before));
   });
 
-  it("con el IPC lento no acumula envíos: salta los intermedios y termina en el último valor", async () => {
+  it("con el motor lento no acumula envíos: junta los intermedios y termina en el último valor", async () => {
     let release: () => void = () => {};
     const gate = new Promise<void>((resolve) => (release = resolve));
-    fakeEngine({ set_block: () => gate });
+    let held = false;
+    const engine = fakeEngine({
+      send: async (r) => {
+        if (held) await gate;
+        return engine.commands.send(r as never);
+      },
+    });
     render(<App />);
-    await waitFor(() => expect(sentFrames()).toHaveLength(1));
+    await waitFor(() => expect(engine.frame()[0]).toBe(128));
+    const before = engine.sent("send").length;
 
+    held = true;
     const user = userEvent.setup();
     const plus = screen.getByRole("button", { name: "Aumentar Pan" });
     for (let i = 0; i < 5; i++) await user.click(plus);
-    expect(sentFrames()).toHaveLength(1);
+    expect(engine.sent("send").length - before).toBe(1);
 
     await act(async () => release());
-    await waitFor(() => expect(sentFrames()).toHaveLength(2));
-    expect(sentFrames()[1].values[0]).toBe(sentFrames()[0].values[0] + 5);
+    await waitFor(() => expect(engine.frame()[0]).toBe(133));
+    expect(engine.sent("send").length - before).toBe(2);
   });
 
   it("puerto ocupado: muestra el error y sigue desconectado", async () => {
     const user = userEvent.setup();
     fakeEngine({
-      connect_open_dmx: () => {
+      connect: () => {
         throw "error de puerto serie: Acceso denegado.";
       },
     });
@@ -138,7 +108,7 @@ describe("Salida DMX desde la interfaz", () => {
   it("si se suelta el cable, avisa que está reconectando", async () => {
     const engine = fakeEngine();
     render(<App />);
-    engine.setStatus({ state: "reconnecting", output: "Cable FTDI (COM5)", lastError: "cable", fps: 0 });
+    engine.state.dmx = { ...DMX_STOPPED, state: "reconnecting", output: "Cable FTDI (COM5)", lastError: "cable" };
     expect(await screen.findByText("Reconectando…", {}, { timeout: 2500 })).toBeInTheDocument();
   });
 
@@ -152,20 +122,18 @@ describe("Salida DMX desde la interfaz", () => {
     await screen.findByText("Cable FTDI (COM5)");
     first.unmount();
 
-    vi.mocked(invoke).mockClear();
-    fakeEngine();
+    const again = fakeEngine();
     const second = render(<App />);
-    await waitFor(() => expect(invoke).toHaveBeenCalledWith("connect_open_dmx", { port: "COM5", fps: 30 }));
+    await waitFor(() => expect(again.sent("connect")).toHaveLength(1));
     await openSection(user, "DMX Output");
     await user.click(await screen.findByRole("button", { name: "Desconectar" }));
     await screen.findByRole("button", { name: "Conectar" });
     second.unmount();
 
-    vi.mocked(invoke).mockClear();
-    fakeEngine();
+    const last = fakeEngine();
     render(<App />);
-    await waitFor(() => expect(invoke).toHaveBeenCalledWith("engine_status"));
-    expect(invoke).not.toHaveBeenCalledWith("connect_open_dmx", expect.anything());
+    await waitFor(() => expect(last.sent("wait").length).toBeGreaterThan(1));
+    expect(last.sent("connect")).toEqual([]);
   });
 
   it("avisa si el adaptador es CH340", async () => {
@@ -237,7 +205,7 @@ describe("Guardar, exportar e importar el show", () => {
     const show = JSON.parse((args as { json: string }).json);
     show.scenes = [{ id: "s1", name: "Vals", values: {}, createdAt: 0, updatedAt: 0 }];
 
-    vi.spyOn(window, "confirm").mockReturnValue(true);
+    willAnswer(true);
     const file = new File([JSON.stringify(show)], "respaldo.json", { type: "application/json" });
     await user.upload(screen.getByLabelText("Archivo de show"), file);
     expect(await screen.findByText("Show importado: respaldo.json")).toBeInTheDocument();
@@ -251,7 +219,7 @@ describe("Guardar, exportar e importar el show", () => {
     fakeEngine();
     render(<App />);
     await openSection(user, "Settings");
-    vi.spyOn(window, "confirm").mockReturnValue(true);
+    willAnswer(true);
     await user.upload(
       screen.getByLabelText("Archivo de show"),
       new File(['{"otra":"cosa"}'], "foto.json", { type: "application/json" }),
