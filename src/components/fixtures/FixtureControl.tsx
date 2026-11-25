@@ -4,13 +4,12 @@ import { Fader } from "@/components/ui/Fader";
 import { StatusIndicator } from "@/components/ui/StatusIndicator";
 import { useFixtureStore } from "@/lib/fixtureStore";
 import { ColorSwatches } from "./ColorSwatches";
+import { PanTiltPad } from "./PanTiltPad";
 
 /**
  * Sección 7: "Cuando se selecciona un fixture, el panel debe adaptarse a
  * sus capacidades" — los canales vienen del perfil real (Fixture Editor),
- * no están hardcodeados. Pan/Tilt como joystick XY (recomendado en la
- * tabla de la sección 7) queda para una iteración posterior — aquí todos
- * los canales usan Fader, que ya soporta drag/wheel/teclado/numérico.
+ * no están hardcodeados. Las cabezas tienen además un pad para apuntar.
  *
  * Los valores en vivo viven en el fixtureStore (no en un useState local):
  * antes se perdían al cambiar de fixture seleccionado, y Scenes (Fase 4)
@@ -50,6 +49,7 @@ export function FixtureControl() {
       </div>
 
       <div className="flex max-h-[calc(100%-13rem)] flex-col gap-2.5 overflow-y-auto scrollbar-thin pr-1">
+        <PanTiltPad instances={[selectedInstance]} />
         {selectedDefinition.channels.map((ch) => (
           <Fader
             key={ch.id}

@@ -12,6 +12,7 @@
 
 mod remote;
 mod show;
+mod stage_window;
 
 use lumenpro_dmx::{
     DmxEngine, DmxOutput, DmxOutputError, DmxUniverse, EngineState, EnttecUsbProOutput, MockOutput,
@@ -19,6 +20,7 @@ use lumenpro_dmx::{
 };
 use serde::Serialize;
 use std::sync::Mutex;
+use tauri::webview::{PermissionKind, PermissionResponse};
 use tauri::{AppHandle, Manager, State};
 
 /// Estado compartido de la app: un único universo DMX + el motor que lo
@@ -163,6 +165,14 @@ fn main() {
             app.manage(remote);
             Ok(())
         })
+        .on_window_event(stage_window::close_with_main)
+        // Solo se pide al pulsar "Escuchar" (src/lib/audioInput.ts). Con el
+        // aviso de WebView2, un "Bloquear" por error queda guardado y no hay
+        // dónde deshacerlo. El permiso de Windows sigue mandando.
+        .on_permission_request(|_, kind| match kind {
+            PermissionKind::Microphone => PermissionResponse::Allow,
+            _ => PermissionResponse::Default,
+        })
         .invoke_handler(tauri::generate_handler![
             list_serial_ports,
             connect_mock,
@@ -174,6 +184,7 @@ fn main() {
             show::load_show,
             show::save_show,
             show::export_show,
+            stage_window::open_stage_window,
             remote::remote_attach,
             remote::remote_status,
             remote::remote_set_enabled,

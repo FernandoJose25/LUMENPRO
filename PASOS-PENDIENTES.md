@@ -61,6 +61,21 @@
   Live; reemplazan la barra decorativa.
 - **Número de canal editable** en Fixture Editor: mueve la función sin romper
   escenas (guardan el id del canal, no su posición).
+- **Audio Reactive** (2026-11-24): `lib/audioInput.ts` (niveles por banda
+  ajustados al volumen del local) y `lib/beatTracker.ts` (tempo por
+  autocorrelación, reloj de golpes que predice). Effects con "Sigue a": tiempo
+  fijo, ritmo, graves, medios o agudos; onda "Golpe". Sin música o sin ritmo
+  reconocido siguen con su velocidad. La plantilla trae "Hora loca con música".
+  Probado con audio simulado en Chromium y en la app; **falta con música real**.
+  El micrófono se autoriza en `main.rs` (`on_permission_request`).
+- **Deshacer y rehacer** (`lib/history.ts`): fixtures, escenas, grupos, chases,
+  effects y momentos. Los valores en vivo quedan fuera a propósito.
+- **Pad de pan/tilt** (`PanTiltPad`, 16 bits) en Fixture Control, Groups y Live.
+- **Curvas** de dimmer y color aplicadas en `dmxFrame.ts`.
+- **Segundo monitor**: `stage_window.rs` + `lib/stageMirror.ts` (BroadcastChannel;
+  la segunda ventana no tiene store). Falta verlo con dos monitores conectados.
+- Topbar sin datos inventados: se quitaron CPU y nombre de show; los BPM son los
+  de la música.
 - **Show en disco** (`show.json` en AppData, escritura atómica) con exportar e
   importar en "Settings". `npm run tauri build` genera el instalador.
 
@@ -75,9 +90,9 @@
       hay documentos que dicen 16, 18 y 26/32. El estrobo por defecto es 255
       (abierto) por analogía con dos cabezas 10R, sin confirmar
 - [ ] Agregar la barra LED móvil con "+ Equipo sin manual" (modelo por identificar)
-- [ ] Control XY dedicado para Pan/Tilt (hoy usa `Fader` genérico)
-- [ ] Selector de gobo con miniaturas, editor de curvas gráfico
-- [ ] Curvas de canal: se editan pero todavía no se aplican en la salida
+- [x] Control XY dedicado para Pan/Tilt
+- [ ] Selector de gobo con miniaturas (necesita el manual de las cabezas)
+- [x] Curvas de canal aplicadas en la salida
 
 ## ✅ Fase 4 — Scenes / Groups / Chases / Effects (completa, ver detalle abajo)
 
@@ -253,7 +268,7 @@
 - [x] Buscador de canales (subir de a uno para identificar un equipo sin manual)
 - [x] Control por celular (página por WiFi local con PIN)
 - [ ] Probar el celular real en la WiFi del evento (firewall de Windows)
-- [ ] Doble monitor (depende de Tauri, gestión de ventanas nativas)
+- [x] Doble monitor (simulador en otra ventana)
 
 ## 🔲 Pendiente — Visualizer y extras
 
@@ -341,7 +356,7 @@
       una escena desde un comando aplica sus valores, y Blackout desde un
       comando apaga el rig.
 
-- [ ] Audio Reactive
+- [x] Audio Reactive
 
 ## Orden recomendado
 
@@ -350,5 +365,5 @@
 3. ~~Envolver en Tauri~~ — hecho, la interfaz envía DMX y genera el `.exe`
 4. Scenes (hecho) → Groups (hecho) → Chases (hecho) → Effects (hecho)
 5. Simulador con posiciones y haces (hecho)
-6. Live Mode (hecho) → Command Palette (hecho) → Audio Reactive, doble
-   monitor (pendientes)
+6. Live Mode (hecho) → Command Palette (hecho) → Audio Reactive (hecho) →
+   doble monitor (hecho)

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
-import { useFixtureStore } from "@/lib/fixtureStore";
+import type { FrameInput } from "@/lib/dmxFrame";
 import {
   approach,
   beamDirection,
@@ -26,6 +26,7 @@ const MIN_FRAME_MS = 15;
 const HIT_RADIUS = 18; // píxeles
 
 interface StageCanvasProps {
+  rig: FrameInput;
   selectedId?: string | null;
   /** Con onSelect/onMove las luces se pueden tocar y arrastrar. */
   onSelect?: (instanceId: string | null) => void;
@@ -42,18 +43,17 @@ interface Drawn {
 
 /** Simulador: haces en perspectiva con lo mismo que sale por el cable.
  *  Arrastrar el fondo gira la cámara; la rueda acerca. */
-export function StageCanvas({ selectedId = null, onSelect, onMove }: StageCanvasProps) {
-  const store = useFixtureStore();
+export function StageCanvas({ rig, selectedId = null, onSelect, onMove }: StageCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const placements = useMemo(() => {
-    const defaults = defaultPlacements(store.instances, store.definitions);
-    return new Map(store.instances.map((i) => [i.id, i.placement ?? defaults.get(i.id)]));
-  }, [store.instances, store.definitions]);
+    const defaults = defaultPlacements(rig.instances, rig.definitions);
+    return new Map(rig.instances.map((i) => [i.id, i.placement ?? defaults.get(i.id)]));
+  }, [rig.instances, rig.definitions]);
 
   // El bucle de dibujo lee siempre lo último sin reiniciarse.
-  const latest = useRef({ store, placements, selectedId, editable: false });
-  latest.current = { store, placements, selectedId, editable: onSelect !== undefined };
+  const latest = useRef({ rig, placements, selectedId, editable: false });
+  latest.current = { rig, placements, selectedId, editable: onSelect !== undefined };
 
   const camera = useRef({ ...DEFAULT_CAMERA });
   const view = useRef<View | null>(null);
@@ -83,7 +83,7 @@ export function StageCanvas({ selectedId = null, onSelect, onMove }: StageCanvas
       const v = makeView(camera.current, width, height);
       view.current = v;
 
-      const { store: s, placements: p, selectedId: selected, editable } = latest.current;
+      const { rig: s, placements: p, selectedId: selected, editable } = latest.current;
       const drawn: Drawn[] = [];
       for (const instance of s.instances) {
         const definition = s.definitions.find((d) => d.id === instance.definitionId);

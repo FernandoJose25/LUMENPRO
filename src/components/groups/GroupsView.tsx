@@ -3,6 +3,7 @@ import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
 import { Fader } from "@/components/ui/Fader";
 import { ColorSwatches } from "@/components/fixtures/ColorSwatches";
+import { PanTiltPad } from "@/components/fixtures/PanTiltPad";
 import { cn } from "@/lib/utils";
 import { useFixtureStore } from "@/lib/fixtureStore";
 import { CHANNEL_TYPE_LABELS, type ChannelType } from "@/types/fixture";
@@ -237,6 +238,7 @@ function GroupControl({ groupId }: { groupId: string | null }) {
         <ColorSwatches instances={members} />
       </div>
       <div className="flex max-h-[calc(100%-6rem)] flex-col gap-2.5 overflow-y-auto scrollbar-thin pr-1">
+        <PanTiltPad instances={members} />
         {channelTypes.map((type) => (
           <Fader
             key={type}

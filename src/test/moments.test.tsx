@@ -337,6 +337,7 @@ describe("Plantilla de quinceañera", () => {
       "Brindis",
       "Hora loca",
       "Hora loca + estrobo",
+      "Hora loca con música",
       "Cierre",
     ]);
     expect(store.groups.map((g) => g.name)).toEqual(["Cabezas", "PAR"]);
@@ -428,7 +429,7 @@ describe("En la app", () => {
     fireEvent.click(screen.getByRole("button", { name: "Usar plantilla de quinceañera" }));
     unmount();
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY)!);
-    expect(saved.moments).toHaveLength(8);
+    expect(saved.moments).toHaveLength(9);
     expect(saved).not.toHaveProperty("momentRun");
   });
 });

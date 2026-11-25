@@ -8,7 +8,7 @@
 
 Software de escritorio para controlar luces de escenario por **DMX512**: cabezas móviles, PARs y otros equipos. Es una alternativa propia a consolas como MA o Chamsys, pensada para el equipo real de mi empresa de eventos (2× cabezas móviles Beam 280 y 4× PAR LED).
 
-> **English summary:** Desktop DMX512 lighting console. React + TypeScript UI (design system, resizable workspace, fixture control, scenes, groups, chases with crossfades, parametric effects, live 2D visualizer) plus a Rust DMX engine (512-channel universe, fixed-FPS output thread with automatic reconnection, Open DMX (FTDI) and Enttec DMX USB PRO drivers plus a mock driver) connected to the UI through Tauri 2 commands. Integration tests with Vitest + Testing Library and unit tests in Rust.
+> **English summary:** Desktop DMX512 lighting console. React + TypeScript UI (design system, resizable workspace, fixture control, scenes, groups, chases with crossfades, parametric effects, beat tracking from live audio, stage simulator) plus a Rust DMX engine (512-channel universe, fixed-FPS output thread with automatic reconnection, Open DMX (FTDI) and Enttec DMX USB PRO drivers plus a mock driver) connected to the UI through Tauri 2 commands. Integration tests with Vitest + Testing Library and unit tests in Rust.
 
 ![Simulador del escenario](docs/screenshots/escenario.png)
 
@@ -21,15 +21,16 @@ Lo diseñé y desarrollé solo, a partir de un brief de producto propio de 37 se
 ## Qué hace
 
 - **Design system propio:** Button, Panel, Fader, Tabs e indicadores de estado, con tokens de color y tipografía.
-- **Workspace profesional:** sidebar, topbar con estado del DMX, paneles redimensionables, **Blackout** global y paleta de comandos (`Ctrl/Cmd + K`).
-- **Fixtures:** biblioteca, editor de canales y control dinámico. Los faders, colores y presets se generan según el perfil de cada equipo (pan/tilt, dimmer, color wheel, gobo, prisma, etc.).
+- **Workspace profesional:** sidebar, topbar con estado del DMX, paneles redimensionables, **Blackout** global, deshacer y rehacer (`Ctrl + Z` / `Ctrl + Y`) y paleta de comandos (`Ctrl/Cmd + K`).
+- **Fixtures:** biblioteca, editor de canales y control dinámico. Los faders, colores y presets se generan según el perfil de cada equipo (pan/tilt, dimmer, color wheel, gobo, prisma, etc.). Las cabezas se apuntan con un pad de 16 bits, y el dimmer y los colores aceptan curvas.
 - **Scenes:** guardan una foto de los valores en vivo y luego se recuperan, re-graban o renombran.
 - **Groups:** agrupan fixtures para controlarlos por lote.
 - **Chases:** secuencias de escenas con fade y hold, en bucle o una sola vez.
 - **Momentos:** el evento en orden (Entrada, Vals, Fotos, Hora loca…). Cada uno junta escena, chase y effects en un botón, con "Siguiente", transición y avance automático opcional. Incluye una plantilla de quinceañera.
 - **Control por celular:** página en la red local (QR + PIN) con Siguiente, momentos, intensidad, estrobo y Blackout.
 - **Effects:** generadores paramétricos (seno, cuadrada…) aplicados sobre un grupo, con un único motor de intervalos global.
-- **Simulador del escenario:** haces en perspectiva con pan/tilt, color, zoom y estrobo reales, posiciones editables y cámara libre. Sin dependencias 3D: proyección propia sobre canvas.
+- **Audio Reactive:** escucha la música por el micrófono o la entrada de línea, detecta los BPM y los golpes (autocorrelación y reloj predictivo propios) y los effects siguen el ritmo, los graves, los medios o los agudos. Sin música vuelven a su velocidad.
+- **Simulador del escenario:** haces en perspectiva con pan/tilt, color, zoom y estrobo reales, posiciones editables y cámara libre. Sin dependencias 3D: proyección propia sobre canvas. Se puede abrir en un segundo monitor.
 - **Equipos sin manual:** identificador que barre canal por canal y guarda su función, valor inicial y presets.
 - **Motor DMX en Rust** (`dmx-engine/`):
   - universo de 512 canales thread-safe;
@@ -47,17 +48,17 @@ Lo diseñé y desarrollé solo, a partir de un brief de producto propio de 37 se
 | Estado | Store propio con Context; el show se guarda en `show.json` (app) o `localStorage` (navegador) |
 | Motor | Rust: crate `lumenpro_dmx`, hilos, `serialport` |
 | Escritorio | Tauri 2 |
-| Calidad | Vitest + Testing Library + jsdom (132 tests), `cargo test` (26 tests), GitHub Actions |
+| Calidad | Vitest + Testing Library + jsdom (174 tests), `cargo test` (26 tests), GitHub Actions |
 
 ## Estructura
 
 ```
-src/components/   ui/ (design system) · layout/ · fixtures/ · scenes/ · groups/ · chases/ · effects/ · moments/ · stage/ · dmx/ · remote/ · live/ · command-palette/
-src/lib/          fixtureStore (estado + persistencia), chasePlayer, effectEngine, momentsEngine, dmxFrame, dmxOutput, remoteControl, stage
+src/components/   ui/ (design system) · layout/ · fixtures/ · scenes/ · groups/ · chases/ · effects/ · audio/ · moments/ · stage/ · dmx/ · remote/ · live/ · command-palette/
+src/lib/          fixtureStore (estado + persistencia), chasePlayer, effectEngine, momentsEngine, dmxFrame, dmxOutput, audioInput, beatTracker, history, remoteControl, stage, stageMirror
 src/types/        Modelo de datos: fixture, scene, group, chase, effect, moment
 src/test/         Tests de integración
 dmx-engine/       Motor DMX en Rust (crate independiente)
-src-tauri/        App de escritorio Tauri 2: motor DMX, show en disco y servidor del celular
+src-tauri/        App de escritorio Tauri 2: motor DMX, show en disco, servidor del celular y segunda ventana
 ```
 
 ## Correr el proyecto

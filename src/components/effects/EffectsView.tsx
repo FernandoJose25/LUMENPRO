@@ -3,10 +3,11 @@ import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 import { useFixtureStore } from "@/lib/fixtureStore";
-import { WAVEFORM_LABELS, type WaveformType } from "@/types/effect";
+import { EFFECT_SOURCE_LABELS, WAVEFORM_LABELS, type EffectSource, type WaveformType } from "@/types/effect";
 import { CHANNEL_TYPE_LABELS, type ChannelType } from "@/types/fixture";
 
 const WAVEFORMS = Object.keys(WAVEFORM_LABELS) as WaveformType[];
+const SOURCES = Object.keys(EFFECT_SOURCE_LABELS) as EffectSource[];
 const CHANNEL_TYPES = Object.keys(CHANNEL_TYPE_LABELS) as ChannelType[];
 
 /**
@@ -213,6 +214,41 @@ function EffectEditor({ effectId }: { effectId: string | null }) {
             className="h-9 rounded-control border border-border bg-panel2 px-2 font-mono text-text-primary outline-none"
           />
         </label>
+
+        <label className="flex flex-col gap-1">
+          <span className="text-text-secondary">Sigue a</span>
+          <select
+            value={effect.source}
+            onChange={(e) => updateEffect(effect.id, { source: e.target.value as EffectSource })}
+            className="h-9 rounded-control border border-border bg-panel2 px-2 text-text-primary outline-none"
+          >
+            {SOURCES.map((s) => (
+              <option key={s} value={s}>
+                {EFFECT_SOURCE_LABELS[s]}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        {effect.source === "beat" ? (
+          <label className="flex flex-col gap-1">
+            <span className="text-text-secondary">Golpes por ciclo</span>
+            <input
+              type="number"
+              min={1}
+              max={64}
+              value={effect.beatsPerCycle}
+              onChange={(e) => updateEffect(effect.id, { beatsPerCycle: Math.max(1, Number(e.target.value) || 1) })}
+              className="h-9 rounded-control border border-border bg-panel2 px-2 font-mono text-text-primary outline-none"
+            />
+          </label>
+        ) : (
+          <span className="self-end pb-2 text-[11px] text-text-secondary">
+            {effect.source === "clock"
+              ? null
+              : "Con música va del mínimo al máximo según cuánto suene; la forma de onda y la velocidad solo se usan sin música."}
+          </span>
+        )}
 
         <label className="flex flex-col gap-1">
           <span className="text-text-secondary">Mínimo (0-255)</span>

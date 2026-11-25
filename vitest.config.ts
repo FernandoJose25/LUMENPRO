@@ -13,5 +13,7 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
     globals: false,
+    // Con todas las suites en paralelo, una de clics largos pasa de 5 s.
+    testTimeout: 20_000,
   },
 });

@@ -11,13 +11,27 @@ import type { ChannelType } from "@/types/fixture";
  * tener ese tipo de canal en un índice DMX distinto, igual que
  * `setGroupChannelByType` en fixtureStore).
  */
-export type WaveformType = "sine" | "square" | "sawtooth" | "triangle";
+export type WaveformType = "sine" | "square" | "sawtooth" | "triangle" | "pulse";
 
 export const WAVEFORM_LABELS: Record<WaveformType, string> = {
   sine: "Seno",
   square: "Cuadrada",
   sawtooth: "Diente de sierra",
   triangle: "Triangular",
+  pulse: "Golpe",
+};
+
+/** Qué marca el paso: la velocidad propia, el ritmo de la música, o cuánto
+ *  suena una parte de ella. Sin música (lib/audioInput.ts) todos vuelven a la
+ *  velocidad propia. */
+export type EffectSource = "clock" | "beat" | "bass" | "mid" | "treble";
+
+export const EFFECT_SOURCE_LABELS: Record<EffectSource, string> = {
+  clock: "Tiempo fijo",
+  beat: "Ritmo",
+  bass: "Graves",
+  mid: "Medios",
+  treble: "Agudos",
 };
 
 export interface Effect {
@@ -37,6 +51,9 @@ export interface Effect {
    *  recorriendo el grupo (p. ej. 6 fixtures con 60° = una vuelta
    *  completa repartida entre todos). */
   phaseOffsetDeg: number;
+  source: EffectSource;
+  /** Con source "beat": golpes que dura cada ciclo. */
+  beatsPerCycle: number;
   createdAt: number;
   updatedAt: number;
 }

@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { getAudioFeed } from "@/lib/audioInput";
 import { useFixtureStore } from "@/lib/fixtureStore";
 import type { WaveformType } from "@/types/effect";
 
@@ -17,6 +18,9 @@ function waveformValue(waveform: WaveformType, phaseCycles: number, min: number,
       break;
     case "triangle":
       t = p < 0.5 ? p * 2 : (1 - p) * 2;
+      break;
+    case "pulse":
+      t = (1 - p) ** 2;
       break;
     case "sine":
     default:
@@ -78,19 +82,24 @@ export function useEffectsEngine() {
 
         const elapsedSec = (now - startTimesRef.current[effectId]) / 1000;
         const cyclesPerSec = effect.speedCpm / 60;
+        const audio = getAudioFeed();
+        const beats = effect.source === "beat" ? (audio?.beats() ?? null) : null;
+        const cycles = beats !== null ? beats / effect.beatsPerCycle : elapsedSec * cyclesPerSec;
+        const level =
+          audio && effect.source !== "clock" && effect.source !== "beat" ? audio.levels[effect.source] : null;
         const members = instancesRef.current.filter((i) => i.group === effect.groupId);
 
         members.forEach((member, index) => {
           const def = definitionsRef.current.find((d) => d.id === member.definitionId);
           if (!def) return;
-          const phase = elapsedSec * cyclesPerSec + (index * effect.phaseOffsetDeg) / 360;
+          const phase = cycles + (index * effect.phaseOffsetDeg) / 360;
+          const value =
+            level !== null
+              ? Math.round(effect.min + (effect.max - effect.min) * level)
+              : waveformValue(effect.waveform, phase, effect.min, effect.max);
           for (const channel of def.channels) {
             if (channel.type !== effect.channelType) continue;
-            setChannelValueRef.current(
-              member.id,
-              channel.id,
-              waveformValue(effect.waveform, phase, effect.min, effect.max),
-            );
+            setChannelValueRef.current(member.id, channel.id, value);
           }
         });
       }

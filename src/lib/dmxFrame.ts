@@ -45,8 +45,23 @@ function strobeValue(channel: FixtureChannel, definition: FixtureDefinition): nu
   return definition.channels.some((c) => c.type === "PAN") ? null : 200;
 }
 
+/** Solo lo que es cantidad de luz: en pan/tilt o en un canal por rangos una
+ *  curva cambiaría a dónde apunta o qué hace. */
+export function acceptsCurve(type: ChannelType): boolean {
+  return type === "DIMMER" || COLOR_TYPES.includes(type);
+}
+
+function applyCurve(channel: FixtureChannel, value: number): number {
+  if (channel.curve === "linear" || !acceptsCurve(channel.type)) return value;
+  const range = channel.dmxMax - channel.dmxMin;
+  if (range <= 0) return value;
+  const t = Math.max(0, Math.min(1, (value - channel.dmxMin) / range));
+  const curved = channel.curve === "log" ? t * t : t * t * (3 - 2 * t);
+  return channel.dmxMin + range * curved;
+}
+
 /** Lo que vale un canal una vez aplicados intensidad, estrobo, identificar y
- *  Blackout. Antes de invertir: es lo que ve el simulador. */
+ *  Blackout y la curva. Antes de invertir: es lo que ve el simulador. */
 export function effectiveValue(
   instance: FixtureInstance,
   definition: FixtureDefinition,
@@ -61,8 +76,8 @@ export function effectiveValue(
     if (channel.type === "MODE") value = 0;
     if (channel.type === "STROBE") value = channel.defaultValue;
   }
-  if (input.blackoutActive && goesDarkOnBlackout(channel, definition)) value = 0;
-  return value;
+  if (input.blackoutActive && goesDarkOnBlackout(channel, definition)) return 0;
+  return applyCurve(channel, value);
 }
 
 function isInverted(instance: FixtureInstance, channel: FixtureChannel): boolean {

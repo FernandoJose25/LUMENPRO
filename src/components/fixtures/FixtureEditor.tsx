@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
+import { acceptsCurve } from "@/lib/dmxFrame";
 import { CHANNEL_TYPE_LABELS, type ChannelType, type FixtureChannel, type FixtureDefinition } from "@/types/fixture";
 
 interface FixtureEditorProps {
@@ -10,7 +11,12 @@ interface FixtureEditorProps {
 }
 
 const CHANNEL_TYPES = Object.keys(CHANNEL_TYPE_LABELS) as ChannelType[];
-const CURVES = ["linear", "log", "s-curve"] as const;
+const CURVE_LABELS: Record<FixtureChannel["curve"], string> = {
+  linear: "Lineal",
+  log: "Suave al encender",
+  "s-curve": "Suave en los extremos",
+};
+const CURVES = Object.keys(CURVE_LABELS) as FixtureChannel["curve"][];
 
 export function emptyChannel(index: number): FixtureChannel {
   return {
@@ -182,13 +188,16 @@ export function FixtureEditor({ definition, onSave, onCancel }: FixtureEditorPro
                 </td>
                 <td className="px-2 py-1.5">
                   <select
-                    value={ch.curve}
+                    aria-label={`Curva de ${ch.name}`}
+                    title={acceptsCurve(ch.type) ? undefined : "Solo en dimmer y colores"}
+                    disabled={!acceptsCurve(ch.type)}
+                    value={acceptsCurve(ch.type) ? ch.curve : "linear"}
                     onChange={(e) => updateChannel(ch.id, { curve: e.target.value as FixtureChannel["curve"] })}
-                    className="rounded border border-border bg-panel2 px-1.5 py-1 text-text-primary outline-none"
+                    className="rounded border border-border bg-panel2 px-1.5 py-1 text-text-primary outline-none disabled:opacity-40"
                   >
                     {CURVES.map((c) => (
                       <option key={c} value={c}>
-                        {c}
+                        {CURVE_LABELS[c]}
                       </option>
                     ))}
                   </select>

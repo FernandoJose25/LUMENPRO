@@ -73,11 +73,13 @@ export function buildQuinceTemplate(rig: Rig, makeId: (prefix: string) => string
     min: number,
     max: number,
     phaseOffsetDeg: number,
+    music: Partial<Effect> = {},
   ): string[] {
     if (!groupId) return [];
     const id = makeId("effect");
     effects.push({
-      id, name, groupId, channelType, waveform: "sine", speedCpm, min, max, phaseOffsetDeg, createdAt: now, updatedAt: now,
+      id, name, groupId, channelType, waveform: "sine", speedCpm, min, max, phaseOffsetDeg,
+      source: "clock", beatsPerCycle: 1, createdAt: now, updatedAt: now, ...music,
     });
     return [id];
   }
@@ -94,6 +96,17 @@ export function buildQuinceTemplate(rig: Rig, makeId: (prefix: string) => string
     ...effect(parsGroup, "PAR: ola roja", "RED", 30, 0, 255, 90),
     ...effect(parsGroup, "PAR: ola verde", "GREEN", 37, 0, 255, 90),
     ...effect(parsGroup, "PAR: ola azul", "BLUE", 44, 0, 255, 90),
+  ];
+  // Los mismos, siguiendo la música si se está escuchando.
+  const musicRainbow = [
+    ...effect(parsGroup, "PAR: rojo al ritmo", "RED", 30, 0, 255, 90, { source: "beat", beatsPerCycle: 4 }),
+    ...effect(parsGroup, "PAR: verde al ritmo", "GREEN", 37, 0, 255, 90, { source: "beat", beatsPerCycle: 6 }),
+    ...effect(parsGroup, "PAR: azul al ritmo", "BLUE", 44, 0, 255, 90, { source: "beat", beatsPerCycle: 8 }),
+    ...effect(parsGroup, "PAR: golpe de graves", "DIMMER", 120, 40, 255, 0, { source: "bass", waveform: "pulse" }),
+  ];
+  const musicMove = [
+    ...effect(headsGroup, "Cabezas: paneo al ritmo", "PAN", 18, 84, 172, 180, { source: "beat", beatsPerCycle: 8 }),
+    ...effect(headsGroup, "Cabezas: cabeceo al ritmo", "TILT", 23, 60, 120, 90, { source: "beat", beatsPerCycle: 6 }),
   ];
 
   function moment(name: string, fadeMs: number, parLook: Look, headLook: Look, effectIds: string[] = []) {
@@ -120,6 +133,7 @@ export function buildQuinceTemplate(rig: Rig, makeId: (prefix: string) => string
   moment("Brindis", 2000, rgb(255, 160, 30, 200), { DIMMER: 120 });
   moment("Hora loca", 500, rgb(0, 0, 0, 255), HEADS_WHITE, [...rainbow, ...fastMove]);
   moment("Hora loca + estrobo", 0, { ...rgb(0, 0, 0, 255), STROBE: 200 }, HEADS_WHITE, [...rainbow, ...fastMove]);
+  moment("Hora loca con música", 500, rgb(0, 0, 0, 255), HEADS_WHITE, [...musicRainbow, ...musicMove]);
   moment("Cierre", 3000, { ...WHITE, DIMMER: 180 }, HEADS_OFF);
 
   return { instances, groups, scenes, effects, moments };

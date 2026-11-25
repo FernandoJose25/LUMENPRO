@@ -1,15 +1,15 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { StatusIndicator } from "@/components/ui/StatusIndicator";
 import type { EngineStatus } from "@/lib/dmxOutput";
+import { useFixtureStore } from "@/lib/fixtureStore";
 import { BlackoutButton } from "./BlackoutButton";
 
 interface TopbarProps {
-  showName: string;
   dmx: EngineStatus;
   universe: number;
-  bpm: number;
-  cpu: number;
+  /** De la música que se está escuchando; null si no hay. */
+  bpm: number | null;
   onSave: () => Promise<void>;
   blackoutActive: boolean;
   onBlackout: () => void;
@@ -22,13 +22,11 @@ const DMX_INDICATOR = {
   reconnecting: { status: "warn", detail: "Reconectando…" },
 } as const;
 
-/** Barra superior — sección 4: show, conexión DMX, universe, BPM, CPU/FPS, undo/redo/save, Blackout. */
+/** Barra superior — sección 4: conexión DMX, universe, BPM, FPS, undo/redo/save, Blackout. */
 export function Topbar({
-  showName,
   dmx,
   universe,
   bpm,
-  cpu,
   onSave,
   blackoutActive,
   onBlackout,
@@ -39,36 +37,71 @@ export function Topbar({
       <span className="text-sm font-semibold tracking-wide text-text-primary">LUMEN PRO</span>
       <div className="h-5 w-px bg-border" />
 
-      <span className="text-sm text-text-secondary">
-        Show: <span className="text-text-primary">{showName}</span>
-      </span>
-
-      <div className="ml-2 flex items-center gap-4">
+      <div className="flex items-center gap-4">
         <StatusIndicator label="USB-DMX" {...DMX_INDICATOR[dmx.state]} />
         <StatusIndicator status="active" label={`Universe ${universe}`} />
-        <span className="font-mono text-xs text-text-secondary">{bpm} BPM</span>
+        {bpm !== null ? <span className="font-mono text-xs text-text-secondary">{bpm} BPM</span> : null}
       </div>
 
       <div className="flex-1" />
 
-      <div className="hidden items-center gap-3 font-mono text-xs text-text-secondary md:flex">
-        <span>CPU {cpu}%</span>
-        <span>FPS {dmx.fps}</span>
-      </div>
+      <span className="hidden font-mono text-xs text-text-secondary md:inline">FPS {dmx.fps}</span>
 
       <div className="flex items-center gap-1.5">
-        <Button variant="ghost" size="sm" aria-label="Deshacer">
-          Undo
-        </Button>
-        <Button variant="ghost" size="sm" aria-label="Rehacer">
-          Redo
-        </Button>
+        <UndoButtons />
         <SaveButton onSave={onSave} />
       </div>
 
       <div className="h-5 w-px bg-border" />
       <BlackoutButton active={blackoutActive} onBlackout={onBlackout} onRelease={onReleaseBlackout} />
     </header>
+  );
+}
+
+function UndoButtons() {
+  const { canUndo, canRedo, undo, redo } = useFixtureStore();
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+      const key = e.key.toLowerCase();
+      const isRedo = key === "y" || (key === "z" && e.shiftKey);
+      if (key !== "z" && !isRedo) return;
+      // Dentro de un campo de texto, Ctrl+Z deshace lo escrito.
+      const target = e.target;
+      if (target instanceof HTMLTextAreaElement) return;
+      if (target instanceof HTMLInputElement && !["range", "checkbox", "color"].includes(target.type)) return;
+      e.preventDefault();
+      if (isRedo) redo();
+      else undo();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [undo, redo]);
+
+  return (
+    <>
+      <Button
+        variant="ghost"
+        size="sm"
+        aria-label="Deshacer"
+        title="Deshacer lo último programado (Ctrl+Z). No cambia los faders."
+        disabled={!canUndo}
+        onClick={undo}
+      >
+        Undo
+      </Button>
+      <Button
+        variant="ghost"
+        size="sm"
+        aria-label="Rehacer"
+        title="Rehacer (Ctrl+Y)"
+        disabled={!canRedo}
+        onClick={redo}
+      >
+        Redo
+      </Button>
+    </>
   );
 }
 

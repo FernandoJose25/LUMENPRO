@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { useFixtureStore } from "@/lib/fixtureStore";
 import { useChasePlayer } from "@/lib/chasePlayer";
 import { ColorSwatches } from "@/components/fixtures/ColorSwatches";
+import { PanTiltPad } from "@/components/fixtures/PanTiltPad";
 import { LiveMoments } from "./LiveMoments";
 import { CHANNEL_TYPE_LABELS, type ChannelType } from "@/types/fixture";
 
@@ -325,6 +326,7 @@ function GroupMasterRow({
         <ColorSwatches instances={members} />
       </div>
       <div className="flex flex-col gap-2">
+        <PanTiltPad instances={members} />
         {channelTypes.map((type) => (
           <Fader
             key={type}

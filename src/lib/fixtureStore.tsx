@@ -9,6 +9,7 @@ import type { Moment } from "@/types/moment";
 import { seedDefinitions, seedInstances } from "@/data/fixtureLibrary";
 import { buildQuinceTemplate } from "@/data/quinceTemplate";
 import type { ChannelValues } from "@/lib/fade";
+import { docOf, EMPTY_HISTORY, recordChange, sameDoc, travel } from "@/lib/history";
 import { STORAGE_KEY, writeShow } from "@/lib/showFile";
 
 function makeId(prefix: string): string {
@@ -133,6 +134,11 @@ interface FixtureStoreValue extends FixtureStoreState {
   /** Corta el chase, los effects y el avance automático del momento; las
    *  luces quedan como están. */
   stopMoment: () => void;
+  /** Deshacer y rehacer lo programado (ver lib/history.ts). No cambian liveValues. */
+  canUndo: boolean;
+  canRedo: boolean;
+  undo: () => void;
+  redo: () => void;
   /** Guarda ya mismo (el guardado automático corre solo). Rechaza si el
    *  disco falla. */
   saveShow: () => Promise<void>;
@@ -154,7 +160,7 @@ function restoreState(parsed: Partial<FixtureStoreState>): FixtureStoreState {
     activeSceneId: parsed.activeSceneId ?? null,
     groups: parsed.groups ?? [],
     chases: parsed.chases ?? [],
-    effects: parsed.effects ?? [],
+    effects: (parsed.effects ?? []).map((fx) => ({ ...fx, source: fx.source ?? "clock", beatsPerCycle: fx.beatsPerCycle ?? 1 })),
     runningEffectIds: [], // nunca se restaura, ver comentario en el tipo
     blackoutActive: false, // ídem
     master: 100, // ídem
@@ -226,6 +232,37 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
       flush();
     };
   }, [saveShow]);
+
+  const [history, setHistory] = useState(EMPTY_HISTORY);
+  const historyRef = useRef(history);
+  const lastDoc = useRef(docOf(state));
+
+  useEffect(() => {
+    const before = lastDoc.current;
+    if (sameDoc(before, state)) return;
+    lastDoc.current = docOf(state);
+    historyRef.current = recordChange(historyRef.current, before, lastDoc.current, Date.now());
+    setHistory(historyRef.current);
+  }, [state]);
+
+  const timeTravel = useCallback((direction: -1 | 1) => {
+    const step = travel(historyRef.current, lastDoc.current, direction);
+    if (!step) return;
+    historyRef.current = step.history;
+    setHistory(step.history);
+    lastDoc.current = step.doc; // para que el efecto de arriba no lo tome por un cambio nuevo
+    setState((s) => {
+      const momentExists = step.doc.moments.some((m) => m.id === s.activeMomentId);
+      return {
+        ...s,
+        ...step.doc,
+        runningEffectIds: s.runningEffectIds.filter((id) => step.doc.effects.some((e) => e.id === id)),
+        ...(momentExists ? {} : { activeMomentId: null, momentRun: null }),
+      };
+    });
+  }, []);
+  const undo = useCallback(() => timeTravel(-1), [timeTravel]);
+  const redo = useCallback(() => timeTravel(1), [timeTravel]);
 
   const serializeShow = useCallback(() => serialize(stateRef.current), []);
 
@@ -570,6 +607,8 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
         min: 0,
         max: 255,
         phaseOffsetDeg: 0,
+        source: "clock",
+        beatsPerCycle: 1,
         createdAt: Date.now(),
         updatedAt: Date.now(),
       };
@@ -776,6 +815,10 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
     startMoment,
     stepMoment,
     stopMoment,
+    canUndo: history.past.length > 0,
+    canRedo: history.future.length > 0,
+    undo,
+    redo,
     saveShow,
     serializeShow,
     importShow,

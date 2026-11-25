@@ -113,6 +113,30 @@ describe("Blackout — apaga sin mover las cabezas", () => {
   });
 });
 
+describe("Curvas", () => {
+  const withCurve = (type: ChannelType, curve: "log" | "s-curve") =>
+    seedDefinitions.map((d) => ({ ...d, channels: d.channels.map((c) => (c.type === type ? { ...c, curve } : c)) }));
+  const dimmerAt = (value: number, curve: "log" | "s-curve", blackout = false) =>
+    frameWith({ [orus.id]: { [orusCh("DIMMER")]: value } }, blackout, seedInstances, withCurve("DIMMER", curve))[5];
+
+  it("suave al encender: apagado y pleno no cambian, a la mitad sale un cuarto", () => {
+    expect([0, 128, 255].map((v) => dimmerAt(v, "log"))).toEqual([0, 64, 255]);
+  });
+
+  it("suave en los extremos: la mitad queda igual", () => {
+    expect([0, 64, 128, 255].map((v) => dimmerAt(v, "s-curve"))).toEqual([0, 40, 128, 255]);
+  });
+
+  it("no impide el Blackout", () => {
+    expect(dimmerAt(255, "log", true)).toBe(0);
+  });
+
+  it("pan y tilt la ignoran: cambiaría a dónde apuntan", () => {
+    const frame = frameWith({ [orus.id]: { [orusCh("PAN")]: 60 } }, false, seedInstances, withCurve("PAN", "log"));
+    expect(frame[0]).toBe(60);
+  });
+});
+
 describe("Intensidad y estrobo generales", () => {
   const base = {
     instances: seedInstances,

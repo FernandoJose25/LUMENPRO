@@ -4,12 +4,15 @@ import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 import { useFixtureStore } from "@/lib/fixtureStore";
 import { defaultPlacements, isHead } from "@/lib/stage";
+import { openStageWindow } from "@/lib/stageMirror";
 import type { FixtureInstance, Placement } from "@/types/fixture";
 import { StageCanvas } from "./StageCanvas";
 
 /** Coloca las luces como van a estar en el evento y mira cómo se ve. */
 export function StageView() {
-  const { instances, definitions, updateInstance, moments, activeMomentId, startMoment } = useFixtureStore();
+  const store = useFixtureStore();
+  const { instances, definitions, updateInstance, moments, activeMomentId, startMoment } = store;
+  const [windowError, setWindowError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const defaults = useMemo(() => defaultPlacements(instances, definitions), [instances, definitions]);
   const placementOf = (i: FixtureInstance) => i.placement ?? defaults.get(i.id);
@@ -26,6 +29,7 @@ export function StageView() {
       <div className="flex min-w-0 flex-1 flex-col gap-2">
         <div className="min-h-0 flex-1 rounded-panel border border-border bg-panel p-2">
           <StageCanvas
+            rig={store}
             selectedId={selectedId}
             onSelect={setSelectedId}
             onMove={(id, position) => {
@@ -43,10 +47,26 @@ export function StageView() {
             ))}
           </div>
         ) : null}
-        <p className="shrink-0 text-[11px] text-text-secondary">
-          Arrastra una luz para moverla y el fondo para girar la vista. Rueda: acercar. Doble clic: vista inicial. No
-          simula gobos ni prisma.
-        </p>
+        <div className="flex shrink-0 items-center gap-3">
+          <p className="flex-1 text-[11px] text-text-secondary">
+            Arrastra una luz para moverla y el fondo para girar la vista. Rueda: acercar. Doble clic: vista inicial. No
+            simula gobos ni prisma.
+          </p>
+          <Button
+            size="sm"
+            onClick={() => {
+              setWindowError(null);
+              openStageWindow().catch((e) => setWindowError(String(e)));
+            }}
+          >
+            Abrir en otra pantalla
+          </Button>
+        </div>
+        {windowError ? (
+          <p role="alert" className="shrink-0 text-xs text-state-danger">
+            {windowError}
+          </p>
+        ) : null}
       </div>
 
       <div className="w-72 shrink-0">
