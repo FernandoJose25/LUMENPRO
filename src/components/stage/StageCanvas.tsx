@@ -22,7 +22,7 @@ const TILT_SPEED = 200;
 const FLOOR = 7; // medio lado de la grilla, en metros
 // Los valores cambian 25 veces por segundo: dibujar a los 144 o 240 Hz de la
 // pantalla solo gasta batería.
-const MIN_FRAME_MS = 15;
+const MIN_FRAME_MS = 30;
 const HIT_RADIUS = 18; // píxeles
 
 interface StageCanvasProps {

@@ -21,12 +21,15 @@ const dotClass: Record<Status, string> = {
   danger: "bg-state-danger",
 };
 
+// Solo lo pasajero (reconectando) late. Una animación que nunca para obliga a
+// redibujar a la frecuencia de la pantalla: con un punto fijo latiendo, la app
+// quieta gastaba un tercio de núcleo a 240 Hz.
 const pulseClass: Record<Status, string> = {
   idle: "",
   ok: "",
-  active: "animate-pulse",
+  active: "",
   warn: "animate-pulse",
-  danger: "animate-pulse",
+  danger: "",
 };
 
 export function StatusIndicator({ status, label, detail, className }: StatusIndicatorProps) {
