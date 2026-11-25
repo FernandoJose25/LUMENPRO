@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/Button";
 import { askText } from "@/lib/dialogs";
 import { useFixtureStore } from "@/lib/fixtureStore";
 import type { FixtureDefinition, FixtureInstance } from "@/types/fixture";
-import { channelCount, nextFreeAddress } from "@/lib/dmxFrame";
+import { channelCount, nextFreeSlot } from "@/lib/dmxFrame";
 import { ChannelFinder } from "./ChannelFinder";
 import { emptyChannel, FixtureEditor } from "./FixtureEditor";
 import { LibraryPicker } from "./LibraryPicker";
@@ -77,8 +77,7 @@ export function FixtureManager({ onOpenControl }: FixtureManagerProps) {
       id: instanceId,
       definitionId,
       label: `${model.toUpperCase()} #1`,
-      universe: 1,
-      address: nextFreeAddress(instances, definitions, count),
+      ...nextFreeSlot(instances, definitions, count),
     });
     setFinderId(instanceId);
   }
@@ -166,8 +165,7 @@ export function FixtureManager({ onOpenControl }: FixtureManagerProps) {
                         id: `inst-${crypto.randomUUID()}`,
                         definitionId: def.id,
                         label: `${def.model.toUpperCase()} #${count + 1}`,
-                        universe: 1,
-                        address: nextFreeAddress(instances, definitions, Math.max(1, channelCount(def))),
+                        ...nextFreeSlot(instances, definitions, Math.max(1, channelCount(def))),
                       })
                     }
                   >

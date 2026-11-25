@@ -11,13 +11,15 @@ mod remote;
 mod supervisor;
 
 use lumenpro_dmx::{
-    DmxEngine, DmxOutput, DmxOutputError, DmxUniverse, EngineState, EnttecUsbProOutput, MockOutput, OpenDmxOutput,
+    discover_artnet, ArtNetOutput, DmxEngine, DmxOutput, DmxOutputError, DmxUniverse, EngineState,
+    EnttecUsbProOutput, MockOutput, OpenDmxOutput, SacnOutput,
 };
 use lumenpro_show::{Message, Session, Show};
 pub use ipc::Client;
 use remote::{Remote, Source};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
@@ -28,6 +30,7 @@ const MAX_WAIT: Duration = Duration::from_secs(2);
 /// Con la salida por apagarse, lo que se deja salir el Blackout para que las
 /// luces no queden encendidas: muchas se quedan con el último valor.
 const FAREWELL: Duration = Duration::from_millis(250);
+const DISCOVERY: Duration = Duration::from_millis(2500);
 
 /// Reloj en milisegundos con la base de `Date.now()`, pero que nunca salta
 /// hacia atrás aunque Windows corrija la hora a mitad del evento.
@@ -48,18 +51,68 @@ impl Clock {
     }
 }
 
+/// Por dónde sale un universo del show.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-struct Output {
+#[serde(rename_all = "camelCase")]
+struct OutputConfig {
+    id: String,
+    /// open_dmx, enttec, artnet, sacn o mock.
     adapter: String,
-    port: String,
+    /// Universo del show.
+    universe: i32,
     fps: u32,
+    /// Los de USB: "COM5".
+    #[serde(default)]
+    port: String,
+    /// Los de red: IP del nodo, o vacío para toda la red.
+    #[serde(default)]
+    host: String,
+    /// Los de red: número de universo del otro lado.
+    #[serde(default)]
+    target: u16,
+}
+
+impl OutputConfig {
+    fn open(&self) -> Result<Box<dyn DmxOutput>, DmxOutputError> {
+        Ok(match self.adapter.as_str() {
+            // Cable FTDI barato: el timing lo genera la PC.
+            "open_dmx" => Box::new(OpenDmxOutput::open(&self.port)?),
+            // Enttec (o compatible): el timing lo genera el adaptador.
+            "enttec" => Box::new(EnttecUsbProOutput::open(&self.port)?),
+            "artnet" => Box::new(ArtNetOutput::open(&self.host, self.target)?),
+            "sacn" => Box::new(SacnOutput::open(&self.host, self.target)?),
+            _ => Box::new(MockOutput::new()),
+        })
+    }
+
+    /// Cómo se llama mientras no se pueda abrir.
+    fn name(&self) -> String {
+        match self.adapter.as_str() {
+            "artnet" => format!("Art-Net {}", self.target),
+            "sacn" => format!("sACN {}", self.target),
+            _ => self.port.clone(),
+        }
+    }
+}
+
+struct Output {
+    config: OutputConfig,
+    dmx: DmxEngine,
+}
+
+fn state_name(state: EngineState) -> &'static str {
+    match state {
+        EngineState::Stopped => "stopped",
+        EngineState::Running => "running",
+        EngineState::Reconnecting => "reconnecting",
+    }
 }
 
 /// Lo que se guarda en disco para retomar si el motor se cae.
 #[derive(Serialize, Deserialize)]
 struct Saved {
     session: Session,
-    output: Option<Output>,
+    outputs: Vec<OutputConfig>,
     ui_expected: bool,
 }
 
@@ -84,9 +137,9 @@ struct Engine {
     changed: Condvar,
     /// Último lote de órdenes aplicado (ver `Request::Send`).
     ack: Mutex<u64>,
-    universe: DmxUniverse,
-    dmx: Mutex<DmxEngine>,
-    output: Mutex<Option<Output>>,
+    /// Los que salen por algún lado.
+    universes: Mutex<BTreeMap<i32, DmxUniverse>>,
+    outputs: Mutex<Vec<Arc<Output>>>,
     remote: std::sync::OnceLock<Remote>,
     ui: Mutex<Ui>,
 }
@@ -101,8 +154,12 @@ enum Request {
     /// Espera a que algo cambie después de `since`.
     Wait { since: u64, timeout_ms: u64 },
     Frame { universe: i32 },
-    Connect { adapter: String, port: String, fps: u32 },
-    Disconnect,
+    /// Si no se puede abrir es un error y no se agrega.
+    AddOutput { output: OutputConfig },
+    RemoveOutput { id: String },
+    /// Las de la última vez: las que no se puedan abrir quedan reintentando.
+    SetOutputs { outputs: Vec<OutputConfig> },
+    DiscoverArtnet,
     RemoteStatus,
     RemoteSetEnabled { enabled: bool },
     RemoteNewPin,
@@ -114,20 +171,9 @@ enum Request {
     Detach { stop: bool },
 }
 
-fn open_output(adapter: &str, port: &str) -> Result<Box<dyn DmxOutput>, DmxOutputError> {
-    Ok(match adapter {
-        // Cable FTDI barato: el timing lo genera la PC.
-        "open_dmx" => Box::new(OpenDmxOutput::open(port)?),
-        // Enttec (o compatible): el timing lo genera el adaptador.
-        "enttec" => Box::new(EnttecUsbProOutput::open(port)?),
-        _ => Box::new(MockOutput::new()),
-    })
-}
-
 impl Engine {
     fn new(dir: &Path) -> Arc<Self> {
         let clock = Clock::new();
-        let universe = DmxUniverse::new();
         let now = Instant::now();
         let engine = Arc::new(Self {
             boot_id: format!("{:x}-{:x}", clock.base as u64, std::process::id()),
@@ -136,9 +182,8 @@ impl Engine {
             show: Mutex::new(Show::new()),
             changed: Condvar::new(),
             ack: Mutex::new(0),
-            dmx: Mutex::new(DmxEngine::new(universe.clone())),
-            universe,
-            output: Mutex::new(None),
+            universes: Mutex::new(BTreeMap::new()),
+            outputs: Mutex::new(Vec::new()),
             remote: std::sync::OnceLock::new(),
             ui: Mutex::new(Ui {
                 pid: None,
@@ -186,50 +231,82 @@ impl Engine {
                 if show.rev() != sent_rev {
                     sent_rev = show.rev();
                     engine.changed.notify_all();
-                    engine.universe.set_block(1, &show.frame(1));
+                    for (number, universe) in engine.universes.lock().unwrap().iter() {
+                        universe.set_block(1, &show.frame(*number));
+                    }
                 }
             }
             thread::sleep(TICK.saturating_sub(started.elapsed()));
         });
     }
 
+    /// Vacío si no hay salidas; con varias, la peor.
     fn dmx_state(&self) -> &'static str {
-        match self.dmx.lock().unwrap().status().state {
-            EngineState::Stopped => "stopped",
-            EngineState::Running => "running",
-            EngineState::Reconnecting => "reconnecting",
+        let outputs = self.outputs.lock().unwrap();
+        if outputs.is_empty() {
+            return "stopped";
         }
+        let worst = outputs.iter().map(|o| o.dmx.status().state).find(|s| *s != EngineState::Running);
+        state_name(worst.unwrap_or(EngineState::Running))
     }
 
     fn dmx_status(&self) -> Value {
-        let status = self.dmx.lock().unwrap().status();
-        json!({
-            "state": match status.state {
-                EngineState::Stopped => "stopped",
-                EngineState::Running => "running",
-                EngineState::Reconnecting => "reconnecting",
-            },
-            "output": status.output,
-            "lastError": status.last_error,
-            "fps": status.fps,
-            "worstGapMs": status.worst_gap.as_millis() as u64,
-        })
+        let state = self.dmx_state();
+        let outputs = self.outputs.lock().unwrap();
+        let outputs: Vec<Value> = outputs
+            .iter()
+            .map(|o| {
+                let status = o.dmx.status();
+                json!({
+                    "config": o.config,
+                    "state": state_name(status.state),
+                    "name": status.output,
+                    "lastError": status.last_error,
+                    "fps": status.fps,
+                    "worstGapMs": status.worst_gap.as_millis() as u64,
+                })
+            })
+            .collect();
+        json!({ "state": state, "outputs": outputs })
     }
 
-    fn connect(&self, output: Output) -> Result<(), String> {
-        let (adapter, port) = (output.adapter.clone(), output.port.clone());
-        self.dmx
-            .lock()
-            .unwrap()
-            .start(move || open_output(&adapter, &port), output.fps)
-            .map_err(|e| e.to_string())?;
-        *self.output.lock().unwrap() = Some(output);
+    /// El buffer de un universo, ya con lo que el show tiene ahora.
+    fn universe(&self, number: i32) -> DmxUniverse {
+        let frame = self.show.lock().unwrap().frame(number);
+        let universe = self.universes.lock().unwrap().entry(number).or_default().clone();
+        universe.set_block(1, &frame);
+        universe
+    }
+
+    /// Puede tardar (un puerto USB lento): no retiene nada mientras abre.
+    fn add_output(&self, config: OutputConfig, retry: bool) -> Result<(), String> {
+        self.remove_output(&config.id);
+        let mut dmx = DmxEngine::new(self.universe(config.universe));
+        let (opener, fps) = (config.clone(), config.fps);
+        if retry {
+            dmx.start_retrying(config.name(), move || opener.open(), fps);
+        } else {
+            dmx.start(move || opener.open(), fps).map_err(|e| e.to_string())?;
+        }
+        self.outputs.lock().unwrap().push(Arc::new(Output { config, dmx }));
         Ok(())
     }
 
-    fn disconnect(&self) {
-        self.dmx.lock().unwrap().stop();
-        *self.output.lock().unwrap() = None;
+    fn remove_output(&self, id: &str) {
+        let removed: Vec<Arc<Output>> = {
+            let mut outputs = self.outputs.lock().unwrap();
+            let (gone, kept) = outputs.drain(..).partition(|o| o.config.id == id);
+            *outputs = kept;
+            gone
+        };
+        // Cerrar espera al hilo de salida: fuera del lock.
+        drop(removed);
+        let outputs = self.outputs.lock().unwrap();
+        self.universes.lock().unwrap().retain(|n, _| outputs.iter().any(|o| o.config.universe == *n));
+    }
+
+    fn output_configs(&self) -> Vec<OutputConfig> {
+        self.outputs.lock().unwrap().iter().map(|o| o.config.clone()).collect()
     }
 
     fn is_live(&self) -> bool {
@@ -243,10 +320,12 @@ impl Engine {
             let mut show = self.show.lock().unwrap();
             let _ = show.apply(Message::Blackout { on: true }, now);
         }
-        if self.dmx_state() == "running" {
+        if self.dmx_state() != "stopped" {
             thread::sleep(FAREWELL);
         }
-        self.disconnect();
+        for config in self.output_configs() {
+            self.remove_output(&config.id);
+        }
     }
 
     fn handle(&self, request: Request) -> Result<Value, String> {
@@ -311,12 +390,27 @@ impl Engine {
                 }))
             }
             Request::Frame { universe } => Ok(json!(self.show.lock().unwrap().frame(universe).as_slice())),
-            Request::Connect { adapter, port, fps } => {
-                self.connect(Output { adapter, port, fps }).map(|()| self.dmx_status())
-            }
-            Request::Disconnect => {
-                self.disconnect();
+            Request::AddOutput { output } => self.add_output(output, false).map(|()| self.dmx_status()),
+            Request::RemoveOutput { id } => {
+                self.remove_output(&id);
                 Ok(self.dmx_status())
+            }
+            Request::SetOutputs { outputs } => {
+                for output in outputs {
+                    self.add_output(output, true)?;
+                }
+                Ok(self.dmx_status())
+            }
+            Request::DiscoverArtnet => {
+                let nodes = discover_artnet(DISCOVERY).map_err(|e| e.to_string())?;
+                let nodes: Vec<Value> = nodes
+                    .into_iter()
+                    .map(|n| {
+                        let name = if n.long_name.is_empty() { n.short_name } else { n.long_name };
+                        json!({ "ip": n.ip.to_string(), "name": name, "universes": n.universes })
+                    })
+                    .collect();
+                Ok(json!(nodes))
             }
             Request::RemoteStatus => Ok(json!(self.remote().status())),
             Request::RemoteSetEnabled { enabled } => {
@@ -358,20 +452,16 @@ impl Engine {
         let session = show.session();
         drop(show);
         let ui_expected = !self.ui.lock().unwrap().detached;
-        Some(Saved { session, output: self.output.lock().unwrap().clone(), ui_expected })
+        Some(Saved { session, outputs: self.output_configs(), ui_expected })
     }
 
     fn resume(&self, saved: Saved) -> Result<(), String> {
         self.show.lock().unwrap().restore(saved.session, self.clock.now())?;
         self.ui.lock().unwrap().detached = !saved.ui_expected;
-        if let Some(output) = saved.output {
-            // El cable puede seguir tomado un instante por el proceso caído.
-            for _ in 0..20 {
-                if self.connect(output.clone()).is_ok() {
-                    break;
-                }
-                thread::sleep(Duration::from_millis(100));
-            }
+        // El cable puede seguir tomado un instante por el proceso caído: por
+        // eso reintentando.
+        for output in saved.outputs {
+            self.add_output(output, true)?;
         }
         self.remote().apply();
         Ok(())
@@ -414,6 +504,20 @@ mod tests {
         ask(engine, json!({ "cmd": "send", "seq": seq, "messages": messages }))
     }
 
+    /// Sin tiempos fijos: en una PC cargada los hilos tardan en nacer.
+    fn eventually(what: &str, ok: impl Fn() -> bool) {
+        let limit = Instant::now() + Duration::from_secs(20);
+        while !ok() {
+            assert!(Instant::now() < limit, "{what}");
+            thread::sleep(Duration::from_millis(10));
+        }
+    }
+
+    fn changes(what: &str, read: impl Fn() -> u8) {
+        let before = read();
+        eventually(what, || read() != before);
+    }
+
     fn started(name: &str) -> Arc<Engine> {
         let engine = Engine::new(&temp(name));
         engine.play();
@@ -422,15 +526,19 @@ mod tests {
     }
 
     fn channel(engine: &Engine, n: u16) -> u8 {
-        engine.universe.get_channel(n)
+        engine.universes.lock().unwrap()[&1].get_channel(n)
+    }
+
+    fn mock(id: &str, universe: i32) -> Value {
+        json!({ "cmd": "addOutput", "output": { "id": id, "adapter": "mock", "universe": universe, "fps": 30 } })
     }
 
     #[test]
     fn orders_reach_the_output() {
         let engine = started("orders");
+        ask(&engine, mock("a", 1));
         send(&engine, 2, json!([{ "type": "startMoment", "id": "a" }]));
-        thread::sleep(Duration::from_millis(250));
-        assert_eq!((channel(&engine, 1), channel(&engine, 2)), (200, 128));
+        eventually("el fade llega", || (channel(&engine, 1), channel(&engine, 2)) == (200, 128));
         assert_eq!(ask(&engine, json!({ "cmd": "frame", "universe": 1 }))[0], 200);
     }
 
@@ -460,14 +568,17 @@ mod tests {
         let quiet = ask(&engine, json!({ "cmd": "wait", "since": rev, "timeoutMs": 60 }));
         assert_eq!(quiet["changes"], Value::Null);
 
-        let other = engine.clone();
-        let waiting =
-            thread::spawn(move || ask(&other, json!({ "cmd": "wait", "since": rev, "timeoutMs": 2000 })));
+        let (other, (sender, receiver)) = (engine.clone(), std::sync::mpsc::channel());
+        let waiting = thread::spawn(move || {
+            sender.send(()).unwrap();
+            ask(&other, json!({ "cmd": "wait", "since": rev, "timeoutMs": 2000 }))
+        });
+        receiver.recv().unwrap();
         thread::sleep(Duration::from_millis(50));
         let at = Instant::now();
         send(&engine, 2, json!([{ "type": "blackout", "on": true }]));
         let reply = waiting.join().unwrap();
-        assert!(at.elapsed() < Duration::from_millis(500));
+        assert!(at.elapsed() < Duration::from_millis(1500));
         assert_eq!(reply["changes"]["playback"]["blackoutActive"], true);
         assert_eq!(reply["ack"], 2);
     }
@@ -475,19 +586,18 @@ mod tests {
     #[test]
     fn the_phone_works_without_any_window() {
         let engine = started("phone");
+        ask(&engine, mock("a", 1));
         engine.show.lock().unwrap().remote(&json!({ "type": "moment", "id": "b" }), engine.clock.now());
-        thread::sleep(Duration::from_millis(300));
-        let a = channel(&engine, 1);
-        thread::sleep(Duration::from_millis(100));
-        assert_ne!(channel(&engine, 1), a, "el effect sigue corriendo sin ventana");
+        eventually("arranca", || engine.show.lock().unwrap().session().playback.running_effect_ids == ["fx"]);
+        changes("el effect sigue corriendo sin ventana", || channel(&engine, 1));
     }
 
     #[test]
     fn a_crash_resumes_the_show_and_the_output() {
         let engine = started("crash");
-        ask(&engine, json!({ "cmd": "connect", "adapter": "mock", "port": "", "fps": 30 }));
+        ask(&engine, mock("a", 1));
         send(&engine, 2, json!([{ "type": "startMoment", "id": "b" }, { "type": "master", "value": 80 }]));
-        thread::sleep(Duration::from_millis(200));
+        eventually("arranca", || engine.show.lock().unwrap().session().playback.running_effect_ids == ["fx"]);
         let saved = serde_json::to_string(&engine.save().unwrap()).unwrap();
 
         let again = Engine::new(&temp("crash2"));
@@ -495,29 +605,113 @@ mod tests {
         again.resume(serde_json::from_str(&saved).unwrap()).unwrap();
         assert_eq!(again.dmx_state(), "running");
         assert_eq!(again.show.lock().unwrap().session().playback.master, 80.0);
-        thread::sleep(Duration::from_millis(100));
-        let a = channel(&again, 1);
-        thread::sleep(Duration::from_millis(100));
-        assert_ne!(channel(&again, 1), a);
+        changes("sigue el effect", || channel(&again, 1));
     }
 
     #[test]
     fn shutting_down_turns_the_lights_off_without_moving_the_heads() {
         let engine = started("bye");
-        ask(&engine, json!({ "cmd": "connect", "adapter": "mock", "port": "", "fps": 30 }));
+        ask(&engine, mock("a", 1));
         send(&engine, 2, json!([{ "type": "startMoment", "id": "a" }]));
-        thread::sleep(Duration::from_millis(250));
+        eventually("enciende", || channel(&engine, 1) == 200);
         assert!(engine.is_live());
+        let universe = engine.universe(1);
         engine.farewell();
-        assert_eq!((channel(&engine, 1), channel(&engine, 2)), (0, 128));
+        assert_eq!((universe.get_channel(1), universe.get_channel(2)), (0, 128));
         assert_eq!(engine.dmx_state(), "stopped");
+    }
+
+    fn states(status: &Value) -> Vec<(String, String)> {
+        let outputs = status["outputs"].as_array().unwrap();
+        outputs
+            .iter()
+            .map(|o| (o["config"]["id"].as_str().unwrap().into(), o["state"].as_str().unwrap().into()))
+            .collect()
+    }
+
+    #[test]
+    fn several_universes_go_out_at_once_each_with_its_own_lights() {
+        let engine = started("universes");
+        let mut two = doc();
+        two["instances"].as_array_mut().unwrap().push(
+            json!({ "id": "p2", "definitionId": "par", "universe": 2, "address": 10, "group": "g" }),
+        );
+        send(&engine, 2, json!([{ "type": "doc", "doc": two }]));
+        ask(&engine, mock("a", 1));
+        ask(&engine, mock("b", 2));
+        ask(&engine, mock("c", 2)); // el mismo universo por dos lados
+        send(&engine, 3, json!([{ "type": "values", "values": { "p1": { "dim": 11 }, "p2": { "dim": 22 } } }]));
+        let at = |u: i32, channel| engine.universes.lock().unwrap()[&u].get_channel(channel);
+        eventually("salen los dos", || (at(1, 1), at(2, 10)) == (11, 22));
+        let universes = engine.universes.lock().unwrap();
+        assert_eq!(universes.keys().copied().collect::<Vec<_>>(), [1, 2]);
+        assert_eq!((universes[&1].get_channel(1), universes[&1].get_channel(10)), (11, 0));
+        assert_eq!((universes[&2].get_channel(1), universes[&2].get_channel(10)), (0, 22));
+    }
+
+    #[test]
+    fn a_new_output_starts_with_what_is_on_not_dark() {
+        let engine = started("new");
+        send(&engine, 2, json!([{ "type": "values", "values": { "p1": { "dim": 99 } } }]));
+        ask(&engine, mock("a", 1));
+        assert_eq!(channel(&engine, 1), 99);
+    }
+
+    #[test]
+    fn outputs_are_removed_one_by_one_and_replaced_by_id() {
+        let engine = started("remove");
+        ask(&engine, mock("a", 1));
+        ask(&engine, mock("b", 2));
+        let status = ask(&engine, mock("a", 3)); // cambiar de universo
+        assert_eq!(states(&status).len(), 2);
+        let status = ask(&engine, json!({ "cmd": "removeOutput", "id": "a" }));
+        assert_eq!(states(&status), [("b".into(), "running".into())]);
+        assert_eq!(engine.universes.lock().unwrap().keys().copied().collect::<Vec<_>>(), [2]);
+        let status = ask(&engine, json!({ "cmd": "removeOutput", "id": "b" }));
+        assert_eq!(status["state"], "stopped");
+    }
+
+    #[test]
+    fn an_output_that_fails_is_not_added_but_a_saved_one_keeps_trying() {
+        let engine = started("fails");
+        let bad = json!({ "id": "x", "adapter": "open_dmx", "universe": 1, "fps": 30, "port": "COM_NO_EXISTE" });
+        let request = json!({ "cmd": "addOutput", "output": bad });
+        assert!(engine.handle(serde_json::from_value(request).unwrap()).is_err());
+        assert_eq!(engine.dmx_state(), "stopped");
+
+        ask(&engine, mock("ok", 1));
+        let status = ask(&engine, json!({ "cmd": "setOutputs", "outputs": [bad] }));
+        assert_eq!(status["state"], "reconnecting", "con varias, se muestra la peor");
+        assert_eq!(status["outputs"][1]["name"], "COM_NO_EXISTE");
+        assert!(status["outputs"][1]["lastError"].is_string());
+        assert_eq!(states(&status)[0].1, "running", "y la otra sigue");
+    }
+
+    #[test]
+    fn the_network_receives_exactly_what_the_engine_shows() {
+        let engine = started("network");
+        let socket = std::net::UdpSocket::bind("127.0.0.1:6454").expect("otro programa usa el puerto Art-Net");
+        ask(&engine, json!({ "cmd": "addOutput", "output":
+            { "id": "n", "adapter": "artnet", "universe": 1, "fps": 40, "host": "127.0.0.1", "target": 9 } }));
+        send(&engine, 2, json!([{ "type": "values", "values": { "p1": { "dim": 123, "pan": 45 } } }]));
+        socket.set_read_timeout(Some(Duration::from_secs(20))).unwrap();
+        let mut packet = [0u8; 600];
+        loop {
+            let len = socket.recv_from(&mut packet).unwrap().0;
+            assert_eq!((len, packet[14]), (530, 9));
+            if (packet[18], packet[19]) == (123, 45) {
+                break;
+            }
+        }
+        let frame = ask(&engine, json!({ "cmd": "frame", "universe": 1 }));
+        assert_eq!(json!(packet[18..530].to_vec()), frame);
     }
 
     #[test]
     fn a_reopened_window_gets_the_show_back() {
         let engine = started("reopen");
         send(&engine, 2, json!([{ "type": "startMoment", "id": "b" }]));
-        thread::sleep(Duration::from_millis(100));
+        eventually("arranca", || engine.show.lock().unwrap().session().playback.running_effect_ids == ["fx"]);
         let reply = ask(&engine, json!({ "cmd": "attach", "pid": 7 }));
         assert_eq!(reply["session"]["doc"], doc());
         assert_eq!(reply["session"]["playback"]["runningEffectIds"], json!(["fx"]));

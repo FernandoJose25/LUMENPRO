@@ -11,6 +11,7 @@ import { EffectsView } from "@/components/effects/EffectsView";
 import { AudioView } from "@/components/audio/AudioView";
 import { LiveView } from "@/components/live/LiveView";
 import { DmxOutputView } from "@/components/dmx/DmxOutputView";
+import { UniversesView } from "@/components/dmx/UniversesView";
 import { MomentsView } from "@/components/moments/MomentsView";
 import { RemoteView } from "@/components/remote/RemoteView";
 import { StageView } from "@/components/stage/StageView";
@@ -21,13 +22,6 @@ import { useAudioInput } from "@/lib/audioInput";
 import { useDmxOutput } from "@/lib/dmxOutput";
 import { useRemoteControl } from "@/lib/remoteControl";
 import { useStagePublisher } from "@/lib/stageMirror";
-import { PlaceholderView } from "@/components/views/PlaceholderView";
-
-// A qué fase del plan (sección 33 del brief) corresponde cada sección del
-// Sidebar que todavía no está implementada.
-const PENDING_PHASE: Record<string, string> = {
-  Universes: "el motor DMX (fuera del alcance frontend de las Fases 1-6)",
-};
 
 export default function App() {
   return (
@@ -51,7 +45,6 @@ function AppShell() {
     <div className="flex h-screen flex-col bg-bg">
       <Topbar
         dmx={dmx.status}
-        universe={1}
         bpm={audio.bpm}
         onSave={saveShow}
         blackoutActive={blackoutActive}
@@ -72,12 +65,10 @@ function AppShell() {
         {section === "Chases" ? <ChasesView /> : null}
         {section === "Effects" ? <EffectsView /> : null}
         {section === "Audio Reactive" ? <AudioView audio={audio} /> : null}
+        {section === "Universes" ? <UniversesView dmx={dmx} /> : null}
         {section === "DMX Output" ? <DmxOutputView dmx={dmx} /> : null}
         {section === "Celular" ? <RemoteView remote={remote} /> : null}
         {section === "Settings" ? <SettingsView /> : null}
-        {PENDING_PHASE[section] ? (
-          <PlaceholderView section={section} phase={PENDING_PHASE[section]} />
-        ) : null}
       </div>
 
       <CommandPalette sections={SECTIONS} activeSection={section} onSelectSection={setSection} />

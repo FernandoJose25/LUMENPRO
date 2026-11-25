@@ -105,7 +105,7 @@ pub fn run(engine: Arc<Engine>, window_is_coming: bool) {
 
         let state = Some((
             engine.show.lock().unwrap().rev(),
-            engine.output.lock().unwrap().clone(),
+            engine.output_configs(),
             engine.ui.lock().unwrap().detached,
         ));
         if state != saved && saved_at.elapsed() >= SAVE_EVERY {
@@ -163,7 +163,7 @@ mod tests {
     }
 
     fn lights_on(engine: &Engine) {
-        ask(engine, json!({ "cmd": "connect", "adapter": "mock", "port": "", "fps": 30 }));
+        ask(engine, json!({ "cmd": "addOutput", "output": { "id": "a", "adapter": "mock", "universe": 1, "fps": 30 } }));
     }
 
     fn window(engine: &Engine, pid: u32) {
@@ -204,7 +204,7 @@ mod tests {
         ask(&engine, json!({ "cmd": "detach", "stop": false }));
         engine.ui.lock().unwrap().connections = 0;
         assert_eq!(watch().decide(&engine, Instant::now() + Duration::from_secs(600)), Action::Nothing);
-        ask(&engine, json!({ "cmd": "disconnect" }));
+        ask(&engine, json!({ "cmd": "removeOutput", "id": "a" }));
         assert_eq!(watch().decide(&engine, Instant::now()), Action::Exit);
     }
 

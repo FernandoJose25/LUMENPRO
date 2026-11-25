@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
-import { channelCount, nextFreeAddress } from "@/lib/dmxFrame";
+import { channelCount, nextFreeSlot } from "@/lib/dmxFrame";
 import { useFixtureStore } from "@/lib/fixtureStore";
 import { loadDefinition, loadLibrary, searchLibrary, type LibraryEntry } from "@/lib/library";
 
@@ -69,8 +69,7 @@ export function LibraryPicker({ onClose }: { onClose: () => void }) {
           id: `inst-${crypto.randomUUID()}`,
           definitionId: used.id,
           label: `${used.model.toUpperCase()} #${before + n + 1}`,
-          universe: 1,
-          address: nextFreeAddress(patch, [...definitions, used], channelCount(used)),
+          ...nextFreeSlot(patch, [...definitions, used], channelCount(used)),
         };
         patch.push(instance);
         addInstance(instance);

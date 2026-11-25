@@ -29,6 +29,8 @@ export interface EngineLink {
   /** Pedido directo al proceso del motor. Solo en la app de escritorio. */
   request<T>(request: Record<string, unknown>): Promise<T>;
   dmxStatus(): EngineStatus;
+  /** Para verlo al instante, sin esperar al próximo aviso del motor. */
+  noteDmx(status: EngineStatus): void;
   subscribeDmx(listener: () => void): () => void;
 }
 
@@ -99,6 +101,7 @@ class LocalLink implements EngineLink {
   }
 
   dmxStatus = () => DMX_STOPPED;
+  noteDmx = () => {};
   subscribeDmx = () => () => {};
 }
 
@@ -262,12 +265,12 @@ class RemoteLink implements EngineLink {
       try {
         const reply = await this.call<WaitReply>(1, { cmd: "wait", since: this.rev, timeoutMs: WAIT_MS });
         if (this.host !== host) return;
-        this.setDmx(reply.dmx);
+        this.noteDmx(reply.dmx);
         if (reply.focus) void invoke("focus_window");
         if (reply.bootId !== this.bootId) await this.reattach(host);
         else if (reply.changes) this.applyChanges(reply.changes, reply.ack, host);
       } catch (e) {
-        this.setDmx({ ...this.dmx, state: "reconnecting", lastError: e instanceof Error ? e.message : String(e) });
+        this.noteDmx({ ...this.dmx, state: "reconnecting", lastError: e instanceof Error ? e.message : String(e) });
         await sleep(RETRY_MS);
       }
       await sleep(Math.max(0, REFRESH_MS - (Date.now() - startedAt)));
@@ -308,7 +311,7 @@ class RemoteLink implements EngineLink {
     this.request<number[]>({ cmd: "frame", universe }).then(done, () => {});
   }
 
-  private setDmx(next: EngineStatus): void {
+  noteDmx(next: EngineStatus): void {
     if (JSON.stringify(next) === JSON.stringify(this.dmx)) return;
     this.dmx = next;
     this.dmxListeners.forEach((listener) => listener());

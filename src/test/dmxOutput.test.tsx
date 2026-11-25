@@ -1,10 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import App from "@/App";
 import { STORAGE_KEY } from "@/lib/showFile";
-import { DMX_STOPPED } from "@/types/engine";
 import { willAnswer } from "./dialogs";
 import { fakeEngine } from "./fakeEngine";
 
@@ -30,9 +29,12 @@ describe("Salida DMX desde la interfaz", () => {
     await waitFor(() => expect(screen.getByLabelText(/Puerto/)).toHaveValue("COM5"));
     await user.click(screen.getByRole("button", { name: "Conectar" }));
 
-    expect(engine.sent("connect")).toEqual([{ cmd: "connect", adapter: "open_dmx", port: "COM5", fps: 30 }]);
+    expect(engine.sent("addOutput").map((r) => r.output)).toEqual([
+      { id: expect.any(String), adapter: "open_dmx", universe: 1, port: "COM5", fps: 30, host: "", target: 0 },
+    ]);
     expect(await screen.findByText("Cable FTDI (COM5)")).toBeInTheDocument();
     expect(screen.getByText("Conectado")).toBeInTheDocument();
+    expect(screen.getAllByText("Universo 1").length).toBeGreaterThan(0);
     expect(screen.getByText("Pausa más larga: 35 ms")).toBeInTheDocument();
   });
 
@@ -92,7 +94,7 @@ describe("Salida DMX desde la interfaz", () => {
   it("puerto ocupado: muestra el error y sigue desconectado", async () => {
     const user = userEvent.setup();
     fakeEngine({
-      connect: () => {
+      addOutput: () => {
         throw "error de puerto serie: Acceso denegado.";
       },
     });
@@ -108,11 +110,12 @@ describe("Salida DMX desde la interfaz", () => {
   it("si se suelta el cable, avisa que está reconectando", async () => {
     const engine = fakeEngine();
     render(<App />);
-    engine.state.dmx = { ...DMX_STOPPED, state: "reconnecting", output: "Cable FTDI (COM5)", lastError: "cable" };
+    engine.commands.addOutput({ cmd: "addOutput", output: { id: "a", adapter: "open_dmx", universe: 1, port: "COM5" } });
+    engine.state.outputs = engine.state.outputs.map((o) => ({ ...o, state: "reconnecting", lastError: "cable" }));
     expect(await screen.findByText("Reconectando…", {}, { timeout: 2500 })).toBeInTheDocument();
   });
 
-  it("al reabrir la app reconecta sola al último adaptador, salvo que se haya desconectado a mano", async () => {
+  it("al reabrir la app reconecta sola las salidas, salvo las que se quitaron a mano", async () => {
     const user = userEvent.setup();
     fakeEngine();
     const first = render(<App />);
@@ -124,16 +127,82 @@ describe("Salida DMX desde la interfaz", () => {
 
     const again = fakeEngine();
     const second = render(<App />);
-    await waitFor(() => expect(again.sent("connect")).toHaveLength(1));
+    await waitFor(() => expect(again.sent("setOutputs")).toHaveLength(1));
+    expect(again.state.outputs[0].config).toMatchObject({ adapter: "open_dmx", port: "COM5", universe: 1 });
     await openSection(user, "DMX Output");
-    await user.click(await screen.findByRole("button", { name: "Desconectar" }));
+    await user.click(await screen.findByRole("button", { name: "Desconectar Cable FTDI (COM5)" }));
     await screen.findByRole("button", { name: "Conectar" });
     second.unmount();
 
     const last = fakeEngine();
     render(<App />);
     await waitFor(() => expect(last.sent("wait").length).toBeGreaterThan(1));
-    expect(last.sent("connect")).toEqual([]);
+    expect(last.sent("setOutputs")).toEqual([]);
+  });
+
+  it("recupera el adaptador que se conectó con la versión anterior", async () => {
+    localStorage.setItem("lumenpro.dmx.last", JSON.stringify({ adapter: "open_dmx", port: "COM7", fps: 25 }));
+    const engine = fakeEngine();
+    render(<App />);
+    await waitFor(() => expect(engine.state.outputs).toHaveLength(1));
+    expect(engine.state.outputs[0].config).toMatchObject({ adapter: "open_dmx", port: "COM7", fps: 25, universe: 1 });
+  });
+
+  it("varias salidas a la vez: cable en el universo 1 y Art-Net en el 2", async () => {
+    const user = userEvent.setup();
+    const engine = fakeEngine({ discoverArtnet: () => [{ ip: "10.0.0.5", name: "Nodo escenario", universes: [4, 5] }] });
+    render(<App />);
+    await openSection(user, "DMX Output");
+    await waitFor(() => expect(screen.getByLabelText(/Puerto/)).toHaveValue("COM5"));
+    await user.click(screen.getByRole("button", { name: "Conectar" }));
+    await user.click(await screen.findByRole("button", { name: "+ Agregar salida" }));
+    await user.selectOptions(screen.getByLabelText("Adaptador"), "artnet");
+    fireEvent.change(screen.getByLabelText("Universo del show"), { target: { value: "2" } });
+    expect(screen.getByLabelText("Universo Art-Net")).toHaveValue(1); // Art-Net cuenta desde 0
+
+    await user.click(screen.getByRole("button", { name: "Buscar nodos en la red" }));
+    await user.click(await screen.findByRole("button", { name: "Nodo escenario · universo 5" }));
+    expect(screen.getByLabelText("IP del nodo")).toHaveValue("10.0.0.5");
+    await user.click(screen.getByRole("button", { name: "Conectar" }));
+
+    await waitFor(() => expect(engine.state.outputs).toHaveLength(2));
+    expect(engine.state.outputs[1].config).toMatchObject({ adapter: "artnet", universe: 2, host: "10.0.0.5", target: 5 });
+    expect(await screen.findByText("Universos 1, 2")).toBeInTheDocument();
+  });
+
+  it("sACN sin IP sale por multicast al mismo número de universo", async () => {
+    const user = userEvent.setup();
+    const engine = fakeEngine();
+    render(<App />);
+    await openSection(user, "DMX Output");
+    await user.selectOptions(screen.getByLabelText("Adaptador"), "sacn");
+    fireEvent.change(screen.getByLabelText("Universo del show"), { target: { value: "3" } });
+    await user.click(screen.getByRole("button", { name: "Conectar" }));
+    await waitFor(() => expect(engine.state.outputs).toHaveLength(1));
+    expect(engine.state.outputs[0].config).toMatchObject({ adapter: "sacn", universe: 3, host: "", target: 3 });
+  });
+
+  it("avisa si una luz está en un universo que no sale por ningún lado", async () => {
+    const user = userEvent.setup();
+    fakeEngine();
+    render(<App />);
+    await openSection(user, "Fixtures");
+    fireEvent.change(screen.getAllByRole("spinbutton")[0], { target: { value: "2" } });
+    await openSection(user, "DMX Output");
+    await user.selectOptions(screen.getByLabelText("Adaptador"), "mock");
+    await user.click(screen.getByRole("button", { name: "Conectar" }));
+    await user.click(await screen.findByRole("button", { name: "Universo 2" }));
+    expect(screen.getByText(/Universo 2: no sale por ningún lado/)).toBeInTheDocument();
+  });
+
+  it("Universes muestra los 512 canales, de quién son y cuánto valen", async () => {
+    const user = userEvent.setup();
+    vi.mocked(isTauri).mockReturnValue(false);
+    render(<App />);
+    await openSection(user, "Universes");
+    expect(screen.getAllByTitle(/^Canal /)).toHaveLength(512);
+    expect(screen.getByTitle("Canal 33 · LPC007 PAR #1 · Master Dimmer")).toHaveTextContent("255");
+    expect(screen.getByText(/60 canales usados · 452 libres/)).toBeInTheDocument();
   });
 
   it("avisa si el adaptador es CH340", async () => {

@@ -1881,7 +1881,9 @@ dependencies = [
 name = "lumenpro_dmx"
 version = "0.1.0"
 dependencies = [
+ "if-addrs",
  "serialport",
+ "socket2",
  "thiserror 1.0.69",
  "unescaper",
 ]

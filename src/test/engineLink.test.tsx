@@ -119,14 +119,14 @@ describe("La ventana se cae y se vuelve a abrir", () => {
 
     const engine = fakeEngine();
     engine.state.session = session;
-    localStorage.setItem("lumenpro.dmx.last", JSON.stringify({ adapter: "mock", port: "", fps: 30 }));
+    localStorage.setItem("lumenpro.dmx.outputs", JSON.stringify([{ id: "a", adapter: "mock", universe: 1, fps: 30 }]));
     await prepareEngine();
     render(<App />);
     await userEvent.setup().click(screen.getByRole("button", { name: "Live" }));
     expect(screen.getByRole("button", { name: "Siguiente: Hora loca + estrobo ▶" })).toBeInTheDocument();
     await waitFor(() => expect(engine.sent("wait").length).toBeGreaterThan(2));
     expect(types(engine.applied)).toEqual([]); // ni reset ni nada que mueva luces
-    expect(engine.sent("connect")).toEqual([]); // reconectar cortaría la señal
+    expect(engine.sent("setOutputs")).toEqual([]); // reconectar cortaría la señal
   });
 });
 

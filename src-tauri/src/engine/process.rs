@@ -86,6 +86,10 @@ pub fn engine(dir: &Path, args: &[String]) -> ! {
     }
     exit_on_panic(dir);
     high_priority();
+    // Que Windows cargue ahora lo que usan los puertos y la red: con un
+    // antivirus de por medio tarda segundos, y mientras no nacen hilos nuevos.
+    let _ = lumenpro_dmx::list_ports();
+    lumenpro_dmx::network::warm_up();
 
     let engine = Engine::new(dir);
     engine.play();

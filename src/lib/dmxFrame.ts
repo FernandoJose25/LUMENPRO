@@ -2,9 +2,6 @@ import type { ChannelType, FixtureChannel, FixtureDefinition, FixtureInstance } 
 
 export const DMX_CHANNELS = 512;
 
-/** El motor en Rust maneja un solo universo (ver AUDIT.md §8.3). */
-const OUTPUT_UNIVERSE = 1;
-
 export interface FrameInput {
   instances: FixtureInstance[];
   definitions: FixtureDefinition[];
@@ -113,8 +110,17 @@ export interface PatchRow {
   issues: string[];
 }
 
-/** Qué canales ocupa cada fixture, en orden de dirección, con los choques. */
-export function describePatch(instances: FixtureInstance[], definitions: FixtureDefinition[]): PatchRow[] {
+/** Los universos que tienen luces o salidas, en orden. Al menos el 1. */
+export const universesOf = (instances: FixtureInstance[], sent: number[]) =>
+  [...new Set([1, ...instances.map((i) => i.universe), ...sent])].sort((a, b) => a - b);
+
+/** Qué canales ocupa cada fixture, en orden de dirección, con los choques.
+ *  `sent`: los universos que tienen salida, o null si todavía no importa. */
+export function describePatch(
+  instances: FixtureInstance[],
+  definitions: FixtureDefinition[],
+  sent: number[] | null = null,
+): PatchRow[] {
   const rows = instances
     .map((instance): PatchRow => {
       const count = channelCount(definitions.find((d) => d.id === instance.definitionId));
@@ -123,8 +129,9 @@ export function describePatch(instances: FixtureInstance[], definitions: Fixture
     .sort((a, b) => a.instance.universe - b.instance.universe || a.first - b.first);
 
   for (const row of rows) {
-    if (row.instance.universe !== OUTPUT_UNIVERSE) {
-      row.issues.push(`Universo ${row.instance.universe}: solo se envía el universo ${OUTPUT_UNIVERSE}`);
+    // Sin ninguna salida ya se sabe que no sale nada.
+    if (sent && sent.length > 0 && !sent.includes(row.instance.universe)) {
+      row.issues.push(`Universo ${row.instance.universe}: no sale por ningún lado. Agrégale una salida.`);
     }
     if (row.last > DMX_CHANNELS) row.issues.push(`Se pasa del canal ${DMX_CHANNELS}`);
     for (const other of rows) {
@@ -140,18 +147,21 @@ export function describePatch(instances: FixtureInstance[], definitions: Fixture
   return rows;
 }
 
-/** Primera dirección donde entran `count` canales seguidos sin pisar a nadie;
- *  1 si ya no queda lugar. */
-export function nextFreeAddress(
+/** Primer lugar donde entran `count` canales seguidos sin pisar a nadie; si un
+ *  universo está lleno, sigue en el próximo. */
+export function nextFreeSlot(
   instances: FixtureInstance[],
   definitions: FixtureDefinition[],
   count: number,
-): number {
-  let address = 1;
-  for (const row of describePatch(instances, definitions)) {
-    if (row.instance.universe !== OUTPUT_UNIVERSE) continue;
-    if (address + count - 1 < row.first) break;
-    address = Math.max(address, row.last + 1);
+): { universe: number; address: number } {
+  const rows = describePatch(instances, definitions);
+  for (let universe = 1; ; universe++) {
+    let address = 1;
+    for (const row of rows) {
+      if (row.instance.universe !== universe) continue;
+      if (address + count - 1 < row.first) break;
+      address = Math.max(address, row.last + 1);
+    }
+    if (address + count - 1 <= DMX_CHANNELS || address === 1) return { universe, address };
   }
-  return address + count - 1 <= DMX_CHANNELS ? address : 1;
 }

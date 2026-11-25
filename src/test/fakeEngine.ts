@@ -1,7 +1,7 @@
 import { vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import { WasmShow } from "@/lib/wasmEngine";
-import { DMX_STOPPED, type EngineMessage, type EngineStatus, type Session } from "@/types/engine";
+import type { EngineMessage, EngineStatus, OutputConfig, OutputStatus, Session } from "@/types/engine";
 
 type Args = Record<string, unknown>;
 type Request = { cmd: string } & Args;
@@ -21,7 +21,7 @@ export function fakeEngine(overrides: Record<string, (args: Args) => unknown> = 
     show: new WasmShow(),
     bootId: "motor-1",
     ack: 0,
-    dmx: DMX_STOPPED as EngineStatus,
+    outputs: [] as OutputStatus[],
     remote: { running: false, pin: "123456", error: null as string | null, addresses: ADDRESSES },
     session: null as Session | null,
     listening: false,
@@ -32,7 +32,19 @@ export function fakeEngine(overrides: Record<string, (args: Args) => unknown> = 
     applied: [] as EngineMessage[],
     waiters: [] as (() => void)[],
   };
-  const running = (output: string): EngineStatus => ({ ...DMX_STOPPED, state: "running", output, fps: 30, worstGapMs: 35 });
+  const NAMES = { mock: "Mock (sin hardware)", open_dmx: "Cable FTDI", enttec: "Enttec", artnet: "Art-Net", sacn: "sACN" };
+  const running = (config: OutputConfig): OutputStatus => ({
+    config,
+    state: "running",
+    name: config.port ? `${NAMES[config.adapter]} (${config.port})` : NAMES[config.adapter],
+    lastError: null,
+    fps: 30,
+    worstGapMs: 35,
+  });
+  const dmx = (): EngineStatus => ({
+    state: state.outputs.length === 0 ? "stopped" : (state.outputs.find((o) => o.state !== "running")?.state ?? "running"),
+    outputs: state.outputs,
+  });
 
   const changed = () => state.waiters.splice(0).forEach((wake) => wake());
 
@@ -60,14 +72,22 @@ export function fakeEngine(overrides: Record<string, (args: Args) => unknown> = 
       }
       const focus = state.focus;
       state.focus = false;
-      return { bootId: state.bootId, ack: state.ack, changes, dmx: state.dmx, focus };
+      return { bootId: state.bootId, ack: state.ack, changes, dmx: dmx(), focus };
     },
     frame: ({ universe }) => state.show.frame(universe as number),
-    connect: ({ adapter, port }) => {
-      state.dmx = running(adapter === "mock" ? "Mock (sin hardware)" : `Cable FTDI (${port})`);
-      return state.dmx;
+    addOutput: ({ output }) => {
+      state.outputs = [...state.outputs, running(output as OutputConfig)];
+      return dmx();
     },
-    disconnect: () => (state.dmx = DMX_STOPPED),
+    setOutputs: ({ outputs }) => {
+      state.outputs = (outputs as OutputConfig[]).map(running);
+      return dmx();
+    },
+    removeOutput: ({ id }) => {
+      state.outputs = state.outputs.filter((o) => o.config.id !== id);
+      return dmx();
+    },
+    discoverArtnet: () => [],
     remoteStatus: () => ({ ...state.remote }),
     remoteSetEnabled: ({ enabled }) => ({ ...Object.assign(state.remote, { running: enabled }) }),
     remoteNewPin: () => ({ ...Object.assign(state.remote, { pin: "654321" }) }),

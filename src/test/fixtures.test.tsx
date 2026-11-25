@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import App from "@/App";
-import { nextFreeAddress } from "@/lib/dmxFrame";
+import { nextFreeSlot } from "@/lib/dmxFrame";
 import { FixtureStoreProvider, useFixtureStore } from "@/lib/fixtureStore";
 import { seedDefinitions, seedInstances } from "@/data/fixtureLibrary";
+import type { FixtureInstance } from "@/types/fixture";
 import { STORAGE_KEY } from "@/lib/showFile";
 import { ColorSwatches } from "@/components/fixtures/ColorSwatches";
 import { willAnswer } from "./dialogs";
@@ -137,22 +138,19 @@ describe("Invertir pan y tilt por montaje", () => {
 });
 
 describe("Direcciones libres", () => {
+  const free = (instances: FixtureInstance[], count: number) => nextFreeSlot(instances, seedDefinitions, count);
+
   it("busca el primer lugar donde entra entero", () => {
-    expect(nextFreeAddress(seedInstances, seedDefinitions, 16)).toBe(61);
-    expect(nextFreeAddress([], seedDefinitions, 16)).toBe(1);
+    expect(free(seedInstances, 16)).toEqual({ universe: 1, address: 61 });
+    expect(free([], 16)).toEqual({ universe: 1, address: 1 });
     const gap = seedInstances.filter((i) => i.address !== 17); // libera 17–32
-    expect(nextFreeAddress(gap, seedDefinitions, 16)).toBe(17);
-    expect(nextFreeAddress(gap, seedDefinitions, 17)).toBe(61);
-    expect(nextFreeAddress(seedInstances, seedDefinitions, 500)).toBe(1);
+    expect(free(gap, 16)).toEqual({ universe: 1, address: 17 });
+    expect(free(gap, 17)).toEqual({ universe: 1, address: 61 });
   });
 
-  it("una unidad nueva no cae encima de otra", () => {
-    render(<App />);
-    go("Fixtures");
-    go("+ Agregar unidad");
-    go("DMX Output");
-    expect(screen.queryByText(/Se pisa con/)).not.toBeInTheDocument();
-    expect(screen.getByText("61–76")).toBeInTheDocument();
+  it("con el universo lleno sigue en el próximo", () => {
+    expect(free(seedInstances, 500)).toEqual({ universe: 2, address: 1 });
+    expect(free([...seedInstances, { ...seedInstances[0], id: "x", universe: 2 }], 500)).toEqual({ universe: 3, address: 1 });
   });
 });
 

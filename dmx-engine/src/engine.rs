@@ -2,8 +2,8 @@
 //! manda por el `DmxOutput` activo. Este es el "motor DMX en Rust" del
 //! roadmap (paso 2, antes de Tauri).
 //!
-//! Diseño deliberadamente simple: un solo universe, un solo output. Si el
-//! cable se desconecta, el hilo lo reporta en `status()` e intenta reabrir
+//! Un motor es un universo por una salida; para varias salidas, varios
+//! motores. Si el cable se desconecta, el hilo lo reporta en `status()` e intenta reabrir
 //! el puerto hasta que vuelva — el show no depende de que alguien lo note.
 
 use crate::output::{DmxOutput, DmxOutputError};
@@ -82,12 +82,37 @@ impl DmxEngine {
         // Antes de abrir: un puerto COM solo admite un dueño a la vez, y el
         // hilo anterior puede ser quien lo tiene tomado.
         self.stop();
+        let output = open()?;
+        self.run(Some(output), String::new(), open, fps);
+        Ok(())
+    }
 
-        let mut output = Some(open()?);
+    /// Como `start`, pero si la primera apertura falla queda reintentando: es
+    /// lo que se quiere al abrir el programa con el cable todavía sin enchufar.
+    /// `name` es lo que se muestra mientras tanto.
+    pub fn start_retrying<F>(&mut self, name: String, open: F, fps: u32)
+    where
+        F: Fn() -> Result<Box<dyn DmxOutput>, DmxOutputError> + Send + 'static,
+    {
+        self.stop();
+        match open() {
+            Ok(output) => self.run(Some(output), name, open, fps),
+            Err(error) => {
+                self.run(None, name, open, fps);
+                self.update_status(|s| s.last_error = Some(error.to_string()));
+            }
+        }
+    }
+
+    fn run<F>(&mut self, first: Option<Box<dyn DmxOutput>>, name: String, open: F, fps: u32)
+    where
+        F: Fn() -> Result<Box<dyn DmxOutput>, DmxOutputError> + Send + 'static,
+    {
+        let mut output = first;
         self.update_status(|s| {
             *s = EngineStatus {
-                state: EngineState::Running,
-                output: output.as_ref().map(|o| o.name()).unwrap_or_default(),
+                state: if output.is_some() { EngineState::Running } else { EngineState::Reconnecting },
+                output: output.as_ref().map_or(name, |o| o.name()),
                 ..EngineStatus::default()
             }
         });
@@ -107,7 +132,7 @@ impl DmxEngine {
             let mut last_attempt = Instant::now();
             let mut window_start = Instant::now();
             let mut window_frames = 0u32;
-            let mut last_frame = Instant::now();
+            let mut last_frame: Option<Instant> = None;
 
             while running.load(Ordering::SeqCst) {
                 let tick_start = Instant::now();
@@ -117,8 +142,8 @@ impl DmxEngine {
                         Ok(()) => {
                             consecutive_errors = 0;
                             window_frames += 1;
-                            let gap = last_frame.elapsed();
-                            last_frame = Instant::now();
+                            let gap = last_frame.map_or(Duration::ZERO, |at| at.elapsed());
+                            last_frame = Some(Instant::now());
                             set_status(&|s| s.worst_gap = s.worst_gap.max(gap));
                         }
                         Err(err) => {
@@ -138,10 +163,12 @@ impl DmxEngine {
                     last_attempt = Instant::now();
                     match open() {
                         Ok(out) => {
+                            let name = out.name();
                             output = Some(out);
                             consecutive_errors = 0;
                             set_status(&|s| {
                                 s.state = EngineState::Running;
+                                s.output = name.clone();
                                 s.last_error = None;
                             });
                         }
@@ -167,7 +194,6 @@ impl DmxEngine {
         });
 
         self.handle = Some(handle);
-        Ok(())
     }
 
     pub fn stop(&mut self) {
@@ -272,6 +298,30 @@ mod tests {
     }
 
     #[test]
+    fn starting_without_the_cable_waits_for_it() {
+        let plugged = Arc::new(AtomicBool::new(false));
+        let for_open = plugged.clone();
+        let open = move || -> Result<Box<dyn DmxOutput>, DmxOutputError> {
+            if for_open.load(Ordering::SeqCst) {
+                Ok(Box::new(Pluggable(for_open.clone())))
+            } else {
+                Err(unplugged())
+            }
+        };
+        let mut engine = DmxEngine::new(DmxUniverse::new());
+        engine.start_retrying("Cable FTDI (COM5)".into(), open, 50);
+        let status = engine.status();
+        assert_eq!((status.state, status.output.as_str()), (EngineState::Reconnecting, "Cable FTDI (COM5)"));
+        assert!(status.last_error.unwrap().contains("cable desconectado"));
+
+        plugged.store(true, Ordering::SeqCst);
+        thread::sleep(RECONNECT_EVERY + Duration::from_millis(400));
+        let status = engine.status();
+        assert_eq!((status.state, status.output.as_str()), (EngineState::Running, "Pluggable"));
+        assert!(status.worst_gap < Duration::from_millis(500), "la espera inicial no es un corte");
+    }
+
+    #[test]
     fn unplugging_is_reported_and_plugging_back_reconnects_alone() {
         let plugged = Arc::new(AtomicBool::new(true));
         let for_open = plugged.clone();
@@ -289,6 +339,7 @@ mod tests {
             )
             .unwrap();
 
+        thread::sleep(Duration::from_millis(100)); // que alcance a salir algo
         plugged.store(false, Ordering::SeqCst);
         thread::sleep(Duration::from_millis(300));
         let status = engine.status();

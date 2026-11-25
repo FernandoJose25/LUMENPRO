@@ -2,9 +2,7 @@ import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useFixtureStore } from "@/lib/fixtureStore";
 import { readSetting, writeSetting } from "@/lib/settings";
-import type { EngineStatus } from "@/types/engine";
-
-export type DmxAdapter = "open_dmx" | "enttec" | "mock";
+import type { DmxAdapter, EngineStatus, OutputConfig } from "@/types/engine";
 
 export interface SerialPort {
   name: string;
@@ -12,13 +10,30 @@ export interface SerialPort {
   description: string;
 }
 
+/** Nodo Art-Net que contestó en la red. */
+export interface ArtNetNode {
+  ip: string;
+  name: string;
+  universes: number[];
+}
+
+export const ADAPTER_LABELS: Record<DmxAdapter, string> = {
+  open_dmx: "Cable FTDI (Open DMX)",
+  enttec: "Enttec DMX USB PRO",
+  artnet: "Art-Net (red)",
+  sacn: "sACN / E1.31 (red)",
+  mock: "Simulado (sin cable)",
+};
+export const isNetwork = (adapter: DmxAdapter) => adapter === "artnet" || adapter === "sacn";
+export const isUsb = (adapter: DmxAdapter) => adapter === "open_dmx" || adapter === "enttec";
+
 // 30 y no 40: con el cable FTDI el timing lo marca la PC y 512 canales tardan
 // 22,6 ms en salir. A 40 casi no queda margen (ver OpenDmxOutput).
 export const DEFAULT_FPS = 30;
 
-/** Último adaptador conectado. Si la app se cierra en pleno evento, al abrirla
- *  las luces vuelven sin tocar nada. "Desconectar" lo olvida. */
-const LAST_KEY = "dmx.last";
+/** Las salidas conectadas. Si la app se cierra en pleno evento, al abrirla las
+ *  luces vuelven sin tocar nada. Quitar una la olvida. */
+const SAVED = "dmx.outputs";
 
 export interface DmxOutput {
   /** false en el navegador: ahí no hay motor DMX, solo interfaz. */
@@ -27,13 +42,25 @@ export interface DmxOutput {
   ports: SerialPort[];
   error: string | null;
   refreshPorts: () => Promise<void>;
-  connect: (adapter: DmxAdapter, port: string, fps: number) => Promise<void>;
-  disconnect: () => Promise<void>;
+  /** true si se pudo abrir. */
+  add: (output: Omit<OutputConfig, "id">) => Promise<boolean>;
+  remove: (id: string) => Promise<void>;
+  findNodes: () => Promise<ArtNetNode[]>;
 }
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
-/** La conexión con el adaptador. Se monta una sola vez (AppShell). */
+function savedOutputs(): OutputConfig[] {
+  const saved = readSetting<OutputConfig[]>(SAVED);
+  if (saved) return saved;
+  // Hasta la versión anterior había una sola.
+  const last = readSetting<{ adapter: DmxAdapter; port: string; fps?: number }>("dmx.last");
+  return last
+    ? [{ id: "1", universe: 1, fps: last.fps ?? DEFAULT_FPS, host: "", target: 0, adapter: last.adapter, port: last.port }]
+    : [];
+}
+
+/** Las salidas DMX. Se monta una sola vez (AppShell). */
 export function useDmxOutput(): DmxOutput {
   const { engine } = useFixtureStore();
   const available = engine.desktop;
@@ -54,37 +81,55 @@ export function useDmxOutput(): DmxOutput {
     if (available) void refreshPorts();
   }, [available, refreshPorts]);
 
-  const connect = useCallback(
-    async (adapter: DmxAdapter, port: string, fps: number) => {
+  /** Cambia las salidas y recuerda cómo quedaron. */
+  const change = useCallback(
+    async (request: Record<string, unknown>): Promise<boolean> => {
       setError(null);
       try {
-        await engine.request({ cmd: "connect", adapter, port, fps });
-        writeSetting(LAST_KEY, { adapter, port, fps });
+        const next = await engine.request<EngineStatus>(request);
+        engine.noteDmx(next);
+        writeSetting(
+          SAVED,
+          next.outputs.map((o) => o.config),
+        );
+        return true;
       } catch (e) {
         setError(message(e));
+        return false;
       }
     },
     [engine],
   );
 
   useEffect(() => {
-    // Con un show en marcha la salida ya está como debe.
+    // Con un show en marcha las salidas ya están como deben.
     if (!available || engine.resumed) return;
-    const last = readSetting<{ adapter: DmxAdapter; port: string; fps?: number }>(LAST_KEY);
-    if (last) void connect(last.adapter, last.port, last.fps ?? DEFAULT_FPS);
-  }, [available, connect, engine]);
+    const outputs = savedOutputs();
+    if (outputs.length > 0) void change({ cmd: "setOutputs", outputs });
+  }, [available, change, engine]);
 
-  const disconnect = useCallback(async () => {
-    writeSetting(LAST_KEY, null);
+  const add = useCallback(
+    (output: Omit<OutputConfig, "id">) =>
+      change({ cmd: "addOutput", output: { ...output, id: `out-${crypto.randomUUID()}` } }),
+    [change],
+  );
+  const remove = useCallback(
+    async (id: string) => {
+      await change({ cmd: "removeOutput", id });
+    },
+    [change],
+  );
+  const findNodes = useCallback(async () => {
     setError(null);
     try {
-      await engine.request({ cmd: "disconnect" });
+      return await engine.request<ArtNetNode[]>({ cmd: "discoverArtnet" });
     } catch (e) {
       setError(message(e));
+      return [];
     }
   }, [engine]);
 
-  return { available, status, ports, error, refreshPorts, connect, disconnect };
+  return { available, status, ports, error, refreshPorts, add, remove, findNodes };
 }
 
 const FRAME_REFRESH_MS = 100;

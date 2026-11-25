@@ -42,6 +42,12 @@
   UV, CMY, HSV, canales finos, barras por foco (effects y simulador), dimmer
   general y por foco. El humo no sigue la intensidad ni "Identificar". El
   simulador muestra color, gobo, prisma, zoom, iris y recorrido real.
+- **Art-Net, sACN y varios universos** (2026-11-25): `dmx-engine/src/network.rs`.
+  Varias salidas a la vez (cable, Enttec, Art-Net, sACN, simulada), cada una con
+  su universo; buscar nodos Art-Net; sección "Universes" con los 512 canales.
+  Verificado con receptores de terceros (librerías `sacn` y `stupidArtnet` de
+  Python): 512 canales iguales, 40 FPS. **Falta con un nodo real**, y la búsqueda
+  de nodos solo se probó con respuestas armadas según la norma.
 - **Diálogos propios** (`lib/dialogs.ts`): los de Windows congelaban la interfaz.
 - **Salida DMX conectada a la interfaz** (2026-11-24): driver del cable FTDI
   (`OpenDmxOutput`: 250 kbaudios, 8N2, BREAK por software, 30 FPS), estado real

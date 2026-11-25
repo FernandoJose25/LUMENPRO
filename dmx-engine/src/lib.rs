@@ -7,10 +7,12 @@
 //! `cargo run --bin smoke_test`).
 
 pub mod engine;
+pub mod network;
 pub mod output;
 pub mod universe;
 
 pub use engine::{DmxEngine, EngineState, EngineStatus};
+pub use network::{discover_artnet, ArtNetNode, ArtNetOutput, SacnOutput};
 pub use output::{
     list_ports, DmxOutput, DmxOutputError, EnttecUsbProOutput, MockOutput, OpenDmxOutput, PortChip,
     PortInfo,

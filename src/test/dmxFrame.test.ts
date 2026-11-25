@@ -269,14 +269,13 @@ describe("describePatch — choques de direcciones", () => {
   });
 
   it("avisa si se pasa del canal 512 o está en un universo que no se envía", () => {
-    const rows = describePatch(
-      [
-        { ...par1, id: "a", address: 510 },
-        { ...par1, id: "b", universe: 2 },
-      ],
-      seedDefinitions,
-    );
-    expect(rows[0].issues).toEqual(["Se pasa del canal 512"]);
-    expect(rows[1].issues).toEqual(["Universo 2: solo se envía el universo 1"]);
+    const instances = [
+      { ...par1, id: "a", address: 510 },
+      { ...par1, id: "b", universe: 2 },
+    ];
+    const issues = (sent: number[] | null) => describePatch(instances, seedDefinitions, sent).map((r) => r.issues);
+    expect(issues([1])).toEqual([["Se pasa del canal 512"], ["Universo 2: no sale por ningún lado. Agrégale una salida."]]);
+    expect(issues([1, 2])).toEqual([["Se pasa del canal 512"], []]);
+    expect(issues([])).toEqual([["Se pasa del canal 512"], []]); // sin salidas ya se sabe
   });
 });

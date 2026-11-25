@@ -7,7 +7,6 @@ import { BlackoutButton } from "./BlackoutButton";
 
 interface TopbarProps {
   dmx: EngineStatus;
-  universe: number;
   /** De la música que se está escuchando; null si no hay. */
   bpm: number | null;
   onSave: () => Promise<void>;
@@ -25,27 +24,34 @@ const DMX_INDICATOR = {
 /** Barra superior — sección 4: conexión DMX, universe, BPM, FPS, undo/redo/save, Blackout. */
 export function Topbar({
   dmx,
-  universe,
   bpm,
   onSave,
   blackoutActive,
   onBlackout,
   onReleaseBlackout,
 }: TopbarProps) {
+  const universes = [...new Set(dmx.outputs.map((o) => o.config.universe))].sort((a, b) => a - b);
+  // Con varias salidas, la más lenta.
+  const fps = dmx.outputs.length > 0 ? Math.min(...dmx.outputs.map((o) => o.fps)) : 0;
   return (
     <header className="flex h-12 shrink-0 items-center gap-4 border-b border-border bg-panel px-3">
       <span className="text-sm font-semibold tracking-wide text-text-primary">LUMEN PRO</span>
       <div className="h-5 w-px bg-border" />
 
       <div className="flex items-center gap-4">
-        <StatusIndicator label="USB-DMX" {...DMX_INDICATOR[dmx.state]} />
-        <StatusIndicator status="active" label={`Universe ${universe}`} />
+        <StatusIndicator label="DMX" {...DMX_INDICATOR[dmx.state]} />
+        {universes.length > 0 ? (
+          <StatusIndicator
+            status="active"
+            label={`${universes.length === 1 ? "Universo" : "Universos"} ${universes.join(", ")}`}
+          />
+        ) : null}
         {bpm !== null ? <span className="font-mono text-xs text-text-secondary">{bpm} BPM</span> : null}
       </div>
 
       <div className="flex-1" />
 
-      <span className="hidden font-mono text-xs text-text-secondary md:inline">FPS {dmx.fps}</span>
+      <span className="hidden font-mono text-xs text-text-secondary md:inline">FPS {fps}</span>
 
       <div className="flex items-center gap-1.5">
         <UndoButtons />

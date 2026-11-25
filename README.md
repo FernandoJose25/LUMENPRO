@@ -8,7 +8,7 @@
 
 Software de escritorio para controlar luces de escenario por **DMX512**: cabezas móviles, PARs y otros equipos. Es una alternativa propia a consolas como MA o Chamsys, pensada para el equipo real de mi empresa de eventos (2× cabezas móviles Beam 280 y 4× PAR LED).
 
-> **English summary:** Desktop DMX512 lighting console. React + TypeScript UI (design system, resizable workspace, fixture control, scenes, groups, chases with crossfades, parametric effects, beat tracking from live audio, stage simulator) plus a Rust show engine that runs in its own supervised process, so the lights keep going if the window hangs or crashes (and the window is reopened automatically); the same engine is compiled to WASM for the browser and the test suite. Open DMX (FTDI) and Enttec DMX USB PRO drivers with automatic reconnection. Integration tests with Vitest + Testing Library and unit tests in Rust.
+> **English summary:** Desktop DMX512 lighting console. React + TypeScript UI (design system, resizable workspace, fixture control, scenes, groups, chases with crossfades, parametric effects, beat tracking from live audio, stage simulator) plus a Rust show engine that runs in its own supervised process, so the lights keep going if the window hangs or crashes (and the window is reopened automatically); the same engine is compiled to WASM for the browser and the test suite. Open DMX (FTDI), Enttec DMX USB PRO, Art-Net and sACN outputs (several universes at once) with automatic reconnection. Integration tests with Vitest + Testing Library and unit tests in Rust.
 
 ![Simulador del escenario](docs/screenshots/escenario.png)
 
@@ -35,8 +35,8 @@ Lo diseñé y desarrollé solo, a partir de un brief de producto propio de 37 se
 - **Motor del show independiente** (`show-engine/` y `src-tauri/src/engine/`): momentos, chases, effects y fades corren en Rust, en un proceso aparte con su guardián. Si la ventana se traba o se cae, las luces y el celular siguen y la ventana se reabre sola. El mismo motor, en WASM, mueve la versión de navegador y los tests.
 - **Salida DMX en Rust** (`dmx-engine/`):
   - universo de 512 canales thread-safe;
-  - hilo de salida a FPS fijo;
-  - drivers para **cable FTDI (Open DMX)** y **Enttec DMX USB PRO** por puerto serie;
+  - varias salidas a la vez, cada una con su universo e hilo a FPS fijo;
+  - drivers para **cable FTDI (Open DMX)** y **Enttec DMX USB PRO** por puerto serie, y **Art-Net** y **sACN (E1.31)** por red, con búsqueda de nodos;
   - reconexión automática si se suelta el cable;
   - driver Mock para desarrollar sin hardware.
 - **App de escritorio con Tauri 2** (`src-tauri/`): la ventana habla con el proceso del motor y guarda el show en disco, con exportar e importar.
@@ -49,7 +49,7 @@ Lo diseñé y desarrollé solo, a partir de un brief de producto propio de 37 se
 | Estado | Store propio con Context; el show se guarda en `show.json` (app) o `localStorage` (navegador) |
 | Motor | Rust: crates `lumenpro_show` (nativo y WASM) y `lumenpro_dmx`, hilos, `serialport` |
 | Escritorio | Tauri 2 |
-| Calidad | Vitest + Testing Library + jsdom (214 tests contra el motor real en WASM), `cargo test` (86 tests), GitHub Actions |
+| Calidad | Vitest + Testing Library + jsdom (219 tests contra el motor real en WASM), `cargo test` (101 tests), GitHub Actions |
 
 ## Estructura
 

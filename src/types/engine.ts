@@ -53,17 +53,44 @@ export interface EngineChanges {
   playback?: Playback;
 }
 
-/** Salida DMX. */
-export interface EngineStatus {
-  state: "stopped" | "running" | "reconnecting";
-  output: string;
+export type DmxAdapter = "open_dmx" | "enttec" | "artnet" | "sacn" | "mock";
+
+/** Por dónde sale un universo del show. */
+export interface OutputConfig {
+  id: string;
+  adapter: DmxAdapter;
+  /** Universo del show. */
+  universe: number;
+  fps: number;
+  /** Los de USB: "COM5". */
+  port: string;
+  /** Los de red: IP del nodo, o vacío para toda la red. */
+  host: string;
+  /** Los de red: número de universo del otro lado. */
+  target: number;
+}
+
+export type OutputState = "stopped" | "running" | "reconnecting";
+
+export interface OutputStatus {
+  config: OutputConfig;
+  state: OutputState;
+  name: string;
   lastError: string | null;
   fps: number;
   /** La pausa más larga entre dos frames desde que se conectó. */
   worstGapMs: number;
 }
 
-export const DMX_STOPPED: EngineStatus = { state: "stopped", output: "", lastError: null, fps: 0, worstGapMs: 0 };
+export interface EngineStatus {
+  /** "stopped" si no hay salidas; con varias, la peor. */
+  state: OutputState;
+  outputs: OutputStatus[];
+  /** Del motor mismo, no de una salida. */
+  lastError?: string;
+}
+
+export const DMX_STOPPED: EngineStatus = { state: "stopped", outputs: [] };
 
 /** El show que el motor ya tenía en marcha cuando se abrió la ventana. */
 export interface Session {
