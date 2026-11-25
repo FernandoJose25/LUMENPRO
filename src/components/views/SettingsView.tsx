@@ -34,7 +34,7 @@ export function SettingsView() {
   };
 
   return (
-    <div className="min-w-0 flex-1 p-2">
+    <div className="min-w-0 flex-1 overflow-y-auto p-2">
       <Panel title="SHOW" className="max-w-xl">
         <p className="mb-3 text-xs text-text-secondary">
           El show se guarda solo. Exporta una copia antes de cada evento: sirve de respaldo y para
@@ -68,6 +68,34 @@ export function SettingsView() {
           </p>
         ) : null}
       </Panel>
+      <Credits />
     </div>
+  );
+}
+
+/** La licencia de QLC+ pide conservar su texto y los créditos. */
+function Credits() {
+  const [text, setText] = useState<string | null>(null);
+
+  const show = async () => {
+    const files = ["library/NOTICE.txt", "library/LICENSE.txt"];
+    const parts = files.map(async (file) => (await fetch(import.meta.env.BASE_URL + file)).text());
+    setText((await Promise.all(parts)).join("\n\n"));
+  };
+
+  return (
+    <Panel title="BIBLIOTECA DE EQUIPOS" className="mt-2 max-w-xl">
+      <p className="mb-3 text-xs text-text-secondary">
+        Los perfiles y las imágenes de gobos son de QLC+ (qlcplus.org), de Heikki Junnila, Massimo Callegari y sus
+        colaboradores, bajo licencia Apache 2.0.
+      </p>
+      {text === null ? (
+        <Button onClick={() => show().catch((e) => setText(`No se pudo leer la licencia: ${e}`))}>Ver licencia</Button>
+      ) : (
+        <pre className="max-h-72 overflow-auto whitespace-pre-wrap rounded-control border border-border bg-panel2 p-3 text-[11px] text-text-secondary">
+          {text}
+        </pre>
+      )}
+    </Panel>
   );
 }

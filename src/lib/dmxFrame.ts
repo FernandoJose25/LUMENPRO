@@ -17,38 +17,57 @@ export interface FrameInput {
   identifyId: string | null;
 }
 
-/** Canales que emiten luz. MODE entra porque un PAR en programa automático
- *  puede ignorar el dimmer. Pan/Tilt, gobos, color, foco y MACRO (reset,
- *  lámpara) quedan fuera a propósito: llevarlos a 0 movería las cabezas. */
-const LIGHT_TYPES: ChannelType[] = ["DIMMER", "RED", "GREEN", "BLUE", "WHITE", "MODE"];
+// Las mismas reglas que show-engine/src/model.rs y frame.rs.
+
+const EMITTERS: ChannelType[] = ["RED", "GREEN", "BLUE", "WHITE", "AMBER", "UV", "LIME", "INDIGO"];
+const CMY: ChannelType[] = ["CYAN", "MAGENTA", "YELLOW"];
+
+const has = (definition: FixtureDefinition, type: ChannelType) => definition.channels.some((c) => c.type === type);
+
+/** Con los tres y sin rojo son filtros: más valor, menos luz. */
+export const isSubtractive = (definition: FixtureDefinition) =>
+  CMY.every((type) => has(definition, type)) && !has(definition, "RED");
+
+/** El canal es de un LED de color. */
+export const emits = (type: ChannelType, definition: FixtureDefinition) =>
+  EMITTERS.includes(type) || (CMY.includes(type) && !isSubtractive(definition));
+
+const isLight = (type: ChannelType, definition: FixtureDefinition) =>
+  type === "DIMMER" || type === "MODE" || type === "COLOR" || emits(type, definition);
+
+/** Humo y ventiladores no son luces. */
+export const givesLight = (definition: FixtureDefinition) => !["Smoke", "Hazer", "Fan"].includes(definition.kind ?? "");
 
 function goesDarkOnBlackout(channel: FixtureChannel, definition: FixtureDefinition): boolean {
-  if (LIGHT_TYPES.includes(channel.type)) return true;
-  // Sin dimmer ni RGBW, cerrar el shutter es la única forma de apagarlo.
-  return channel.type === "STROBE" && !definition.channels.some((c) => LIGHT_TYPES.includes(c.type));
+  if (isLight(channel.type, definition)) return true;
+  // Sin dimmer ni color, cerrar el shutter es la única forma de apagarlo.
+  return channel.type === "STROBE" && !definition.channels.some((c) => isLight(c.type, definition));
 }
-
-const COLOR_TYPES: ChannelType[] = ["RED", "GREEN", "BLUE", "WHITE"];
 
 /** La intensidad general baja el dimmer; sin dimmer, los colores. */
 function followsMaster(channel: FixtureChannel, definition: FixtureDefinition): boolean {
-  if (channel.type === "DIMMER") return true;
-  return COLOR_TYPES.includes(channel.type) && !definition.channels.some((c) => c.type === "DIMMER");
+  if (!givesLight(definition)) return false;
+  const dimmers = definition.channels.filter((c) => c.type === "DIMMER");
+  if (dimmers.length === 0) return emits(channel.type, definition);
+  if (channel.type !== "DIMMER") return false;
+  if (dimmers.some((c) => c.master)) return channel.master === true;
+  const inAHead = (c: FixtureChannel) => definition.heads?.some((head) => head.includes(c.id)) ?? false;
+  return !inAHead(channel) || dimmers.every(inAHead);
 }
 
 /** Valor para el botón Estrobo, o null si no se sabe cuál es. En una cabeza
  *  sin rango conocido no se adivina: podría caer en "cerrado". En un PAR lo
  *  habitual es lento a rápido en todo el canal. */
 function strobeValue(channel: FixtureChannel, definition: FixtureDefinition): number | null {
-  const range = channel.presets.find((p) => p.label === "Estrobo");
+  const range = channel.presets.find((p) => p.label === "Estrobo" || p.kind === "strobe");
   if (range) return range.dmxFrom + (range.dmxTo - range.dmxFrom) * 0.75;
-  return definition.channels.some((c) => c.type === "PAN") ? null : 200;
+  return has(definition, "PAN") ? null : 200;
 }
 
 /** Solo lo que es cantidad de luz: en pan/tilt o en un canal por rangos una
  *  curva cambiaría a dónde apunta o qué hace. */
 export function acceptsCurve(type: ChannelType): boolean {
-  return type === "DIMMER" || COLOR_TYPES.includes(type);
+  return type === "DIMMER" || EMITTERS.includes(type) || CMY.includes(type);
 }
 
 function applyCurve(channel: FixtureChannel, value: number): number {
@@ -73,14 +92,18 @@ export function effectiveValue(
   let value = input.liveValues[instance.id]?.[channel.id] ?? channel.defaultValue;
   if (input.strobeActive && channel.type === "STROBE") value = strobeValue(channel, definition) ?? value;
   if (followsMaster(channel, definition)) value = (value * input.master) / 100;
-  if (input.identifyId === instance.id) {
-    if (channel.type === "DIMMER" || COLOR_TYPES.includes(channel.type)) value = 255;
-    if (channel.type === "MODE") value = 0;
+  if (input.identifyId === instance.id && givesLight(definition)) {
+    if (channel.type === "DIMMER" || emits(channel.type, definition)) value = 255;
+    if (channel.type === "MODE" || channel.type === "COLOR") value = 0;
     if (channel.type === "STROBE") value = channel.defaultValue;
   }
   if (input.blackoutActive && goesDarkOnBlackout(channel, definition)) return 0;
   return applyCurve(channel, value);
 }
+
+/** El número más alto y no la cantidad: un perfil puede tener huecos. */
+export const channelCount = (definition: FixtureDefinition | undefined) =>
+  (definition?.channels ?? []).reduce((max, c) => Math.max(max, c.index), 0);
 
 export interface PatchRow {
   instance: FixtureInstance;
@@ -94,9 +117,7 @@ export interface PatchRow {
 export function describePatch(instances: FixtureInstance[], definitions: FixtureDefinition[]): PatchRow[] {
   const rows = instances
     .map((instance): PatchRow => {
-      // El número más alto y no la cantidad: un perfil puede tener huecos.
-      const channels = definitions.find((d) => d.id === instance.definitionId)?.channels ?? [];
-      const count = Math.max(0, ...channels.map((c) => c.index));
+      const count = channelCount(definitions.find((d) => d.id === instance.definitionId));
       return { instance, first: instance.address, last: instance.address + count - 1, issues: [] };
     })
     .sort((a, b) => a.instance.universe - b.instance.universe || a.first - b.first);

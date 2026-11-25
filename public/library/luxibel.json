@@ -1,0 +1,1 @@
+[{"model":"LX161","type":"Strobe","channels":[{"n":"Dimmer","t":"DIMMER"},{"n":"Cold White","t":"WHITE"},{"n":"Warm White","t":"WHITE"},{"n":"Strobe","t":"STROBE","p":[[0,10,"No function"],[11,255,"Strobe with increasing speed"]]}],"modes":[{"n":"4 Channel","c":[0,1,2,3]}],"phys":{"lens":[60,60],"width":250}}]

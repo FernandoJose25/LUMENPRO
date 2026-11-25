@@ -1,0 +1,8 @@
+Los perfiles de equipos (esta carpeta) y las imágenes de gobos (public/gobos)
+provienen de Q Light Controller Plus (QLC+), https://www.qlcplus.org
+Copyright (c) Heikki Junnila, Massimo Callegari y los colaboradores de QLC+.
+Se distribuyen bajo la licencia Apache 2.0 (LICENSE.txt).
+
+Cambios: los archivos .qxf se convirtieron a JSON con scripts/import-qlcplus.mjs
+(tipos de canal y valores iniciales propios de LUMEN PRO). Las imágenes no se
+modificaron. Versión de origen: 87b988ac2427fe40a1c1e58be9ace62c41b17292.

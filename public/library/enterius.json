@@ -1,0 +1,1 @@
+[{"model":"EC-133DMX","type":"Color Changer","channels":[{"n":"Channel 1","t":"DIMMER"},{"n":"Channel 2","t":"DIMMER"},{"n":"Channel 3","t":"DIMMER"},{"n":"Red brightness","t":"RED"},{"n":"Green brightness","t":"GREEN"},{"n":"Blue brightness","t":"BLUE"}],"modes":[{"n":"3 channel dimmer","c":[0,1,2]},{"n":"RGB controller","c":[3,4,5]}],"phys":{"width":87}}]

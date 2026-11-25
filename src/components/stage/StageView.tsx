@@ -49,8 +49,7 @@ export function StageView() {
         ) : null}
         <div className="flex shrink-0 items-center gap-3">
           <p className="flex-1 text-[11px] text-text-secondary">
-            Arrastra una luz para moverla y el fondo para girar la vista. Rueda: acercar. Doble clic: vista inicial. No
-            simula gobos ni prisma.
+            Arrastra una luz para moverla y el fondo para girar la vista. Rueda: acercar. Doble clic: vista inicial.
           </p>
           <Button
             size="sm"

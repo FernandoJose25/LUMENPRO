@@ -1,0 +1,1 @@
+[{"model":"PAR64 LED","type":"Color Changer","channels":[{"n":"Red","t":"RED"},{"n":"Green","t":"GREEN"},{"n":"Blue","t":"BLUE"},{"n":"Intensity","t":"DIMMER"},{"n":"Strobe Rate","t":"STROBE"}],"modes":[{"n":"Default","c":[0,1,2,3,4]}],"phys":{"lens":[25,25],"width":216}}]

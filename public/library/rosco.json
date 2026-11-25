@@ -1,0 +1,1 @@
+[{"model":"I-Cue","type":"Scanner","channels":[{"n":"Pan - coarse","t":"PAN","d":128},{"n":"Pan - fine","t":"PAN_FINE","b":"PAN"},{"n":"Tilt - coarse","t":"TILT","d":128},{"n":"Tilt - fine","t":"TILT_FINE","b":"TILT"}],"modes":[{"n":"2 channel","c":[0,2]},{"n":"4 channel","c":[0,1,2,3]}],"phys":{"pan":230,"tilt":57,"width":160}}]

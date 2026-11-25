@@ -621,3 +621,133 @@ fn a_session_resumes_where_it_was() {
     r.run(54_000.0);
     assert_eq!(r.active(), "b", "el avance automático conserva su hora");
 }
+
+// --- Equipos de la biblioteca ------------------------------------------
+
+/// Una sola unidad en la dirección 1.
+fn single(definition: Value) -> Rig {
+    let mut r = Rig::new();
+    r.doc["definitions"] = json!([definition]);
+    r.doc["definitions"][0]["id"] = json!("d");
+    r.doc["instances"] = json!([{ "id": "u", "definitionId": "d", "universe": 1, "address": 1, "group": "g" }]);
+    r.reset();
+    r
+}
+
+fn with(mut channel: Value, patch: Value) -> Value {
+    for (k, v) in patch.as_object().unwrap() {
+        channel[k] = v.clone();
+    }
+    channel
+}
+
+/// Barra de tres focos RGB con dimmer general y uno por foco.
+fn bar() -> Value {
+    let mut channels = vec![with(channel("m", 1, "DIMMER", 255), json!({ "master": true }))];
+    let mut heads = Vec::new();
+    for h in 0..3 {
+        let at = 2 + h * 2;
+        channels.push(channel(&format!("d{h}"), at, "DIMMER", 255));
+        channels.push(channel(&format!("r{h}"), at + 1, "RED", 0));
+        heads.push(json!([format!("d{h}"), format!("r{h}")]));
+    }
+    json!({ "channels": channels, "heads": heads, "kind": "LED Bar (Pixels)" })
+}
+
+#[test]
+fn a_bar_lowers_once_with_the_master_and_goes_dark_whole() {
+    let mut r = single(bar());
+    r.send(json!({ "type": "master", "value": 50 }));
+    let f = r.show.frame(1);
+    assert_eq!((f[0], f[1], f[3], f[5]), (128, 255, 255, 255));
+    r.send(json!({ "type": "blackout", "on": true }));
+    assert_eq!(r.show.frame(1)[..7], [0; 7]);
+}
+
+#[test]
+fn an_effect_runs_along_the_heads_of_a_bar() {
+    let mut r = single(bar());
+    r.doc["effects"][0]["groupId"] = json!("g");
+    r.doc["effects"][0]["waveform"] = json!("sawtooth");
+    r.doc["effects"][0]["min"] = json!(0);
+    r.doc["effects"][0]["max"] = json!(200);
+    r.doc["effects"][0]["phaseOffsetDeg"] = json!(90);
+    r.reset();
+    r.send(json!({ "type": "startEffect", "id": "fx" }));
+    r.run(20.0);
+    assert_eq!([r.live("u", "r0"), r.live("u", "r1"), r.live("u", "r2")], [0, 50, 100]);
+}
+
+#[test]
+fn dimmer_packs_lower_every_output() {
+    let mut r = single(json!({ "channels": [channel("a", 1, "DIMMER", 200), channel("b", 2, "DIMMER", 100)] }));
+    r.send(json!({ "type": "master", "value": 50 }));
+    assert_eq!(r.show.frame(1)[..2], [100, 50]);
+}
+
+#[test]
+fn cmy_filters_are_not_light_but_led_colors_are() {
+    let cmy = [channel("c", 1, "CYAN", 40), channel("m", 2, "MAGENTA", 40), channel("y", 3, "YELLOW", 40)];
+    let mut head = cmy.to_vec();
+    head.push(channel("dim", 4, "DIMMER", 255));
+    let mut r = single(json!({ "channels": head }));
+    r.send(json!({ "type": "blackout", "on": true }));
+    assert_eq!(r.show.frame(1)[..4], [40, 40, 40, 0]);
+
+    let leds = ["RED", "AMBER", "UV", "LIME", "YELLOW"];
+    let channels: Vec<Value> = leds.iter().enumerate().map(|(i, k)| channel(k, i as i32 + 1, k, 200)).collect();
+    let mut r = single(json!({ "channels": channels }));
+    r.send(json!({ "type": "master", "value": 50 }));
+    assert_eq!(r.show.frame(1)[..5], [100; 5]);
+    r.send(json!({ "type": "blackout", "on": true }));
+    assert_eq!(r.show.frame(1)[..5], [0; 5]);
+}
+
+#[test]
+fn identifying_or_lowering_the_light_never_fires_the_smoke() {
+    let mut r = single(json!({ "channels": [channel("smoke", 1, "DIMMER", 0)], "kind": "Smoke" }));
+    r.send(json!({ "type": "identify", "id": "u" }));
+    assert_eq!(r.show.frame(1)[0], 0);
+    r.set("u", "smoke", 200);
+    r.send(json!({ "type": "master", "value": 10 }));
+    assert_eq!(r.show.frame(1)[0], 200);
+    r.send(json!({ "type": "blackout", "on": true }));
+    assert_eq!(r.show.frame(1)[0], 0);
+}
+
+#[test]
+fn a_16_bit_dimmer_uses_its_fine_channel_to_fade_smoothly() {
+    let mut r = single(json!({ "channels": [
+        channel("dim", 1, "DIMMER", 255), with(channel("fine", 2, "FINE", 0), json!({ "fineOf": "dim" })),
+    ]}));
+    r.set("u", "dim", 101);
+    r.send(json!({ "type": "master", "value": 50 }));
+    assert_eq!(r.show.frame(1)[..2], [50, 128]);
+    r.send(json!({ "type": "master", "value": 100 }));
+    assert_eq!(r.show.frame(1)[..2], [101, 0]);
+    r.send(json!({ "type": "blackout", "on": true }));
+    assert_eq!(r.show.frame(1)[..2], [0, 0]);
+}
+
+#[test]
+fn each_head_of_a_multi_head_fixture_keeps_its_own_fine_channel() {
+    let mut r = single(json!({ "channels": [
+        channel("p1", 1, "PAN", 10), with(channel("p1f", 2, "PAN_FINE", 20), json!({ "fineOf": "p1" })),
+        channel("p2", 3, "PAN", 30), with(channel("p2f", 4, "PAN_FINE", 40), json!({ "fineOf": "p2" })),
+    ]}));
+    assert_eq!(r.show.frame(1)[..4], [10, 20, 30, 40]);
+    r.doc["instances"][0]["panInvert"] = json!(true);
+    r.reset();
+    assert_eq!(r.show.frame(1)[..4], [245, 235, 225, 215]);
+}
+
+#[test]
+fn the_strobe_button_uses_the_range_the_profile_marks() {
+    let shutter = with(channel("s", 1, "STROBE", 255), json!({ "presets": [
+        { "id": "a", "label": "Closed", "kind": "closed", "dmxFrom": 0, "dmxTo": 7 },
+        { "id": "b", "label": "Slow to fast", "kind": "strobe", "dmxFrom": 100, "dmxTo": 200 },
+    ]}));
+    let mut r = single(json!({ "channels": [shutter, channel("pan", 2, "PAN", 128)] }));
+    r.send(json!({ "type": "strobe", "on": true }));
+    assert_eq!(r.show.frame(1)[0], 175);
+}

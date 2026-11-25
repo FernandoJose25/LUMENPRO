@@ -34,6 +34,14 @@
   Al cerrarla con luces pregunta si dejarlas. Si se cae el motor, retoma de
   `session.json`. Probado con el `.exe`: ventana trabada, matada y cerrada en
   plena hora loca, señal sin pausas de más de 34 ms y celular andando.
+- **Biblioteca de QLC+** (2026-11-25): 1781 perfiles y 5234 modos de QLC+ 5.3.1
+  en `public/library`, y 584 gobos en `public/gobos`. Se generan con
+  `scripts/import-qlcplus.mjs` y se comparan canal por canal con los originales
+  con `scripts/verify-library.py` (0 diferencias). Buscador y modo en Fixtures →
+  "+ Elegir de la biblioteca"; cambiar de modo conserva los ids de canal. Ámbar,
+  UV, CMY, HSV, canales finos, barras por foco (effects y simulador), dimmer
+  general y por foco. El humo no sigue la intensidad ni "Identificar". El
+  simulador muestra color, gobo, prisma, zoom, iris y recorrido real.
 - **Diálogos propios** (`lib/dialogs.ts`): los de Windows congelaban la interfaz.
 - **Salida DMX conectada a la interfaz** (2026-11-24): driver del cable FTDI
   (`OpenDmxOutput`: 250 kbaudios, 8N2, BREAK por software, 30 FPS), estado real
@@ -99,7 +107,7 @@
       (abierto) por analogía con dos cabezas 10R, sin confirmar
 - [ ] Agregar la barra LED móvil con "+ Equipo sin manual" (modelo por identificar)
 - [x] Control XY dedicado para Pan/Tilt
-- [ ] Selector de gobo con miniaturas (necesita el manual de las cabezas)
+- [x] Selector de gobo con miniaturas (en los equipos de la biblioteca)
 - [x] Curvas de canal aplicadas en la salida
 
 ## ✅ Fase 4 — Scenes / Groups / Chases / Effects (completa, ver detalle abajo)

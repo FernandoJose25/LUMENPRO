@@ -1,0 +1,1 @@
+[{"model":"ATMe","type":"Smoke","channels":[{"n":"Unit control","t":"MACRO","p":[[0,127,"Unit OFF"],[128,128,"No function"],[129,255,"Unit ON"]]},{"n":"Haze","t":"DIMMER"},{"n":"Haze control","t":"MACRO","p":[[0,127,"Haze OFF"],[128,128,"No function"],[129,255,"Haze ON"]]}],"modes":[{"n":"3 Channel","c":[0,1,2]}],"phys":{"width":180}}]

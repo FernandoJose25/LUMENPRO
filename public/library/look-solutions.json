@@ -1,0 +1,1 @@
+[{"model":"Unique 2.1","type":"Hazer","channels":[{"n":"Pump","t":"DIMMER"},{"n":"Fan","t":"SPEED"}],"modes":[{"n":"Standard","c":[0,1]}],"phys":{"width":250}},{"model":"Viper NT","type":"Smoke","channels":[{"n":"Smoke Pump","t":"DIMMER"}],"modes":[{"n":"Standard","c":[0]}],"phys":{"width":230}}]

@@ -69,12 +69,12 @@ export function FixtureEditor({ definition, onSave, onCancel }: FixtureEditorPro
 
   const handleSave = () => {
     onSave({
+      // Lo que esta pantalla no edita (modo, focos, lente…) se conserva.
+      ...definition,
       id: definition?.id ?? `def-${crypto.randomUUID()}`,
       manufacturer: manufacturer.trim(),
       model: model.trim(),
       channels: [...channels].sort((a, b) => a.index - b.index),
-      panLimit: definition?.panLimit,
-      tiltLimit: definition?.tiltLimit,
       verified: definition?.verified ?? false,
       verifiedNote: isNew
         ? "Creado manualmente en Fixture Editor — verifícalo contra la hoja del fabricante antes de un show en vivo."

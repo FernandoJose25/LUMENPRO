@@ -22,7 +22,7 @@ Lo diseñé y desarrollé solo, a partir de un brief de producto propio de 37 se
 
 - **Design system propio:** Button, Panel, Fader, Tabs e indicadores de estado, con tokens de color y tipografía.
 - **Workspace profesional:** sidebar, topbar con estado del DMX, paneles redimensionables, **Blackout** global, deshacer y rehacer (`Ctrl + Z` / `Ctrl + Y`) y paleta de comandos (`Ctrl/Cmd + K`).
-- **Fixtures:** biblioteca, editor de canales y control dinámico. Los faders, colores y presets se generan según el perfil de cada equipo (pan/tilt, dimmer, color wheel, gobo, prisma, etc.). Las cabezas se apuntan con un pad de 16 bits, y el dimmer y los colores aceptan curvas.
+- **Fixtures:** biblioteca de QLC+ (1781 equipos, 5234 modos, con sus gobos y colores), editor de canales y control dinámico. Los faders, colores y presets se generan según el perfil de cada equipo (pan/tilt, dimmer, color wheel, gobo, prisma, etc.). Las cabezas se apuntan con un pad de 16 bits, y el dimmer y los colores aceptan curvas.
 - **Scenes:** guardan una foto de los valores en vivo y luego se recuperan, re-graban o renombran.
 - **Groups:** agrupan fixtures para controlarlos por lote.
 - **Chases:** secuencias de escenas con fade y hold, en bucle o una sola vez.
@@ -30,7 +30,7 @@ Lo diseñé y desarrollé solo, a partir de un brief de producto propio de 37 se
 - **Control por celular:** página en la red local (QR + PIN) con Siguiente, momentos, intensidad, estrobo y Blackout.
 - **Effects:** generadores paramétricos (seno, cuadrada…) aplicados sobre un grupo, con un único motor de intervalos global.
 - **Audio Reactive:** escucha la música por el micrófono o la entrada de línea, detecta los BPM y los golpes (autocorrelación y reloj predictivo propios) y los effects siguen el ritmo, los graves, los medios o los agudos. Sin música vuelven a su velocidad.
-- **Simulador del escenario:** haces en perspectiva con pan/tilt, color, zoom y estrobo reales, posiciones editables y cámara libre. Sin dependencias 3D: proyección propia sobre canvas. Se puede abrir en un segundo monitor.
+- **Simulador del escenario:** haces en perspectiva con pan/tilt, color, zoom, gobo, prisma y estrobo reales, posiciones editables y cámara libre. Sin dependencias 3D: proyección propia sobre canvas. Se puede abrir en un segundo monitor.
 - **Equipos sin manual:** identificador que barre canal por canal y guarda su función, valor inicial y presets.
 - **Motor del show independiente** (`show-engine/` y `src-tauri/src/engine/`): momentos, chases, effects y fades corren en Rust, en un proceso aparte con su guardián. Si la ventana se traba o se cae, las luces y el celular siguen y la ventana se reabre sola. El mismo motor, en WASM, mueve la versión de navegador y los tests.
 - **Salida DMX en Rust** (`dmx-engine/`):
@@ -49,7 +49,7 @@ Lo diseñé y desarrollé solo, a partir de un brief de producto propio de 37 se
 | Estado | Store propio con Context; el show se guarda en `show.json` (app) o `localStorage` (navegador) |
 | Motor | Rust: crates `lumenpro_show` (nativo y WASM) y `lumenpro_dmx`, hilos, `serialport` |
 | Escritorio | Tauri 2 |
-| Calidad | Vitest + Testing Library + jsdom (192 tests contra el motor real en WASM), `cargo test` (78 tests), GitHub Actions |
+| Calidad | Vitest + Testing Library + jsdom (214 tests contra el motor real en WASM), `cargo test` (86 tests), GitHub Actions |
 
 ## Estructura
 
@@ -82,3 +82,7 @@ npm run tauri build                   # instalador .exe (src-tauri/target/releas
 ## Estado y siguiente paso
 
 La app se empaqueta como `.exe` y el motor corre aparte de la ventana. El show se maneja desde la laptop o el celular. Falta probarlo con el adaptador y las luces reales. El detalle está en [PASOS-PENDIENTES.md](PASOS-PENDIENTES.md).
+
+## Créditos
+
+Los perfiles de equipos (`public/library`) y las imágenes de gobos (`public/gobos`) son de [QLC+](https://www.qlcplus.org) (Heikki Junnila, Massimo Callegari y colaboradores), bajo [licencia Apache 2.0](public/library/LICENSE.txt). Ver [NOTICE](public/library/NOTICE.txt).

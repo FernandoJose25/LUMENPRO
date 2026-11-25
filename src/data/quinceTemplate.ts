@@ -28,7 +28,8 @@ const rgb = (red: number, green: number, blue: number, dimmer: number): Look => 
 
 const WHITE: Look = { ...rgb(255, 255, 255, 255), WHITE: 255 };
 const HEADS_OFF: Look = { DIMMER: 0 };
-const HEADS_WHITE: Look = { DIMMER: 255 };
+// Las cabezas LED encienden con sus colores; las de lámpara ignoran eso.
+const HEADS_WHITE: Look = WHITE;
 
 /**
  * Los momentos de una quinceañera armados sobre el rig que haya. Trabaja por
@@ -43,8 +44,10 @@ export function buildQuinceTemplate(rig: Rig, makeId: (prefix: string) => string
   const has = (i: FixtureInstance, type: ChannelType) =>
     definitionOf(i)?.channels.some((c) => c.type === type) ?? false;
 
-  const heads = instances.filter((i) => has(i, "PAN"));
-  const pars = instances.filter((i) => !has(i, "PAN") && has(i, "RED"));
+  // Un láser no se enciende solo con una plantilla.
+  const lights = instances.filter((i) => definitionOf(i)?.kind !== "Laser");
+  const heads = lights.filter((i) => has(i, "PAN"));
+  const pars = lights.filter((i) => !has(i, "PAN") && has(i, "RED"));
 
   /** El grupo del primer fixture; si no tiene, uno nuevo con los que estén
    *  sueltos. Nunca saca a nadie de un grupo que ya armó el usuario. */

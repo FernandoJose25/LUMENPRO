@@ -3,7 +3,7 @@
 //! milisegundos (la misma base que `Date.now()`).
 
 use crate::frame::{self, Frame, Overlay};
-use crate::model::{ChannelType, ChannelValues, Doc, EffectSource};
+use crate::model::{ChannelValues, Doc, EffectSource};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
@@ -150,19 +150,15 @@ impl Fade {
                 let value = live.get(&instance.id).and_then(|c| c.get(&channel.id)).copied();
                 f64::from(value.unwrap_or_else(|| channel.default_dmx()))
             };
-            let fine_of = |kind: ChannelType| {
-                let fine = definition.first(kind.fine()?)?;
-                Some((fine, f64::from(*to.get(&fine.id)?)))
-            };
-            let joined: Vec<&str> = definition
-                .channels
-                .iter()
-                .filter(|c| to.contains_key(&c.id))
-                .filter_map(|c| Some(fine_of(c.kind)?.0.id.as_str()))
-                .collect();
-            for channel in &definition.channels {
+            for (channel, role) in definition.channels.iter().zip(&definition.roles) {
                 let Some(end) = to.get(&channel.id).map(|v| f64::from(*v)) else { continue };
-                if joined.contains(&channel.id.as_str()) {
+                let fine = role.fine.map(|i| &definition.channels[i]);
+                // Un fino va junto con su canal, si también está en la escena.
+                let joined = role.is_fine
+                    && definition.channels.iter().zip(&definition.roles).any(|(coarse, r)| {
+                        r.fine.is_some_and(|i| definition.channels[i].id == channel.id) && to.contains_key(&coarse.id)
+                    });
+                if joined {
                     continue;
                 }
                 let mut item = FadeItem {
@@ -173,7 +169,7 @@ impl Fade {
                     to: end,
                     snap: !channel.kind.is_fadeable(),
                 };
-                if let Some((fine, fine_end)) = fine_of(channel.kind) {
+                if let Some((fine, fine_end)) = fine.and_then(|f| Some((f, f64::from(*to.get(&f.id)?)))) {
                     item.fine = Some(fine.id.clone());
                     item.from = item.from * 256.0 + now(fine);
                     item.to = item.to * 256.0 + fine_end;
@@ -240,10 +236,6 @@ pub struct Show {
     audio: Option<(AudioFeed, f64)>,
 }
 
-fn parse_doc(doc: &Value) -> Result<Doc, String> {
-    Doc::deserialize(doc).map_err(|e| format!("El show no se entiende: {e}"))
-}
-
 impl Show {
     pub fn new() -> Self {
         Self::default()
@@ -266,7 +258,7 @@ impl Show {
 
     /// Retoma donde iba: los fades a medias se terminan desde donde quedaron.
     pub fn restore(&mut self, session: Session, now: f64) -> Result<(), String> {
-        let doc = parse_doc(&session.doc)?;
+        let doc = Doc::parse(&session.doc)?;
         self.reset(session.doc, doc, session.live);
         self.next_nonce = session.playback.moment_run.map_or(0, |r| r.nonce);
         let chase = session.playback.chase.clone();
@@ -293,14 +285,14 @@ impl Show {
     pub fn apply(&mut self, message: Message, now: f64) -> Result<(), String> {
         match message {
             Message::Reset { doc, live, active_scene_id, active_moment_id } => {
-                let parsed = parse_doc(&doc)?;
+                let parsed = Doc::parse(&doc)?;
                 let live = crate::model::values(live).unwrap_or_default();
                 self.reset(doc, parsed, live);
                 self.playback = Playback { active_scene_id, active_moment_id, ..Playback::default() };
                 self.prune();
             }
             Message::Doc { doc } => {
-                self.doc = parse_doc(&doc)?;
+                self.doc = Doc::parse(&doc)?;
                 self.doc_json = doc;
                 self.prune();
                 self.follow_moment_chase(now);
@@ -690,13 +682,19 @@ impl Show {
                 EffectSource::Treble => Some(l.treble),
                 EffectSource::Clock | EffectSource::Beat => None,
             });
-            let members = self.doc.instances.iter().filter(|i| i.group.as_ref() == Some(group));
-            for (index, member) in members.enumerate() {
-                let Some(definition) = self.doc.definition(&member.definition_id) else { continue };
+            // Una barra de varios focos cuenta como varias luces seguidas.
+            let cells = self
+                .doc
+                .rig()
+                .filter(|(i, _)| i.group.as_ref() == Some(group))
+                .flat_map(|(member, definition)| {
+                    definition.cells(effect.channel_type).into_iter().map(move |cell| (member, cell))
+                });
+            for (index, (member, channels)) in cells.enumerate() {
                 let phase = cycles + index as f64 * effect.phase_offset_deg / 360.0;
                 let t = level.unwrap_or_else(|| effect.waveform.level(phase));
                 let value = (effect.min + (effect.max - effect.min) * t).round().clamp(0.0, 255.0) as u8;
-                for channel in definition.channels.iter().filter(|c| c.kind == effect.channel_type) {
+                for channel in channels {
                     writes.push((member.id.clone(), channel.id.clone(), value));
                 }
             }

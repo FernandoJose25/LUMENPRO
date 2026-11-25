@@ -1,22 +1,26 @@
-import { colorLook, lookValues, SWATCHES } from "@/lib/look";
+import { colorValues, lookValues, SWATCHES, takesColor } from "@/lib/look";
 import { useFixtureStore } from "@/lib/fixtureStore";
 import type { FixtureInstance } from "@/types/fixture";
 
-/** Colores de un toque para los equipos RGB que reciba; si no hay ninguno, no
- *  se muestra. */
+/** Colores de un toque para los equipos que puedan ponerlos (LED, CMY o rueda
+ *  de color); si no hay ninguno, no se muestra. */
 export function ColorSwatches({ instances }: { instances: FixtureInstance[] }) {
   const { definitions, getChannelValue, setChannelValues } = useFixtureStore();
-  const channelsOf = (i: FixtureInstance) => definitions.find((d) => d.id === i.definitionId)?.channels ?? [];
-  const rgb = instances.filter((i) => channelsOf(i).some((c) => c.type === "RED"));
-  if (rgb.length === 0) return null;
+  const definitionOf = (i: FixtureInstance) => definitions.find((d) => d.id === i.definitionId);
+  const channelsOf = (i: FixtureInstance) => definitionOf(i)?.channels ?? [];
+  const colorable = instances.filter((i) => {
+    const definition = definitionOf(i);
+    return definition && takesColor(definition);
+  });
+  if (colorable.length === 0) return null;
 
   function pick(hex: string) {
     // Con el dimmer en 0 el color no se vería: se sube solo en los apagados.
-    const dark = rgb.filter((i) =>
+    const dark = colorable.filter((i) =>
       channelsOf(i).some((c) => c.type === "DIMMER" && getChannelValue(i.id, c.id, c.defaultValue) === 0),
     );
     setChannelValues(lookValues(dark, definitions, { DIMMER: 255 }));
-    setChannelValues(lookValues(rgb, definitions, colorLook(hex)));
+    setChannelValues(Object.fromEntries(colorable.map((i) => [i.id, colorValues(definitionOf(i)!, hex)])));
   }
 
   return (

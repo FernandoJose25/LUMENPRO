@@ -289,7 +289,7 @@ function GroupMasterRow({
     const types = new Set<ChannelType>();
     for (const member of members) {
       const def = definitions.find((d) => d.id === member.definitionId);
-      def?.channels.forEach((ch) => types.add(ch.type));
+      def?.channels.forEach((ch) => ch.type !== "FINE" && types.add(ch.type));
     }
     return Array.from(types);
   }, [members, definitions]);

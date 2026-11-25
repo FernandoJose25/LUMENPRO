@@ -4,9 +4,11 @@ import { Button } from "@/components/ui/Button";
 import { askText } from "@/lib/dialogs";
 import { useFixtureStore } from "@/lib/fixtureStore";
 import type { FixtureDefinition, FixtureInstance } from "@/types/fixture";
-import { nextFreeAddress } from "@/lib/dmxFrame";
+import { channelCount, nextFreeAddress } from "@/lib/dmxFrame";
 import { ChannelFinder } from "./ChannelFinder";
 import { emptyChannel, FixtureEditor } from "./FixtureEditor";
+import { LibraryPicker } from "./LibraryPicker";
+import { ModeSelect } from "./ModeSelect";
 
 interface FixtureManagerProps {
   onOpenControl: (instanceId: string) => void;
@@ -32,6 +34,7 @@ export function FixtureManager({ onOpenControl }: FixtureManagerProps) {
   const [expanded, setExpanded] = useState<string | null>(definitions[0]?.id ?? null);
   const [editingDef, setEditingDef] = useState<FixtureDefinition | "new" | null>(null);
   const [finderId, setFinderId] = useState<string | null>(null);
+  const [inLibrary, setInLibrary] = useState(false);
 
   const groups = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -82,6 +85,8 @@ export function FixtureManager({ onOpenControl }: FixtureManagerProps) {
 
   if (finderId) return <ChannelFinder instanceId={finderId} onClose={() => setFinderId(null)} />;
 
+  if (inLibrary) return <LibraryPicker onClose={() => setInLibrary(false)} />;
+
   if (editingDef) {
     return (
       <FixtureEditor
@@ -115,6 +120,7 @@ export function FixtureManager({ onOpenControl }: FixtureManagerProps) {
             >
               <span className="flex items-center gap-2">
                 <span className="font-medium text-text-primary">{def.model.toUpperCase()}</span>
+                {def.mode ? <span className="text-[11px] text-text-secondary">{def.mode}</span> : null}
                 {!def.verified ? (
                   <span
                     className="rounded-full bg-state-warn/15 px-1.5 py-0.5 text-[10px] font-medium text-state-warn"
@@ -133,6 +139,7 @@ export function FixtureManager({ onOpenControl }: FixtureManagerProps) {
                   <span className="text-[11px] uppercase tracking-wide text-text-secondary">
                     {def.manufacturer}
                   </span>
+                  <ModeSelect definition={def} />
                   <Button size="sm" variant="ghost" onClick={() => setEditingDef(def)}>
                     Editar perfil
                   </Button>
@@ -160,11 +167,7 @@ export function FixtureManager({ onOpenControl }: FixtureManagerProps) {
                         definitionId: def.id,
                         label: `${def.model.toUpperCase()} #${count + 1}`,
                         universe: 1,
-                        address: nextFreeAddress(
-                          instances,
-                          definitions,
-                          Math.max(1, ...def.channels.map((c) => c.index)),
-                        ),
+                        address: nextFreeAddress(instances, definitions, Math.max(1, channelCount(def))),
                       })
                     }
                   >
@@ -178,7 +181,10 @@ export function FixtureManager({ onOpenControl }: FixtureManagerProps) {
       </div>
 
       <div className="mt-3 border-t border-border pt-3">
-        <Button variant="primary" className="w-full" onClick={() => setEditingDef("new")}>
+        <Button variant="primary" className="w-full" onClick={() => setInLibrary(true)}>
+          + Elegir de la biblioteca
+        </Button>
+        <Button className="mt-2 w-full" onClick={() => setEditingDef("new")}>
           + ADD FIXTURE
         </Button>
         <Button className="mt-2 w-full" onClick={addUnknown}>

@@ -7,7 +7,8 @@ import {
   beamEnd,
   DEFAULT_CAMERA,
   defaultPlacements,
-  lightState,
+  lightStates,
+  prismDirections,
   makeView,
   project,
   unproject,
@@ -35,9 +36,9 @@ function input(patch: Partial<FrameInput> = {}): FrameInput {
   };
 }
 const orusLight = (values: Record<string, number>, patch: Partial<FrameInput> = {}) =>
-  lightState(orus, orusDef, input({ liveValues: { [orus.id]: values }, ...patch }));
+  lightStates(orus, orusDef, input({ liveValues: { [orus.id]: values }, ...patch }))[0];
 const parLight = (values: Record<string, number>, patch: Partial<FrameInput> = {}) =>
-  lightState(par, parDef, input({ liveValues: { [par.id]: values }, ...patch }));
+  lightStates(par, parDef, input({ liveValues: { [par.id]: values }, ...patch }))[0];
 
 describe("Hacia dónde apunta", () => {
   const near = (v: { x: number; y: number; z: number }, x: number, y: number, z: number) => {
@@ -128,7 +129,7 @@ describe("Cómo se ve cada luz", () => {
       ),
     };
     const at = (value: number) =>
-      lightState(orus, definition, input({ liveValues: { [orus.id]: { [orusCh("COLOR_WHEEL")]: value } } })).color;
+      lightStates(orus, definition, input({ liveValues: { [orus.id]: { [orusCh("COLOR_WHEEL")]: value } } }))[0].color;
     expect(at(45)).toEqual([0, 0, 255]);
     expect(at(0)).toEqual([255, 255, 255]);
   });
@@ -177,6 +178,28 @@ describe("Cámara", () => {
       const back = unproject(v, at.x, at.y, point.y)!;
       expect(back.x).toBeCloseTo(point.x, 4);
       expect(back.z).toBeCloseTo(point.z, 4);
+    }
+  });
+});
+
+describe("Prisma", () => {
+  it("abre las copias parejas alrededor del haz", () => {
+    for (const direction of [
+      { x: 0, y: -1, z: 0 },
+      { x: 0, y: 0, z: 1 },
+      { x: 0.6, y: -0.8, z: 0 },
+    ]) {
+      const copies = prismDirections(direction, 3, 25);
+      expect(copies).toHaveLength(3);
+      for (const c of copies) {
+        expect(Math.hypot(c.x, c.y, c.z)).toBeCloseTo(1);
+        const cos = c.x * direction.x + c.y * direction.y + c.z * direction.z;
+        expect((Math.acos(cos) * 180) / Math.PI).toBeCloseTo(7, 1);
+      }
+      const sum = copies.reduce((s, c) => ({ x: s.x + c.x, y: s.y + c.y, z: s.z + c.z }));
+      const length = Math.hypot(sum.x, sum.y, sum.z);
+      expect(sum.x / length).toBeCloseTo(direction.x);
+      expect(sum.y / length).toBeCloseTo(direction.y);
     }
   });
 });

@@ -1,0 +1,1 @@
+[{"model":"Tour-Hazer II","type":"Smoke","channels":[{"n":"Pump","t":"DIMMER"},{"n":"Fan","t":"SPEED"}],"modes":[{"n":"Standard","c":[0,1]}],"phys":{"width":533}}]

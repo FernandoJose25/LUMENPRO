@@ -4,6 +4,7 @@ import { Fader } from "@/components/ui/Fader";
 import { StatusIndicator } from "@/components/ui/StatusIndicator";
 import { useFixtureStore } from "@/lib/fixtureStore";
 import { ColorSwatches } from "./ColorSwatches";
+import { ChannelPresets } from "./ChannelPresets";
 import { PanTiltPad } from "./PanTiltPad";
 
 /**
@@ -34,7 +35,8 @@ export function FixtureControl() {
     );
   }
 
-  const withPresets = selectedDefinition.channels.filter((c) => c.presets.length > 0);
+  // Los finos ya van con su canal (el pad, los fades): a mano casi no se usan.
+  const faders = selectedDefinition.channels.filter((c) => !c.fineOf);
 
   return (
     <Panel className="h-full" title="FIXTURE CONTROL">
@@ -48,40 +50,19 @@ export function FixtureControl() {
         <StatusIndicator status="active" label="Seleccionado" />
       </div>
 
-      <div className="flex max-h-[calc(100%-13rem)] flex-col gap-2.5 overflow-y-auto scrollbar-thin pr-1">
+      <div className="flex max-h-[calc(100%-3.5rem)] flex-col gap-2.5 overflow-y-auto scrollbar-thin pr-1">
         <PanTiltPad instances={[selectedInstance]} />
-        {selectedDefinition.channels.map((ch) => (
-          <Fader
-            key={ch.id}
-            label={ch.name}
-            value={getChannelValue(selectedInstance.id, ch.id, ch.defaultValue)}
-            min={ch.dmxMin}
-            max={ch.dmxMax}
-            onChange={(v) => setChannelValue(selectedInstance.id, ch.id, v)}
-          />
-        ))}
-      </div>
-
-      <div className="mt-3 flex max-h-36 flex-col gap-2 overflow-y-auto scrollbar-thin border-t border-border pt-3">
         <ColorSwatches instances={[selectedInstance]} />
-        {withPresets.map((c) => (
-          <div key={c.id} className="flex flex-wrap items-center gap-1.5">
-            <span className="w-16 shrink-0 text-xs font-medium text-text-secondary">{c.name}</span>
-            {c.presets.map((p) => (
-              <Button
-                key={p.id}
-                size="sm"
-                // El centro del rango: lejos de los bordes, donde los equipos difieren.
-                onClick={() => setChannelValue(selectedInstance.id, c.id, Math.round((p.dmxFrom + p.dmxTo) / 2))}
-              >
-                {p.color ? (
-                  <span className="h-3 w-3 rounded-full" style={{ backgroundColor: p.color }} aria-hidden />
-                ) : null}
-                {p.label}
-              </Button>
-            ))}
-          </div>
-        ))}
+        {faders.map((ch) => {
+          const value = getChannelValue(selectedInstance.id, ch.id, ch.defaultValue);
+          const set = (v: number) => setChannelValue(selectedInstance.id, ch.id, v);
+          return (
+            <div key={ch.id} className="flex flex-col gap-1.5">
+              <Fader label={ch.name} value={value} min={ch.dmxMin} max={ch.dmxMax} onChange={set} />
+              {ch.presets.length > 0 ? <ChannelPresets channel={ch} value={value} onPick={set} /> : null}
+            </div>
+          );
+        })}
       </div>
     </Panel>
   );
