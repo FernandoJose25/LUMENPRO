@@ -57,6 +57,7 @@ export function HeldColors({ heldColors, onPick }: HeldColorsProps) {
           ))}
           <button
             type="button"
+            aria-label={`${line.name}: Del momento`}
             aria-pressed={line.is(null)}
             onClick={() => pick(line.id, null)}
             className={cn(

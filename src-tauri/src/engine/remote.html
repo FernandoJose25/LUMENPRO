@@ -295,6 +295,7 @@ function renderColors() {
       const back = document.createElement("button");
       back.className = "moment";
       back.textContent = "Del momento";
+      back.setAttribute("aria-label", line.name + ": Del momento");
       back.dataset.hex = "";
       back.onclick = () => send({ type: "color", group: line.id, color: null });
       grid.appendChild(back);

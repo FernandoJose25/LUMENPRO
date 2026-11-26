@@ -20,7 +20,7 @@ import {
 } from "@/lib/palettes";
 import { colorValues } from "@/lib/look";
 import { withTwins } from "@/lib/dmxFrame";
-import { seedDefinitions, seedInstances } from "@/data/fixtureLibrary";
+import { ORUS_WHEEL, ORUS_WHEEL_NOTE, seedDefinitions, seedInstances } from "@/data/fixtureLibrary";
 import { buildQuinceTemplate } from "@/data/quinceTemplate";
 import { resetTemplate } from "@/lib/factory";
 import { closeWindow, createEngineLink, type EngineHost, type EngineLink } from "@/lib/engineLink";
@@ -197,11 +197,21 @@ interface FixtureStoreValue extends FixtureStoreState {
   importShow: (json: string) => void;
 }
 
+/** Las cabezas de ejemplo de la 0.2 venían con la rueda de color vacía: sin
+ *  ella no toman un color fijo. Solo se llena si sigue vacía. */
+function withWheel(definition: FixtureDefinition): FixtureDefinition {
+  if (definition.id !== "def-orus-280") return definition;
+  const channels = definition.channels.map((c) =>
+    c.type === "COLOR_WHEEL" && c.presets.length === 0 ? { ...c, presets: ORUS_WHEEL, notes: ORUS_WHEEL_NOTE } : c,
+  );
+  return channels.some((c, i) => c !== definition.channels[i]) ? { ...definition, channels } : definition;
+}
+
 function restoreState(parsed: Partial<FixtureStoreState>): FixtureStoreState {
   // Migración suave: shows guardados antes de que existieran liveValues/
   // scenes/... no deben romper el load, solo completan con vacío.
   return {
-    definitions: parsed.definitions ?? seedDefinitions,
+    definitions: (parsed.definitions ?? seedDefinitions).map(withWheel),
     instances: parsed.instances ?? seedInstances,
     selectedInstanceId: parsed.selectedInstanceId ?? seedInstances[0]?.id ?? null,
     liveValues: parsed.liveValues ?? {},

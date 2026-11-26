@@ -68,8 +68,17 @@ describe("Colores de un toque", () => {
     expect(buildFrame(store)[39]).toBe(90);
   });
 
-  it("en una cabeza sin RGB no aparece", () => {
+  it("en la cabeza gira la rueda al color más parecido", () => {
     mount([0]);
+    go("Rojo");
+    // Canal 8, la rueda: "Rojo" va del 63 al 71.
+    expect(buildFrame(store)[7]).toBe(67);
+  });
+
+  it("en una luz sin color no aparece", () => {
+    mount([0]);
+    const head = store.definitions[0];
+    act(() => store.updateDefinition({ ...head, channels: head.channels.filter((c) => c.type !== "COLOR_WHEEL") }));
     expect(screen.queryByRole("button", { name: "Rojo" })).not.toBeInTheDocument();
   });
 });

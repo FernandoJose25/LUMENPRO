@@ -48,7 +48,7 @@ describe("Color fijo", () => {
     expect(playback(engine).runningEffectIds.length).toBeGreaterThan(0);
     const before = JSON.stringify(lastDoc(engine).scenes);
 
-    await user.click(colors.getByRole("button", { name: "Del momento" }));
+    await user.click(colors.getByRole("button", { name: "PAR: Del momento" }));
     await waitFor(() => expect(playback(engine).heldColors).toEqual({}));
     expect(JSON.stringify(lastDoc(engine).scenes)).toBe(before);
   });
@@ -170,5 +170,32 @@ describe("Shows de la 0.2", () => {
       return found as Extract<EngineMessage, { type: "reset" }>;
     });
     expect(reset.doc.effects.map((e) => e.min)).toEqual([0, 40]);
+  });
+});
+
+describe("Color fijo en las cabezas", () => {
+  it("la rueda va al color elegido y con Estrobo destellan en ese color", async () => {
+    const { user, engine } = await withTemplate();
+    await user.click(screen.getByRole("button", { name: "Live" }));
+    await user.click(within(screen.getByRole("region", { name: "Momentos" })).getByRole("button", { name: /^Hora loca$/ }));
+    const colors = within(screen.getByRole("region", { name: "Color fijo" }));
+    await user.click(colors.getByRole("button", { name: "Cabezas: Rojo" }));
+    await waitFor(() => expect(engine.state.show.frame(1)[7]).toBe(67)); // canal 8: rueda en "Rojo"
+    await user.click(screen.getAllByRole("button", { name: "Estrobo" })[0]);
+    await waitFor(() => expect(playback(engine).strobeActive).toBe(true));
+    const frame = engine.state.show.frame(1);
+    expect([frame[6], frame[7]]).toEqual([87, 67]); // obturador en estrobo, rueda en rojo
+  });
+
+  it("las cabezas de un show de la 0.2 reciben la rueda de colores", async () => {
+    const head = { id: "def-orus-280", manufacturer: "Orus", model: "280W", verified: false, channels: [
+      { id: "w", index: 1, name: "Color Wheel", type: "COLOR_WHEEL", dmxMin: 0, dmxMax: 255, defaultValue: 0, invert: false, curve: "linear", presets: [] },
+    ] };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ definitions: [head], instances: [] }));
+    const engine = fakeEngine();
+    render(<App />);
+    await waitFor(() => expect(engine.applied.some((m) => m.type === "reset")).toBe(true));
+    const reset = engine.applied.find((m) => m.type === "reset") as Extract<EngineMessage, { type: "reset" }>;
+    expect(reset.doc.definitions[0].channels[0].presets.map((p) => p.label)).toContain("Rojo");
   });
 });

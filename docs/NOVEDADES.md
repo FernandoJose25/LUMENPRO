@@ -1,8 +1,10 @@
-## Novedades de la 0.3.2
+## Novedades de la 0.3.3
 
-**El color fijo dura hasta el próximo momento.** Al pasar a Entrada, Fotos o el que sea, vuelven sus colores. Y si prendes a mano un efecto de color (la ola roja, por ejemplo), le gana al color fijo: lo último que tocas manda.
+**Color fijo para las cabezas.** Las BEAM 280 ya aparecen en Color fijo (en Live, Escenario y el celular): la rueda de colores gira al color más parecido al que elijas. Con Estrobo, destellan en ese color. La rueda es la típica de las beam 280 de 10R y está sin confirmar: revísala con la luz conectada.
 
-**La voz también prende los PAR.** Sin sonido siguen apagados, pero cualquier sonido los prende. "Solo con música" queda desmarcado: márcalo para los discursos.
+**El aviso de versión nueva también llega con el programa abierto.** Antes solo se buscaba al abrirlo; ahora también cada media hora.
+
+**De la 0.3.2:** el color fijo dura hasta el próximo momento, un efecto de color prendido a mano le gana, y la voz también prende los PAR ("Solo con música" para los discursos).
 
 **De la 0.3.1:** sin sonido los PAR al ritmo quedan apagados, "Guardar cambios en «momento»" en Live y faders de grupo con su valor real.
 

@@ -1,4 +1,4 @@
-import type { FixtureDefinition, FixtureInstance } from "@/types/fixture";
+import type { ChannelPreset, FixtureDefinition, FixtureInstance } from "@/types/fixture";
 
 /**
  * IMPORTANTE (ver AUDIT.md §7): no encontré la hoja de canales OFICIAL de
@@ -14,6 +14,35 @@ import type { FixtureDefinition, FixtureInstance } from "@/types/fixture";
 
 let uid = 0;
 const id = (prefix: string) => `${prefix}-${++uid}`;
+
+/** Sin confirmar: la rueda de la Starway Servo Beam 10R (biblioteca de QLC+),
+ *  la más común en las beam 280 de 10R. Ids fijos: no deben mover el contador
+ *  de arriba, del que salen los ids de canal que ya usan los shows guardados. */
+const WHEEL: [number, number, string, string][] = [
+  [0, 8, "Blanco", "#ffffff"],
+  [9, 17, "Rojo intenso", "#d6332d"],
+  [18, 26, "Azul intenso", "#1e58a0"],
+  [27, 35, "Amarillo", "#ffff00"],
+  [36, 44, "Verde", "#00ff00"],
+  [45, 53, "Magenta", "#ff00ff"],
+  [54, 62, "Celeste", "#add8e6"],
+  [63, 71, "Rojo", "#ff0000"],
+  [72, 80, "Verde oscuro", "#1b8454"],
+  [81, 89, "Ámbar", "#dec02e"],
+  [90, 98, "Azul", "#0000ff"],
+  [99, 107, "Naranja", "#ffa500"],
+  [108, 116, "Cálido (CTO)", "#eabe48"],
+  [117, 127, "Morado", "#632d85"],
+];
+export const ORUS_WHEEL: ChannelPreset[] = WHEEL.map(([dmxFrom, dmxTo, label, color], n) => ({
+  id: `orus-color-${n + 1}`,
+  label,
+  dmxFrom,
+  dmxTo,
+  color,
+}));
+export const ORUS_WHEEL_NOTE =
+  "Sin confirmar: es la rueda de la Starway Servo Beam 10R, de la misma familia. Con la luz conectada, revisa que cada color caiga donde dice y corrígelo en Editar perfil.";
 
 export const seedDefinitions: FixtureDefinition[] = [
   {
@@ -33,7 +62,7 @@ export const seedDefinitions: FixtureDefinition[] = [
       { id: id("ch"), index: 5, name: "Speed Pan/Tilt", type: "SPEED", dmxMin: 0, dmxMax: 255, defaultValue: 0, invert: false, curve: "linear", presets: [] },
       { id: id("ch"), index: 6, name: "Dimmer", type: "DIMMER", dmxMin: 0, dmxMax: 255, defaultValue: 0, invert: false, curve: "linear", presets: [] },
       { id: id("ch"), index: 7, name: "Strobe", type: "STROBE", dmxMin: 0, dmxMax: 255, defaultValue: 255, invert: false, curve: "linear", presets: [{ id: id("pr"), label: "Cerrado", dmxFrom: 0, dmxTo: 7 }, { id: id("pr"), label: "Estrobo", dmxFrom: 64, dmxTo: 95 }, { id: id("pr"), label: "Abierto", dmxFrom: 248, dmxTo: 255 }], notes: "Sin confirmar: 0 = cerrado, 64–95 = estrobo y 255 = abierto en dos cabezas 10R comparables (Stairville BS-280, Starway Servo Beam 10R)." },
-      { id: id("ch"), index: 8, name: "Color Wheel", type: "COLOR_WHEEL", dmxMin: 0, dmxMax: 255, defaultValue: 0, invert: false, curve: "linear", presets: [] },
+      { id: id("ch"), index: 8, name: "Color Wheel", type: "COLOR_WHEEL", dmxMin: 0, dmxMax: 255, defaultValue: 0, invert: false, curve: "linear", presets: ORUS_WHEEL, notes: ORUS_WHEEL_NOTE },
       { id: id("ch"), index: 9, name: "Gobo", type: "GOBO", dmxMin: 0, dmxMax: 255, defaultValue: 0, invert: false, curve: "linear", presets: [] },
       { id: id("ch"), index: 10, name: "Gobo Rot", type: "GOBO_ROT", dmxMin: 0, dmxMax: 255, defaultValue: 0, invert: false, curve: "linear", presets: [] },
       { id: id("ch"), index: 11, name: "Prism", type: "PRISM", dmxMin: 0, dmxMax: 255, defaultValue: 0, invert: false, curve: "linear", presets: [] },

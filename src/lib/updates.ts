@@ -4,6 +4,9 @@ import { Channel, invoke, isTauri } from "@tauri-apps/api/core";
 /** La versión de este programa (package.json). */
 export const VERSION = __APP_VERSION__;
 
+/** La ventana queda abierta horas: no basta con mirar al abrir. */
+const CHECK_EVERY_MS = 30 * 60 * 1000;
+
 export interface UpdateState {
   /** La versión nueva, o null si no hay (o no hay internet). */
   version: string | null;
@@ -16,8 +19,8 @@ export interface UpdateState {
 }
 
 /**
- * Pregunta una vez al abrir si hay una versión nueva (src-tauri/src/updates.rs)
- * y, si la hay, muestra el aviso. Instalar la descarga, apaga el motor y
+ * Pregunta al abrir y cada media hora si hay una versión nueva
+ * (src-tauri/src/updates.rs) y, si la hay, muestra el aviso. Instalar la descarga, apaga el motor y
  * reinicia el programa ya actualizado.
  */
 export function useUpdate() {
@@ -26,13 +29,21 @@ export function useUpdate() {
   useEffect(() => {
     if (!isTauri()) return;
     let alive = true;
-    invoke<{ version: string; notes: string | null } | null>("check_update")
-      .then((found) => {
-        if (alive && found) setState((s) => ({ ...s, version: found.version, notes: found.notes, open: true }));
-      })
-      .catch(() => {});
+    let shown: string | null = null;
+    const check = () =>
+      invoke<{ version: string; notes: string | null } | null>("check_update")
+        .then((found) => {
+          // Cada versión se avisa una vez; después queda el botón de arriba.
+          if (!alive || !found || found.version === shown) return;
+          shown = found.version;
+          setState((s) => ({ ...s, version: found.version, notes: found.notes, open: true }));
+        })
+        .catch(() => {});
+    void check();
+    const timer = setInterval(() => void check(), CHECK_EVERY_MS);
     return () => {
       alive = false;
+      clearInterval(timer);
     };
   }, []);
 

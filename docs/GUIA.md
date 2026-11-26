@@ -10,7 +10,7 @@ Esta guía es para alguien que nunca lo usó. Se puede seguir sin luces, con el 
 2. Ábrelo. Si Windows muestra **"Windows protegió tu PC"**, toca **Más información** y después **Ejecutar de todas formas**. Pasa porque el programa no está firmado; no es un virus.
 3. Abre LUMEN PRO desde el menú Inicio.
 
-Cuando hay una versión nueva y la laptop tiene internet, al abrir aparece un aviso con las novedades. **Instalar ahora** la descarga e instala sola: las luces se apagan un momento y LUMEN PRO se vuelve a abrir con tu show. Si tocas **Ahora no**, queda arriba el botón **Versión nueva** para hacerlo después. No actualices en pleno evento.
+Cuando hay una versión nueva y la laptop tiene internet, aparece un aviso con las novedades (al abrir y, con el programa abierto, en menos de media hora). **Instalar ahora** la descarga e instala sola: las luces se apagan un momento y LUMEN PRO se vuelve a abrir con tu show. Si tocas **Ahora no**, queda arriba el botón **Versión nueva** para hacerlo después. No actualices en pleno evento.
 
 ## 2. Agregar tus luces
 
@@ -84,7 +84,7 @@ En el celular está el botón grande **Siguiente**, los momentos, el **Color fij
 - Toca **Siguiente** cuando cambia el momento. En la laptop también sirven **AvPág** y **RePág**, o un pasador de diapositivas.
 - **Intensidad** baja todas las luces a la vez sin perder nada.
 - **Blackout** apaga todo sin mover las cabezas. Al volver, todo queda como estaba.
-- **Color fijo** (en **Live**, **Escenario** y el celular): elige un color para los PAR o las cabezas y se queda hasta que pasas a otro momento. Tapa los colores del momento y de sus efectos (la ola de colores se vuelve de un solo color) pero deja que sigan el dimmer, el estrobo y los movimientos. Si prendes a mano un efecto de color de ese grupo, el efecto le gana. Los momentos no cambian: **Del momento** lo suelta antes y vuelve lo que tenían.
+- **Color fijo** (en **Live**, **Escenario** y el celular): elige un color para los PAR o las cabezas y se queda hasta que pasas a otro momento. Tapa los colores del momento y de sus efectos (la ola de colores se vuelve de un solo color) pero deja que sigan el dimmer, el estrobo y los movimientos. Si prendes a mano un efecto de color de ese grupo, el efecto le gana. Las cabezas también lo toman, con su rueda de colores (el más parecido al que elijas), y con **Estrobo** destellan en ese color. La rueda de las BEAM 280 está sin confirmar: con la luz conectada, revisa en **Fixtures → Editar perfil** que cada color caiga donde dice. Los momentos no cambian: **Del momento** lo suelta antes y vuelve lo que tenían.
 - **Hora loca con música:** en **Audio Reactive** toca **Escuchar** con la música sonando. Arriba aparecen los BPM y las luces siguen el ritmo. Hay que tocarlo cada vez que se abre el programa. Sin sonido, los PAR que laten con los graves se quedan apagados; cualquier sonido los prende, también la voz. Para que los discursos no los prendan, marca **Solo con música**: espera a reconocer el ritmo de una canción.
 - **Cambiar algo en vivo y que quede:** en **Live**, mueve los colores o los faders de un grupo y toca **Guardar cambios en «…»**: la próxima vez que lances ese momento se verá así. Si no lo guardas, el siguiente momento pone sus propias luces.
 - En **Live** puedes armar **Mis botones**: los que más uses, grandes.
