@@ -76,7 +76,7 @@ describe("EffectsView — edición de parámetros", () => {
     expect(screen.getByRole("button", { name: /▶ Reproducir/i })).toBeDisabled();
 
     const groupId = await createGroupWithFirstFixture(user);
-    const groupSelect = screen.getAllByRole("combobox")[0];
+    const groupSelect = screen.getByLabelText("Grupo objetivo");
     await user.selectOptions(groupSelect, groupId);
 
     expect(screen.getByRole("button", { name: /▶ Reproducir/i })).toBeEnabled();
@@ -88,7 +88,7 @@ describe("EffectsView — edición de parámetros", () => {
 
     const groupId = await createGroupWithFirstFixture(user);
     await createEffect(user, "Effect Test");
-    const groupSelect = screen.getAllByRole("combobox")[0];
+    const groupSelect = screen.getByLabelText("Grupo objetivo");
     await user.selectOptions(groupSelect, groupId);
     await user.click(screen.getByRole("button", { name: /▶ Reproducir/i }));
     expect(readDebug().runningEffectIds).toHaveLength(1);
@@ -137,9 +137,9 @@ describe("EffectsView — reproducción real (timers controlados)", () => {
     willAnswer("Effect Test");
     fireEvent.click(screen.getByRole("button", { name: /\+ Nuevo effect/i }));
 
-    const groupSelect = screen.getAllByRole("combobox")[0];
+    const groupSelect = screen.getByLabelText("Grupo objetivo");
     fireEvent.change(groupSelect, { target: { value: groupId } });
-    const waveformSelect = screen.getAllByRole("combobox")[2]; // grupo, tipo de canal, forma de onda
+    const waveformSelect = screen.getByLabelText("Forma de onda");
     fireEvent.change(waveformSelect, { target: { value: "square" } });
 
     const instanceId = readDebug().instances.find((i: { group?: string }) => i.group === groupId).id as string;

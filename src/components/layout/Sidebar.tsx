@@ -13,6 +13,7 @@ export const SECTIONS = [
   "Scenes",
   "Chases",
   "Effects",
+  "Paletas",
   "Audio Reactive",
   "Universes",
   "DMX Output",

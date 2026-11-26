@@ -8,6 +8,7 @@ import { GroupsView } from "@/components/groups/GroupsView";
 import { ScenesView } from "@/components/scenes/ScenesView";
 import { ChasesView } from "@/components/chases/ChasesView";
 import { EffectsView } from "@/components/effects/EffectsView";
+import { PalettesView } from "@/components/palettes/PalettesView";
 import { AudioView } from "@/components/audio/AudioView";
 import { LiveView } from "@/components/live/LiveView";
 import { DmxOutputView } from "@/components/dmx/DmxOutputView";
@@ -64,6 +65,7 @@ function AppShell() {
         {section === "Scenes" ? <ScenesView /> : null}
         {section === "Chases" ? <ChasesView /> : null}
         {section === "Effects" ? <EffectsView /> : null}
+        {section === "Paletas" ? <PalettesView /> : null}
         {section === "Audio Reactive" ? <AudioView audio={audio} /> : null}
         {section === "Universes" ? <UniversesView dmx={dmx} /> : null}
         {section === "DMX Output" ? <DmxOutputView dmx={dmx} /> : null}

@@ -48,6 +48,12 @@
   Verificado con receptores de terceros (librerías `sacn` y `stupidArtnet` de
   Python): 512 canales iguales, 40 FPS. **Falta con un nodo real**, y la búsqueda
   de nodos solo se probó con respuestas armadas según la norma.
+- **Movimientos y paletas** (2026-11-26): effects de figura (círculo, ocho,
+  línea, abanico) con tamaño en grados, giro, desfase y música; se suman encima
+  de la posición sin tocar los faders, abren y cierran suave y respetan el
+  recorrido. Sección "Paletas" (posiciones, colores, gobos y haz): las escenas
+  guardan qué paleta tenía cada luz y la siguen si se corrige. En Escenario,
+  "Apuntar" lleva las cabezas a donde se toca el piso. La plantilla usa figuras.
 - **Diálogos propios** (`lib/dialogs.ts`): los de Windows congelaban la interfaz.
 - **Salida DMX conectada a la interfaz** (2026-11-24): driver del cable FTDI
   (`OpenDmxOutput`: 250 kbaudios, 8N2, BREAK por software, 30 FPS), estado real

@@ -3,7 +3,9 @@ import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 import { useFixtureStore } from "@/lib/fixtureStore";
-import { defaultPlacements, isHead } from "@/lib/stage";
+import type { ChannelValues } from "@/lib/fade";
+import { readAxis, writeAxis } from "@/lib/panTilt";
+import { aimAt, defaultPlacements, isHead, type Vec3 } from "@/lib/stage";
 import { openStageWindow } from "@/lib/stageMirror";
 import type { FixtureInstance, Placement } from "@/types/fixture";
 import { StageCanvas } from "./StageCanvas";
@@ -11,7 +13,9 @@ import { StageCanvas } from "./StageCanvas";
 /** Coloca las luces como van a estar en el evento y mira cómo se ve. */
 export function StageView() {
   const store = useFixtureStore();
-  const { instances, definitions, updateInstance, moments, activeMomentId, startMoment } = store;
+  const { instances, definitions, updateInstance, moments, activeMomentId, startMoment, getChannelValue, setChannelValues } =
+    store;
+  const [aiming, setAiming] = useState(false);
   const [windowError, setWindowError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const defaults = useMemo(() => defaultPlacements(instances, definitions), [instances, definitions]);
@@ -23,6 +27,27 @@ export function StageView() {
   }
 
   const selected = instances.find((i) => i.id === selectedId);
+  const definitionOf = (i: FixtureInstance) => definitions.find((d) => d.id === i.definitionId);
+  const heads = instances.filter((i) => {
+    const d = definitionOf(i);
+    return d && isHead(d);
+  });
+  // La elegida si es una cabeza; si no, todas.
+  const aimed = selected && heads.includes(selected) ? [selected] : heads;
+
+  function aimAll(point: Vec3) {
+    const values: ChannelValues = {};
+    for (const instance of aimed) {
+      const definition = definitionOf(instance)!;
+      const placement = placementOf(instance);
+      if (!placement) continue;
+      const read = (axis: "PAN" | "TILT") =>
+        readAxis(definition, axis, (c) => getChannelValue(instance.id, c.id, c.defaultValue));
+      const to = aimAt(placement, definition, point, { pan: read("PAN"), tilt: read("TILT") });
+      if (to) values[instance.id] = { ...writeAxis(definition, "PAN", to.pan), ...writeAxis(definition, "TILT", to.tilt) };
+    }
+    setChannelValues(values);
+  }
 
   return (
     <div className="flex min-w-0 flex-1 gap-2 p-2">
@@ -32,6 +57,7 @@ export function StageView() {
             rig={store}
             selectedId={selectedId}
             onSelect={setSelectedId}
+            onAim={aiming ? aimAll : undefined}
             onMove={(id, position) => {
               const moved = instances.find((i) => i.id === id);
               if (moved) place(moved, position);
@@ -51,6 +77,16 @@ export function StageView() {
           <p className="flex-1 text-[11px] text-text-secondary">
             Arrastra una luz para moverla y el fondo para girar la vista. Rueda: acercar. Doble clic: vista inicial.
           </p>
+          <Button
+            size="sm"
+            variant={aiming ? "primary" : "secondary"}
+            aria-pressed={aiming}
+            disabled={heads.length === 0}
+            title="Toca o arrastra sobre el piso: las cabezas apuntan ahí. Si hay una elegida, solo esa."
+            onClick={() => setAiming(!aiming)}
+          >
+            {aiming ? `Apuntando ${aimed.length === 1 ? aimed[0].label : "todas las cabezas"}` : "Apuntar"}
+          </Button>
           <Button
             size="sm"
             onClick={() => {

@@ -6,6 +6,8 @@ export interface FrameInput {
   instances: FixtureInstance[];
   definitions: FixtureDefinition[];
   liveValues: Record<string, Record<string, number>>;
+  /** Cabezas dibujando una figura: mandan sobre liveValues. */
+  moving?: Record<string, Record<string, number>>;
   blackoutActive: boolean;
   /** Intensidad general, 0–100. */
   master: number;
@@ -86,7 +88,7 @@ export function effectiveValue(
   channel: FixtureChannel,
   input: FrameInput,
 ): number {
-  let value = input.liveValues[instance.id]?.[channel.id] ?? channel.defaultValue;
+  let value = input.moving?.[instance.id]?.[channel.id] ?? input.liveValues[instance.id]?.[channel.id] ?? channel.defaultValue;
   if (input.strobeActive && channel.type === "STROBE") value = strobeValue(channel, definition) ?? value;
   if (followsMaster(channel, definition)) value = (value * input.master) / 100;
   if (input.identifyId === instance.id && givesLight(definition)) {

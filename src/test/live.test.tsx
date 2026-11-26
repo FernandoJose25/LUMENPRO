@@ -115,7 +115,7 @@ describe("LiveView — disparo de escenas, effects, grupos y blackout", () => {
 
     const groupId = await createGroupWithFirstFixture(user, "Grupo Test");
     await createEffect(user, "Effect Test");
-    const groupSelect = screen.getAllByRole("combobox")[0];
+    const groupSelect = screen.getByLabelText("Grupo objetivo");
     await user.selectOptions(groupSelect, groupId);
 
     // El botón de Live Mode incluye el prefijo ▶/■, a diferencia del
@@ -172,7 +172,7 @@ describe("LiveView — disparo de escenas, effects, grupos y blackout", () => {
     // GroupsView que compliquen firstFaderNumberInput() más abajo.
     const groupId = await createGroupWithoutMembers(user, "Grupo Vacío");
     await createEffect(user, "Effect Test");
-    const groupSelect = screen.getAllByRole("combobox")[0];
+    const groupSelect = screen.getByLabelText("Grupo objetivo");
     await user.selectOptions(groupSelect, groupId);
     await user.click(screen.getByRole("button", { name: /▶ Effect Test/i }));
     expect(readDebug().runningEffectIds).toHaveLength(1);

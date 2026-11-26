@@ -34,9 +34,27 @@ export const EFFECT_SOURCE_LABELS: Record<EffectSource, string> = {
   treble: "Agudos",
 };
 
+/** Una onda sobre un canal, o una figura que dibujan las cabezas alrededor de
+ *  donde estén apuntando (sin tocar sus faders: se puede mover el centro). */
+export type EffectKind = "wave" | "figure";
+export type FigureType = "circle" | "eight" | "line" | "fan";
+
+export const FIGURE_LABELS: Record<FigureType, string> = {
+  circle: "Círculo",
+  eight: "Ocho",
+  line: "Línea",
+  fan: "Abanico",
+};
+
 export interface Effect {
   id: string;
   name: string;
+  kind: EffectKind;
+  figure: FigureType;
+  /** Figuras: cuánto se aparta del centro, en grados. */
+  sizeDeg: number;
+  /** Figuras: giro del dibujo, en grados. */
+  angleDeg: number;
   /** Group.id objetivo. Un efecto sin grupo asignado no hace nada al
    *  reproducirse (la UI no debería dejar "Reproducir" sin uno). */
   groupId: string | null;

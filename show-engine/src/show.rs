@@ -3,12 +3,16 @@
 //! milisegundos (la misma base que `Date.now()`).
 
 use crate::frame::{self, Frame, Overlay};
-use crate::model::{ChannelValues, Doc, EffectSource};
+use crate::model::{Channel, ChannelType, ChannelValues, Definition, Doc, Effect, EffectKind, EffectSource};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 
 const IDENTIFY_MS: f64 = 3000.0;
+/// Lo que tarda una figura en abrirse al arrancar y en volver al centro al
+/// detenerse: sin esto la cabeza pegaría un salto.
+const FIGURE_RAMP_MS: f64 = 1000.0;
+const MAX_STEP_MS: f64 = 50.0;
 /// Sin noticias del audio en este tiempo, sus niveles ya no valen.
 const LEVELS_STALE_MS: f64 = 500.0;
 /// El ritmo sí se puede seguir contando un rato aunque la ventana se trabe.
@@ -232,8 +236,53 @@ pub struct Show {
     next_nonce: u64,
     chase: Option<ChaseRun>,
     effect_started: BTreeMap<String, f64>,
+    /// Cuánto abrió cada figura, 0–1. Las que se detuvieron siguen acá hasta
+    /// volver al centro.
+    figures: BTreeMap<String, f64>,
+    /// Dónde están las cabezas que dibujan una figura. No toca `live`: el
+    /// centro es lo que diga `live`, y se puede mover mientras tanto.
+    moving: ChannelValues,
+    moving_rev: u64,
+    last_tick: f64,
     identify_until: f64,
     audio: Option<(AudioFeed, f64)>,
+}
+
+/// Vueltas completas que lleva un effect.
+fn cycles_of(effect: &Effect, started: f64, beats: Option<f64>, now: f64) -> f64 {
+    match beats.filter(|_| effect.source == EffectSource::Beat) {
+        Some(beats) => beats / effect.beats_per_cycle.max(0.01),
+        None => (now - started) / 1000.0 * effect.speed_cpm / 60.0,
+    }
+}
+
+/// Cuánto suena la parte de la música que sigue, si sigue alguna.
+fn level_of(effect: &Effect, levels: Option<Levels>) -> Option<f64> {
+    levels.and_then(|l| match effect.source {
+        EffectSource::Bass => Some(l.bass),
+        EffectSource::Mid => Some(l.mid),
+        EffectSource::Treble => Some(l.treble),
+        EffectSource::Clock | EffectSource::Beat => None,
+    })
+}
+
+fn smooth(t: f64) -> f64 {
+    t * t * (3.0 - 2.0 * t)
+}
+
+/// Los pares pan/tilt de un equipo, como índices de canal. Un pan compartido
+/// por varias cabezas se mueve con la primera.
+fn heads_of(definition: &Definition) -> Vec<[Option<usize>; 2]> {
+    let cells = |kind| -> Vec<usize> {
+        definition
+            .cells(kind)
+            .iter()
+            .filter_map(|cell| cell.first())
+            .filter_map(|channel| definition.channels.iter().position(|c| c.id == channel.id))
+            .collect()
+    };
+    let (pan, tilt) = (cells(ChannelType::Pan), cells(ChannelType::Tilt));
+    (0..pan.len().max(tilt.len())).map(|i| [pan.get(i).copied(), tilt.get(i).copied()]).collect()
 }
 
 impl Show {
@@ -661,7 +710,7 @@ impl Show {
     fn tick_effects(&mut self, now: f64) {
         let running = &self.playback.running_effect_ids;
         // Al volver a arrancar, la fase empieza de cero.
-        self.effect_started.retain(|id, _| running.contains(id));
+        self.effect_started.retain(|id, _| running.contains(id) || self.figures.contains_key(id));
         if running.is_empty() {
             return;
         }
@@ -669,19 +718,13 @@ impl Show {
         let mut writes = Vec::new();
         for id in running {
             let Some(effect) = self.doc.effects.iter().find(|e| e.id == *id) else { continue };
-            let Some(group) = &effect.group_id else { continue };
             let started = *self.effect_started.entry(id.clone()).or_insert(now);
-
-            let cycles = match beats.filter(|_| effect.source == EffectSource::Beat) {
-                Some(beats) => beats / effect.beats_per_cycle.max(0.01),
-                None => (now - started) / 1000.0 * effect.speed_cpm / 60.0,
-            };
-            let level = levels.and_then(|l| match effect.source {
-                EffectSource::Bass => Some(l.bass),
-                EffectSource::Mid => Some(l.mid),
-                EffectSource::Treble => Some(l.treble),
-                EffectSource::Clock | EffectSource::Beat => None,
-            });
+            if effect.kind != EffectKind::Wave {
+                continue;
+            }
+            let Some(group) = &effect.group_id else { continue };
+            let cycles = cycles_of(effect, started, beats, now);
+            let level = level_of(effect, levels);
             // Una barra de varios focos cuenta como varias luces seguidas.
             let cells = self
                 .doc
@@ -704,6 +747,94 @@ impl Show {
         }
     }
 
+    /// Abre las figuras que corren y cierra las que se detuvieron.
+    fn ramp_figures(&mut self, now: f64) {
+        // Tras un reinicio o una suspensión, un paso normal: abrir de golpe
+        // sería el salto que esto evita.
+        let elapsed = (now - self.last_tick).clamp(0.0, MAX_STEP_MS);
+        let step = elapsed / FIGURE_RAMP_MS;
+        let is_running = |id: &String| self.playback.running_effect_ids.contains(id);
+        for effect in self.doc.effects.iter().filter(|e| e.kind == EffectKind::Figure) {
+            if is_running(&effect.id) {
+                let open = self.figures.entry(effect.id.clone()).or_insert(0.0);
+                *open = (*open + step).min(1.0);
+            }
+        }
+        let effects = &self.doc.effects;
+        self.figures.retain(|id, open| {
+            if !is_running(id) {
+                *open -= step;
+            }
+            *open > 0.0 && effects.iter().any(|e| e.id == *id && e.kind == EffectKind::Figure)
+        });
+        for id in self.figures.keys() {
+            self.effect_started.entry(id.clone()).or_insert(now);
+        }
+    }
+
+    fn tick_figures(&mut self, now: f64) {
+        self.ramp_figures(now);
+        let (levels, beats) = (self.levels(now), self.beats(now));
+        // (instancia, índice del canal) -> grados de más
+        let mut offsets: BTreeMap<(&str, usize), f64> = BTreeMap::new();
+        for (id, open) in &self.figures {
+            let Some(effect) = self.doc.effects.iter().find(|e| e.id == *id) else { continue };
+            let Some(group) = &effect.group_id else { continue };
+            let started = self.effect_started.get(id).copied().unwrap_or(now);
+            let cycles = cycles_of(effect, started, beats, now);
+            // Siguiendo la música, la figura crece con lo que suena.
+            let size = effect.size_deg * smooth(*open) * level_of(effect, levels).unwrap_or(1.0);
+            let (sin, cos) = effect.angle_deg.to_radians().sin_cos();
+
+            let heads: Vec<_> = self
+                .doc
+                .rig()
+                .filter(|(i, _)| i.group.as_ref() == Some(group))
+                .flat_map(|(i, d)| heads_of(d).into_iter().map(move |axes| (i, d, axes)))
+                .collect();
+            let count = heads.len();
+            for (index, (instance, definition, axes)) in heads.into_iter().enumerate() {
+                let place = if count > 1 { 2.0 * index as f64 / (count - 1) as f64 - 1.0 } else { 0.0 };
+                let phase = cycles + index as f64 * effect.phase_offset_deg / 360.0;
+                let (x, y) = effect.figure.at(phase, place);
+                let turned = [x * cos - y * sin, x * sin + y * cos];
+                for (axis, offset) in axes.into_iter().zip(turned) {
+                    let Some(channel) = axis else { continue };
+                    let range = definition.range(definition.channels[channel].kind);
+                    *offsets.entry((&instance.id, channel)).or_default() += offset * size / range;
+                }
+            }
+        }
+
+        let mut moving = ChannelValues::new();
+        for ((instance, channel), offset) in offsets {
+            let Some((_, definition)) = self.doc.rig().find(|(i, _)| i.id == instance) else { continue };
+            let coarse = &definition.channels[channel];
+            let fine = definition.roles[channel].fine.map(|i| &definition.channels[i]);
+            let read = |c: &Channel| {
+                let value = self.live.get(instance).and_then(|v| v.get(&c.id)).copied();
+                f64::from(value.unwrap_or_else(|| c.default_dmx()))
+            };
+            let center = read(coarse) * 256.0 + fine.map_or(0.0, read);
+            let position = (center + offset * 65536.0).round().clamp(0.0, 65535.0) as u32;
+            let channels = moving.entry(instance.to_string()).or_default();
+            match fine {
+                Some(fine) => {
+                    channels.insert(coarse.id.clone(), (position >> 8) as u8);
+                    channels.insert(fine.id.clone(), (position & 255) as u8);
+                }
+                None => {
+                    channels.insert(coarse.id.clone(), ((position + 128) >> 8).min(255) as u8);
+                }
+            }
+        }
+        if moving != self.moving {
+            self.rev += 1;
+            self.moving_rev = self.rev;
+            self.moving = moving;
+        }
+    }
+
     // ------------------------------------------------------------------
     // Salida
     // ------------------------------------------------------------------
@@ -712,6 +843,8 @@ impl Show {
         self.tick_moment(now);
         self.tick_chase(now);
         self.tick_effects(now);
+        self.tick_figures(now);
+        self.last_tick = now;
         if self.playback.identify_id.is_some() && now >= self.identify_until {
             self.edit(|p| p.identify_id = None);
         }
@@ -725,7 +858,7 @@ impl Show {
             strobe: p.strobe_active,
             identify: p.identify_id.as_deref(),
         };
-        frame::build(&self.doc, &self.live, &overlay, universe)
+        frame::build(&self.doc, &self.live, &self.moving, &overlay, universe)
     }
 
     pub fn rev(&self) -> u64 {
@@ -752,6 +885,9 @@ impl Show {
                 }
             }
             out["values"] = json!(values);
+        }
+        if full || self.moving_rev > since {
+            out["moving"] = json!(self.moving);
         }
         if full || self.playback_rev > since {
             out["playback"] = json!(self.playback);

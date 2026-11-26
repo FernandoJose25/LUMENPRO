@@ -4,6 +4,7 @@ import { Fader } from "@/components/ui/Fader";
 import { StatusIndicator } from "@/components/ui/StatusIndicator";
 import { useFixtureStore } from "@/lib/fixtureStore";
 import { ColorSwatches } from "./ColorSwatches";
+import { PaletteChips } from "@/components/palettes/PalettesView";
 import { ChannelPresets } from "./ChannelPresets";
 import { PanTiltPad } from "./PanTiltPad";
 
@@ -53,6 +54,7 @@ export function FixtureControl() {
       <div className="flex max-h-[calc(100%-3.5rem)] flex-col gap-2.5 overflow-y-auto scrollbar-thin pr-1">
         <PanTiltPad instances={[selectedInstance]} />
         <ColorSwatches instances={[selectedInstance]} />
+        <PaletteChips instanceIds={[selectedInstance.id]} />
         {faders.map((ch) => {
           const value = getChannelValue(selectedInstance.id, ch.id, ch.defaultValue);
           const set = (v: number) => setChannelValue(selectedInstance.id, ch.id, v);

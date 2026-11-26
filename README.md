@@ -28,7 +28,8 @@ Lo diseñé y desarrollé solo, a partir de un brief de producto propio de 37 se
 - **Chases:** secuencias de escenas con fade y hold, en bucle o una sola vez.
 - **Momentos:** el evento en orden (Entrada, Vals, Fotos, Hora loca…). Cada uno junta escena, chase y effects en un botón, con "Siguiente", transición y avance automático opcional. Incluye una plantilla de quinceañera.
 - **Control por celular:** página en la red local (QR + PIN) con Siguiente, momentos, intensidad, estrobo y Blackout.
-- **Effects:** generadores paramétricos (seno, cuadrada…) aplicados sobre un grupo, con un único motor de intervalos global.
+- **Effects:** ondas sobre un canal (seno, cuadrada…) y figuras de movimiento (círculo, ocho, línea, abanico) que se suman a la posición sin tocar los faders.
+- **Paletas:** posiciones, colores y gobos con nombre; si se corrige una, cambian todas las escenas que la usan. En el simulador se apunta tocando el piso.
 - **Audio Reactive:** escucha la música por el micrófono o la entrada de línea, detecta los BPM y los golpes (autocorrelación y reloj predictivo propios) y los effects siguen el ritmo, los graves, los medios o los agudos. Sin música vuelven a su velocidad.
 - **Simulador del escenario:** haces en perspectiva con pan/tilt, color, zoom, gobo, prisma y estrobo reales, posiciones editables y cámara libre. Sin dependencias 3D: proyección propia sobre canvas. Se puede abrir en un segundo monitor.
 - **Equipos sin manual:** identificador que barre canal por canal y guarda su función, valor inicial y presets.
@@ -49,7 +50,7 @@ Lo diseñé y desarrollé solo, a partir de un brief de producto propio de 37 se
 | Estado | Store propio con Context; el show se guarda en `show.json` (app) o `localStorage` (navegador) |
 | Motor | Rust: crates `lumenpro_show` (nativo y WASM) y `lumenpro_dmx`, hilos, `serialport` |
 | Escritorio | Tauri 2 |
-| Calidad | Vitest + Testing Library + jsdom (219 tests contra el motor real en WASM), `cargo test` (101 tests), GitHub Actions |
+| Calidad | Vitest + Testing Library + jsdom (231 tests contra el motor real en WASM), `cargo test` (113 tests), GitHub Actions |
 
 ## Estructura
 

@@ -25,8 +25,9 @@ export async function openStageWindow(): Promise<void> {
 
 /** Lado de la ventana principal. Se monta una sola vez (AppShell). */
 export function useStagePublisher(): void {
-  const { instances, definitions, liveValues, blackoutActive, master, strobeActive, identifyId } = useFixtureStore();
-  const rig: FrameInput = { instances, definitions, liveValues, blackoutActive, master, strobeActive, identifyId };
+  const { instances, definitions, liveValues, moving, blackoutActive, master, strobeActive, identifyId } =
+    useFixtureStore();
+  const rig: FrameInput = { instances, definitions, liveValues, moving, blackoutActive, master, strobeActive, identifyId };
   const rigRef = useRef(rig);
   rigRef.current = rig;
 
@@ -46,7 +47,7 @@ export function useStagePublisher(): void {
 
   useEffect(() => {
     if (Date.now() - lastHello.current < GONE_MS) channel.current?.postMessage(rigRef.current);
-  }, [instances, definitions, liveValues, blackoutActive, master, strobeActive, identifyId]);
+  }, [instances, definitions, liveValues, moving, blackoutActive, master, strobeActive, identifyId]);
 }
 
 /** Lado de la segunda ventana; null hasta que la principal conteste. */

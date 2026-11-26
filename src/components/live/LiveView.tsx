@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { useFixtureStore } from "@/lib/fixtureStore";
 import { ColorSwatches } from "@/components/fixtures/ColorSwatches";
 import { PanTiltPad } from "@/components/fixtures/PanTiltPad";
+import { PaletteChips } from "@/components/palettes/PalettesView";
 import { LiveMoments } from "./LiveMoments";
 import { CHANNEL_TYPE_LABELS, type ChannelType } from "@/types/fixture";
 
@@ -305,8 +306,9 @@ function GroupMasterRow({
           {members.length} fixture{members.length === 1 ? "" : "s"}
         </span>
       </div>
-      <div className="mb-2">
+      <div className="mb-2 flex flex-col gap-2">
         <ColorSwatches instances={members} />
+        <PaletteChips instanceIds={members.map((m) => m.id)} />
       </div>
       <div className="flex flex-col gap-2">
         <PanTiltPad instances={members} />

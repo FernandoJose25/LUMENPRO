@@ -34,6 +34,8 @@ interface StageCanvasProps {
   /** Con onSelect/onMove las luces se pueden tocar y arrastrar. */
   onSelect?: (instanceId: string | null) => void;
   onMove?: (instanceId: string, position: { x: number; z: number }) => void;
+  /** Con esto, tocar el piso no gira la vista: dice a qué punto apuntar. */
+  onAim?: (point: Vec3) => void;
 }
 
 /** Más focos que esto se dibujan como puntos: con un cono cada uno, una barra
@@ -49,7 +51,7 @@ interface Drawn {
 
 /** Simulador: haces en perspectiva con lo mismo que sale por el cable.
  *  Arrastrar el fondo gira la cámara; la rueda acerca. */
-export function StageCanvas({ rig, selectedId = null, onSelect, onMove }: StageCanvasProps) {
+export function StageCanvas({ rig, selectedId = null, onSelect, onMove, onAim }: StageCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const placements = useMemo(() => {
@@ -146,7 +148,18 @@ export function StageCanvas({ rig, selectedId = null, onSelect, onMove }: StageC
 
   const drag = useRef<{ id: string | null; x: number; y: number } | null>(null);
 
+  function aim(e: React.PointerEvent<HTMLCanvasElement>) {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const point = view.current && unproject(view.current, e.clientX - rect.left, e.clientY - rect.top, 0);
+    if (point && onAim) onAim({ x: limit(point.x), y: 0, z: limit(point.z) });
+  }
+
   function handlePointerDown(e: React.PointerEvent<HTMLCanvasElement>) {
+    if (onAim) {
+      drag.current = { id: "aim", x: e.clientX, y: e.clientY };
+      e.currentTarget.setPointerCapture(e.pointerId);
+      return aim(e);
+    }
     const rect = e.currentTarget.getBoundingClientRect();
     const [x, y] = [e.clientX - rect.left, e.clientY - rect.top];
     let hit: string | null = null;
@@ -166,6 +179,7 @@ export function StageCanvas({ rig, selectedId = null, onSelect, onMove }: StageC
   function handlePointerMove(e: React.PointerEvent<HTMLCanvasElement>) {
     const d = drag.current;
     if (!d) return;
+    if (onAim) return aim(e);
     const [dx, dy] = [e.clientX - d.x, e.clientY - d.y];
     drag.current = { ...d, x: e.clientX, y: e.clientY };
     if (d.id && onMove && view.current) {
@@ -186,7 +200,7 @@ export function StageCanvas({ rig, selectedId = null, onSelect, onMove }: StageC
       ref={canvasRef}
       role="img"
       aria-label="Simulador del escenario"
-      className="h-full w-full cursor-grab touch-none rounded-control active:cursor-grabbing"
+      className={`h-full w-full touch-none rounded-control ${onAim ? "cursor-crosshair" : "cursor-grab active:cursor-grabbing"}`}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={() => (drag.current = null)}

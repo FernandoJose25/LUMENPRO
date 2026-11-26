@@ -6,6 +6,8 @@ import { GROUP_COLORS } from "@/types/group";
 import type { Chase, ChaseStep } from "@/types/chase";
 import type { Effect } from "@/types/effect";
 import type { Moment } from "@/types/moment";
+import type { Palette, PaletteKind } from "@/types/palette";
+import { capture, colorPaletteValues, matchPalettes, paletteValues } from "@/lib/palettes";
 import { seedDefinitions, seedInstances } from "@/data/fixtureLibrary";
 import { buildQuinceTemplate } from "@/data/quinceTemplate";
 import { closeWindow, createEngineLink, type EngineHost, type EngineLink } from "@/lib/engineLink";
@@ -34,6 +36,8 @@ interface FixtureStoreState extends ShowDoc, Playback {
    *  intensidad y estrobo generales NO los tocan: se aplican en la salida, así
    *  nada puede pisarlos y al quitarlos todo vuelve como estaba. */
   liveValues: ChannelValues;
+  /** Cabezas dibujando una figura, según el motor. No se guarda. */
+  moving: ChannelValues;
 }
 
 /** Lo que no se guarda con el show: al abrir, nada arranca solo. La excepción
@@ -47,6 +51,7 @@ const IDLE: Omit<Playback, "activeSceneId" | "activeMomentId"> = {
   momentRun: null,
   chase: null,
 };
+const NOT_SAVED = new Set([...Object.keys(IDLE), "moving"]);
 
 interface FixtureStoreValue extends FixtureStoreState {
   engine: EngineLink;
@@ -67,6 +72,16 @@ interface FixtureStoreValue extends FixtureStoreState {
   /** Varios canales en una sola actualización (merge). */
   setChannelValues: (values: ChannelValues) => void;
   saveScene: (name: string) => Scene;
+  /** Captura de las luces dadas los canales de esa clase. */
+  addPalette: (kind: PaletteKind, name: string, instances: FixtureInstance[]) => Palette;
+  /** Un color para todas las luces que puedan ponerlo. */
+  addColorPalette: (name: string, hex: string) => Palette;
+  /** Vuelve a capturar lo que tienen ahora sus luces. */
+  updatePalette: (paletteId: string) => void;
+  renamePalette: (paletteId: string, name: string) => void;
+  /** Las escenas que la usaban se quedan con sus valores. */
+  removePalette: (paletteId: string) => void;
+  applyPalette: (paletteId: string, instances: FixtureInstance[]) => void;
   updateSceneValues: (sceneId: string) => void;
   renameScene: (sceneId: string, name: string) => void;
   removeScene: (sceneId: string) => void;
@@ -146,10 +161,20 @@ function restoreState(parsed: Partial<FixtureStoreState>): FixtureStoreState {
     selectedInstanceId: parsed.selectedInstanceId ?? seedInstances[0]?.id ?? null,
     liveValues: parsed.liveValues ?? {},
     scenes: parsed.scenes ?? [],
+    palettes: parsed.palettes ?? [],
+    moving: {},
     activeSceneId: parsed.activeSceneId ?? null,
     groups: parsed.groups ?? [],
     chases: parsed.chases ?? [],
-    effects: (parsed.effects ?? []).map((fx) => ({ ...fx, source: fx.source ?? "clock", beatsPerCycle: fx.beatsPerCycle ?? 1 })),
+    effects: (parsed.effects ?? []).map((fx) => ({
+      ...fx,
+      source: fx.source ?? "clock",
+      beatsPerCycle: fx.beatsPerCycle ?? 1,
+      kind: fx.kind ?? "wave",
+      figure: fx.figure ?? "circle",
+      sizeDeg: fx.sizeDeg ?? 20,
+      angleDeg: fx.angleDeg ?? 0,
+    })),
     moments: parsed.moments ?? [],
     activeMomentId: parsed.activeMomentId ?? null,
     ...IDLE,
@@ -157,7 +182,7 @@ function restoreState(parsed: Partial<FixtureStoreState>): FixtureStoreState {
 }
 
 function serialize(state: FixtureStoreState): string {
-  return JSON.stringify(Object.fromEntries(Object.entries(state).filter(([key]) => !(key in IDLE))));
+  return JSON.stringify(Object.fromEntries(Object.entries(state).filter(([key]) => !NOT_SAVED.has(key))));
 }
 
 /** El show del disco, o el que el motor ya tenía en marcha. */
@@ -218,10 +243,10 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
 
   useEffect(() => {
     const host: EngineHost = {
-      onChanges: ({ full, values, playback }: EngineChanges) => {
+      onChanges: ({ full, values, moving, playback }: EngineChanges) => {
         const s = stateRef.current;
         const liveValues = full ? values : mergeValues(s.liveValues, values);
-        stateRef.current = { ...s, ...playback, liveValues };
+        stateRef.current = { ...s, ...playback, liveValues, moving: moving ?? s.moving };
         publish(stateRef.current);
       },
       resetMessage: () => resetMessage(stateRef.current),
@@ -385,6 +410,7 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
         id: makeId("scene"),
         name: name.trim() || "Sin nombre",
         values: captureSnapshot(stateRef.current),
+        refs: matchPalettes(stateRef.current, stateRef.current.palettes),
         createdAt: Date.now(),
         updatedAt: Date.now(),
       };
@@ -402,7 +428,9 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
       setState((s) => ({
         ...s,
         scenes: s.scenes.map((sc) =>
-          sc.id === sceneId ? { ...sc, values: captureSnapshot(s), updatedAt: Date.now() } : sc,
+          sc.id === sceneId
+            ? { ...sc, values: captureSnapshot(s), refs: matchPalettes(s, s.palettes), updatedAt: Date.now() }
+            : sc,
         ),
       }));
     },
@@ -428,6 +456,79 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
 
   /** Recall = merge, no blackout (ver comentario en types/scene.ts): solo
    *  pisa los instanceId/channelId que la escena capturó. */
+  const addPalette = useCallback(
+    (kind: PaletteKind, name: string, chosen: FixtureInstance[]): Palette => {
+      const palette: Palette = { id: makeId("palette"), name, kind, values: capture(stateRef.current, kind, chosen) };
+      setState((s) => ({ ...s, palettes: [...s.palettes, palette] }));
+      return palette;
+    },
+    [setState],
+  );
+
+  const addColorPalette = useCallback(
+    (name: string, hex: string): Palette => {
+      const palette: Palette = {
+        id: makeId("palette"),
+        name,
+        kind: "color",
+        hex,
+        values: colorPaletteValues(stateRef.current, hex),
+      };
+      setState((s) => ({ ...s, palettes: [...s.palettes, palette] }));
+      return palette;
+    },
+    [setState],
+  );
+
+  const updatePalette = useCallback(
+    (paletteId: string) =>
+      setState((s) => ({
+        ...s,
+        palettes: s.palettes.map((p) => {
+          if (p.id !== paletteId) return p;
+          const owners = s.instances.filter((i) => p.values[i.id]);
+          // Corregida a mano: ya no es "el color tal" para las que se agreguen.
+          return { ...p, hex: undefined, values: capture(s, p.kind, owners.length > 0 ? owners : s.instances) };
+        }),
+      })),
+    [setState],
+  );
+
+  const renamePalette = useCallback(
+    (paletteId: string, name: string) =>
+      setState((s) => ({ ...s, palettes: s.palettes.map((p) => (p.id === paletteId ? { ...p, name } : p)) })),
+    [setState],
+  );
+
+  const removePalette = useCallback(
+    (paletteId: string) =>
+      setState((s) => {
+        const palette = s.palettes.find((p) => p.id === paletteId);
+        const scenes = s.scenes.map((scene) => {
+          if (!palette || !Object.values(scene.refs ?? {}).some((r) => r[palette.kind] === paletteId)) return scene;
+          const values = { ...scene.values };
+          const refs = { ...scene.refs };
+          for (const [instanceId, own] of Object.entries(refs)) {
+            if (own[palette.kind] !== paletteId) continue;
+            values[instanceId] = { ...values[instanceId], ...palette.values[instanceId] };
+            const { [palette.kind]: _gone, ...rest } = own;
+            refs[instanceId] = rest;
+          }
+          return { ...scene, values, refs };
+        });
+        return { ...s, scenes, palettes: s.palettes.filter((p) => p.id !== paletteId) };
+      }),
+    [setState],
+  );
+
+  const applyPalette = useCallback(
+    (paletteId: string, chosen: FixtureInstance[]) => {
+      const palette = stateRef.current.palettes.find((p) => p.id === paletteId);
+      if (palette) setChannelValues(paletteValues(palette, stateRef.current, chosen));
+    },
+    [setChannelValues],
+  );
+
   const recallScene = useCallback((sceneId: string) => engine.send({ type: "recallScene", id: sceneId }), [engine]);
 
   const addGroup = useCallback(
@@ -600,6 +701,10 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
         id: makeId("effect"),
         name: name.trim() || `Effect ${state.effects.length + 1}`,
         groupId: null,
+        kind: "wave",
+        figure: "circle",
+        sizeDeg: 20,
+        angleDeg: 0,
         channelType: "DIMMER",
         waveform: "sine",
         speedCpm: 20,
@@ -734,6 +839,12 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
     setChannelValue,
     setChannelValues,
     saveScene,
+    addPalette,
+    addColorPalette,
+    updatePalette,
+    renamePalette,
+    removePalette,
+    applyPalette,
     updateSceneValues,
     renameScene,
     removeScene,

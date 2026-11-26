@@ -175,11 +175,25 @@ pub struct Definition {
     pub kind: Option<String>,
     /// Barras y equipos de varios focos: los ids de canal de cada uno.
     pub heads: Vec<Vec<String>>,
+    pub pan_limit: Option<Limit>,
+    pub tilt_limit: Option<Limit>,
     /// Lo que se deduce del perfil, por canal (`prepare`). Una barra puede
     /// tener 480 canales y esto se consulta 50 veces por segundo.
     #[serde(skip)]
     pub roles: Vec<Role>,
 }
+
+/// Recorrido en grados.
+#[derive(Debug, Clone, Copy, Default, Deserialize)]
+#[serde(default)]
+pub struct Limit {
+    #[serde(deserialize_with = "num")]
+    pub max: f64,
+}
+
+// Recorrido habitual de una cabeza móvil, si el perfil no dice otra cosa.
+const PAN_RANGE: f64 = 540.0;
+const TILT_RANGE: f64 = 270.0;
 
 #[derive(Debug, Clone, Default)]
 pub struct Role {
@@ -281,6 +295,20 @@ impl Definition {
         })
     }
 
+    /// Grados que recorre un eje de punta a punta.
+    pub fn range(&self, axis: ChannelType) -> f64 {
+        let (limit, usual) = match axis {
+            ChannelType::Pan => (self.pan_limit, PAN_RANGE),
+            _ => (self.tilt_limit, TILT_RANGE),
+        };
+        limit.map(|l| l.max).filter(|max| *max > 0.0).unwrap_or(usual)
+    }
+
+    pub fn fine_of(&self, channel: &Channel) -> Option<&Channel> {
+        let index = self.channels.iter().position(|c| c.id == channel.id)?;
+        Some(&self.channels[self.roles.get(index)?.fine?])
+    }
+
     /// Grupos de canales de un tipo que se mueven por separado: uno por foco,
     /// o todos juntos si el equipo no los distingue.
     pub fn cells(&self, kind: ChannelType) -> Vec<Vec<&Channel>> {
@@ -322,6 +350,18 @@ pub struct Instance {
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Scene {
+    pub id: String,
+    /// Ya con las paletas aplicadas (`Doc::parse`).
+    #[serde(deserialize_with = "values")]
+    pub values: ChannelValues,
+    /// Paletas que usa: instanceId -> clase -> id. Mandan sobre `values`.
+    refs: BTreeMap<String, BTreeMap<String, String>>,
+}
+
+/// Una posición, un color o un gobo con nombre, para varias luces.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Palette {
     pub id: String,
     #[serde(deserialize_with = "values")]
     pub values: ChannelValues,
@@ -384,11 +424,56 @@ pub enum EffectSource {
     Clock,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum EffectKind {
+    /// Las cabezas dibujan una figura alrededor de donde estén.
+    Figure,
+    /// Un canal sube y baja.
+    #[default]
+    #[serde(other)]
+    Wave,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Figure {
+    Eight,
+    Line,
+    Fan,
+    #[default]
+    #[serde(other)]
+    Circle,
+}
+
+impl Figure {
+    /// Desplazamiento de pan y tilt, de -1 a 1. `place` es el lugar de la
+    /// cabeza en el grupo, de -1 (la primera) a 1 (la última).
+    pub fn at(self, phase: f64, place: f64) -> (f64, f64) {
+        let a = std::f64::consts::TAU * (phase - phase.floor());
+        match self {
+            Figure::Circle => (a.sin(), a.cos()),
+            Figure::Eight => (a.sin(), (2.0 * a).sin() / 2.0),
+            Figure::Line => (a.sin(), 0.0),
+            // Se abre y se cierra.
+            Figure::Fan => (place * (0.5 - 0.5 * a.cos()), 0.0),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Effect {
     pub id: String,
     pub group_id: Option<String>,
+    pub kind: EffectKind,
+    pub figure: Figure,
+    /// Figuras: cuánto se aparta del centro, en grados.
+    #[serde(deserialize_with = "num")]
+    pub size_deg: f64,
+    /// Figuras: giro del dibujo.
+    #[serde(deserialize_with = "num")]
+    pub angle_deg: f64,
     pub channel_type: ChannelType,
     pub waveform: Waveform,
     #[serde(deserialize_with = "num")]
@@ -423,6 +508,7 @@ pub struct Doc {
     pub definitions: Vec<Definition>,
     pub instances: Vec<Instance>,
     pub scenes: Vec<Scene>,
+    pub palettes: Vec<Palette>,
     pub chases: Vec<Chase>,
     pub effects: Vec<Effect>,
     pub moments: Vec<Moment>,
@@ -435,6 +521,16 @@ impl Doc {
     pub fn parse(json: &serde_json::Value) -> Result<Self, String> {
         let mut doc = Doc::deserialize(json).map_err(|e| format!("El show no se entiende: {e}"))?;
         doc.definitions.iter_mut().for_each(Definition::prepare);
+        for scene in &mut doc.scenes {
+            for (instance, classes) in &scene.refs {
+                for id in classes.values() {
+                    let palette = doc.palettes.iter().find(|p| p.id == *id);
+                    if let Some(channels) = palette.and_then(|p| p.values.get(instance)) {
+                        scene.values.entry(instance.clone()).or_default().extend(channels.clone());
+                    }
+                }
+            }
+        }
         doc.profile = doc
             .instances
             .iter()

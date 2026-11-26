@@ -88,6 +88,37 @@ function normalize(v: Vec3): Vec3 {
   return { x: v.x / length, y: v.y / length, z: v.z / length };
 }
 
+/**
+ * Pan y tilt (0–1, como el pad) para que una cabeza apunte a ese punto. De las
+ * dos formas de llegar (y de las vueltas de más) elige la más cercana a donde
+ * está; null si ninguna entra en su recorrido.
+ */
+export function aimAt(
+  placement: Placement,
+  definition: FixtureDefinition,
+  target: Vec3,
+  current: { pan: number; tilt: number },
+): { pan: number; tilt: number } | null {
+  const d = normalize({ x: target.x - placement.x, y: target.y - placement.y, z: target.z - placement.z });
+  const away = (Math.acos(clamp(d.y * (placement.hung ? -1 : 1), -1, 1)) * 180) / Math.PI;
+  const around = (Math.atan2(d.x, d.z) * 180) / Math.PI - placement.yaw;
+  const panRange = definition.panLimit?.max ?? PAN_RANGE;
+  const tiltRange = definition.tiltLimit?.max ?? TILT_RANGE;
+  let best: { pan: number; tilt: number; distance: number } | null = null;
+  for (const [pan, tilt] of [
+    [around, away],
+    [around + 180, -away],
+  ]) {
+    for (let turns = -3; turns <= 3; turns++) {
+      const option = { pan: (pan + 360 * turns) / panRange + 0.5, tilt: 0.5 - tilt / tiltRange };
+      if (option.pan < 0 || option.pan > 1 || option.tilt < 0 || option.tilt > 1) continue;
+      const distance = Math.hypot(option.pan - current.pan, option.tilt - current.tilt);
+      if (!best || distance < best.distance) best = { ...option, distance };
+    }
+  }
+  return best && { pan: best.pan, tilt: best.tilt };
+}
+
 /** Hacia dónde apunta. Con pan y tilt al centro una cabeza apunta recto por su
  *  eje: arriba si está apoyada, abajo si cuelga. */
 export function beamDirection(placement: Placement, head: { pan: number; tilt: number } | null): Vec3 {

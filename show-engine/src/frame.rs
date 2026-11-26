@@ -38,11 +38,11 @@ fn apply_curve(channel: &Channel, value: f64) -> f64 {
     channel.dmx_min + range * curved
 }
 
-/// Valor en vivo de un canal, sin nada encima.
-fn live_value(instance: &Instance, channel: &Channel, live: &ChannelValues) -> f64 {
-    live.get(&instance.id)
-        .and_then(|channels| channels.get(&channel.id))
-        .map_or(channel.default_value, |v| f64::from(*v))
+/// Valor en vivo de un canal, sin nada encima. `moving` son las figuras: le
+/// ganan a lo que haya debajo.
+fn live_value(instance: &Instance, channel: &Channel, live: &ChannelValues, moving: &ChannelValues) -> f64 {
+    let read = |values: &ChannelValues| values.get(&instance.id).and_then(|c| c.get(&channel.id)).copied();
+    read(moving).or_else(|| read(live)).map_or(channel.default_value, f64::from)
 }
 
 /// Lo que vale con intensidad, estrobo, identificar, Blackout y curva.
@@ -85,7 +85,7 @@ fn is_inverted(instance: &Instance, channel: &Channel) -> bool {
 }
 
 /// Índice 0 = canal DMX 1.
-pub fn build(doc: &Doc, live: &ChannelValues, over: &Overlay, universe: i32) -> Frame {
+pub fn build(doc: &Doc, live: &ChannelValues, moving: &ChannelValues, over: &Overlay, universe: i32) -> Frame {
     let mut frame = [0; CHANNELS];
     let mut put = |address: i32, channel: &Channel, value: u8| {
         if let Ok(slot) = usize::try_from(address.saturating_add(channel.index) - 2) {
@@ -97,7 +97,7 @@ pub fn build(doc: &Doc, live: &ChannelValues, over: &Overlay, universe: i32) -> 
     for (instance, definition) in doc.rig().filter(|(i, _)| i.universe == universe) {
         // Los finos salen junto con el canal que completan.
         for (channel, role) in definition.channels.iter().zip(&definition.roles).filter(|(_, r)| !r.is_fine) {
-            let value = live_value(instance, channel, live);
+            let value = live_value(instance, channel, live, moving);
             let inverted = is_inverted(instance, channel);
             // floor(x + 0.5) y no round(): es lo que hace Math.round en la interfaz.
             match role.fine.map(|i| &definition.channels[i]) {
@@ -107,7 +107,7 @@ pub fn build(doc: &Doc, live: &ChannelValues, over: &Overlay, universe: i32) -> 
                     put(instance.address, channel, (output + 0.5).floor().clamp(0.0, 255.0) as u8);
                 }
                 Some(fine_channel) => {
-                    let value = value + live_value(instance, fine_channel, live) / 256.0;
+                    let value = value + live_value(instance, fine_channel, live, moving) / 256.0;
                     let value = effective(instance, definition, (channel, role), value, over) * 256.0;
                     let top = (channel.dmx_min + channel.dmx_max) * 256.0 + 255.0;
                     let output = if inverted { top - value } else { value };

@@ -50,6 +50,8 @@ export interface EngineChanges {
   /** Los valores son todos, no solo los que cambiaron. */
   full: boolean;
   values: ChannelValues;
+  /** Pan y tilt de las cabezas que dibujan una figura: todos, cuando cambian. */
+  moving?: ChannelValues;
   playback?: Playback;
 }
 

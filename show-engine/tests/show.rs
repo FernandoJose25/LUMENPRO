@@ -751,3 +751,221 @@ fn the_strobe_button_uses_the_range_the_profile_marks() {
     r.send(json!({ "type": "strobe", "on": true }));
     assert_eq!(r.show.frame(1)[0], 175);
 }
+
+// --- Figuras ------------------------------------------------------------
+
+/// Dos cabezas de 16 bits con pan de 512° y tilt de 256°: 128 pasos de 16 bits
+/// por grado de pan y 256 por grado de tilt.
+fn heads(figure: &str, patch: Value) -> Rig {
+    let mut r = Rig::new();
+    r.doc["definitions"] = json!([{
+        "id": "head", "panLimit": { "min": 0, "max": 512 }, "tiltLimit": { "min": 0, "max": 256 },
+        "channels": [
+            channel("pan", 1, "PAN", 128), channel("panf", 2, "PAN_FINE", 0),
+            channel("tilt", 3, "TILT", 128), channel("tiltf", 4, "TILT_FINE", 0),
+        ],
+    }]);
+    r.doc["instances"] = json!([
+        { "id": "a", "definitionId": "head", "universe": 1, "address": 1, "group": "g" },
+        { "id": "b", "definitionId": "head", "universe": 1, "address": 11, "group": "g" },
+    ]);
+    let mut effect = json!({ "id": "fig", "groupId": "g", "kind": "figure", "figure": figure, "sizeDeg": 20,
+        "angleDeg": 0, "speedCpm": 60, "phaseOffsetDeg": 0, "source": "clock", "beatsPerCycle": 1 });
+    for (k, v) in patch.as_object().unwrap() {
+        effect[k] = v.clone();
+    }
+    r.doc["effects"] = json!([effect]);
+    r.reset();
+    r
+}
+
+/// Grados de pan y tilt respecto del centro, según lo que sale por el cable.
+fn aim(r: &Rig, address: usize) -> (f64, f64) {
+    let f = r.show.frame(1);
+    let axis = |at: usize| f64::from(f[at]) * 256.0 + f64::from(f[at + 1]) - 32768.0;
+    (axis(address - 1) / 128.0, axis(address + 1) / 256.0)
+}
+
+/// Un ciclo completo, ya abierta.
+fn trace(r: &mut Rig) -> Vec<(f64, f64)> {
+    r.send(json!({ "type": "startEffect", "id": "fig" }));
+    r.run(2000.0);
+    (0..50)
+        .map(|_| {
+            r.run(20.0);
+            aim(r, 1)
+        })
+        .collect()
+}
+
+fn extent(points: &[(f64, f64)]) -> (f64, f64) {
+    let span = |f: fn(&(f64, f64)) -> f64| {
+        points.iter().map(f).fold(f64::MIN, f64::max) - points.iter().map(f).fold(f64::MAX, f64::min)
+    };
+    (span(|p| p.0), span(|p| p.1))
+}
+
+#[test]
+fn a_circle_is_round_complete_and_smooth() {
+    let mut r = heads("circle", json!({}));
+    let points = trace(&mut r);
+    for (pan, tilt) in &points {
+        assert!((pan.hypot(*tilt) - 20.0).abs() < 0.05, "{pan} {tilt}");
+    }
+    let quadrants: std::collections::BTreeSet<_> = points.iter().map(|p| (p.0 > 0.0, p.1 > 0.0)).collect();
+    assert_eq!(quadrants.len(), 4);
+    for w in points.windows(2) {
+        assert!((w[1].0 - w[0].0).hypot(w[1].1 - w[0].1) < 3.0, "salto");
+    }
+}
+
+#[test]
+fn an_eight_crosses_the_center_and_a_line_stays_on_its_axis() {
+    let points = trace(&mut heads("eight", json!({})));
+    let (pan, tilt) = extent(&points);
+    assert!((pan - 40.0).abs() < 0.2 && (tilt - 20.0).abs() < 0.2, "{pan} {tilt}");
+    assert!(points.iter().filter(|p| p.0.hypot(p.1) < 1.5).count() >= 2);
+
+    let (pan, tilt) = extent(&trace(&mut heads("line", json!({}))));
+    assert!((pan - 40.0).abs() < 0.2 && tilt < 0.01);
+    let (pan, tilt) = extent(&trace(&mut heads("line", json!({ "angleDeg": 90 }))));
+    assert!(pan < 0.05 && (tilt - 40.0).abs() < 0.2, "girada va en tilt: {pan} {tilt}");
+}
+
+#[test]
+fn a_fan_opens_symmetrically() {
+    let mut r = heads("fan", json!({ "speedCpm": 60 }));
+    r.send(json!({ "type": "startEffect", "id": "fig" }));
+    r.run(2500.0); // a media vuelta: abierto del todo
+    let (a, b) = (aim(&r, 1), aim(&r, 11));
+    assert!((a.0 + 20.0).abs() < 0.3 && (b.0 - 20.0).abs() < 0.3, "{a:?} {b:?}");
+    r.run(500.0);
+    assert!(aim(&r, 1).0.abs() < 0.3);
+}
+
+#[test]
+fn the_phase_offset_spreads_the_heads_along_the_figure() {
+    let mut r = heads("circle", json!({ "phaseOffsetDeg": 180 }));
+    trace(&mut r);
+    let (a, b) = (aim(&r, 1), aim(&r, 11));
+    assert!((a.0 + b.0).abs() < 0.1 && (a.1 + b.1).abs() < 0.1);
+}
+
+#[test]
+fn a_figure_opens_and_closes_softly_and_leaves_the_faders_where_they_were() {
+    let mut r = heads("circle", json!({}));
+    r.send(json!({ "type": "startEffect", "id": "fig" }));
+    r.run(20.0);
+    assert!(aim(&r, 1).0.hypot(aim(&r, 1).1) < 0.5, "no arranca de un salto");
+    r.run(2000.0);
+    assert_eq!(r.live("a", "pan"), 999, "los valores en vivo no se tocan");
+    r.send(json!({ "type": "stopEffect", "id": "fig" }));
+    let before = aim(&r, 1);
+    r.run(20.0);
+    let after = aim(&r, 1);
+    assert!((after.0 - before.0).hypot(after.1 - before.1) < 4.0, "no frena de un salto");
+    r.run(1500.0);
+    assert_eq!(aim(&r, 1), (0.0, 0.0));
+    assert_eq!(r.show.changes(0)["moving"], json!({}));
+}
+
+#[test]
+fn the_center_can_be_moved_while_it_draws() {
+    let mut r = heads("circle", json!({}));
+    trace(&mut r);
+    r.send(json!({ "type": "values", "values": { "a": { "pan": 158, "panf": 0 } } })); // +60°
+    r.run(20.0);
+    let points: Vec<_> = (0..50).map(|_| { r.run(20.0); aim(&r, 1).0 }).collect();
+    let middle = points.iter().sum::<f64>() / 50.0;
+    assert!((middle - 60.0).abs() < 0.5, "{middle}");
+}
+
+#[test]
+fn at_the_end_of_its_travel_a_head_stops_instead_of_wrapping_around() {
+    let mut r = heads("line", json!({ "sizeDeg": 90 }));
+    r.send(json!({ "type": "values", "values": { "a": { "pan": 250, "panf": 0 } } }));
+    for (pan, _) in trace(&mut r) {
+        assert!(pan > 100.0, "dio la vuelta: {pan}");
+    }
+}
+
+#[test]
+fn two_figures_add_up_and_a_moment_change_closes_them() {
+    let mut r = heads("line", json!({}));
+    let mut second = r.doc["effects"][0].clone();
+    second["id"] = json!("fig2");
+    second["angleDeg"] = json!(90);
+    r.doc["effects"].as_array_mut().unwrap().push(second);
+    r.doc["moments"] = json!([
+        { "id": "m1", "name": "A", "effectIds": ["fig", "fig2"], "fadeMs": 0 },
+        { "id": "m2", "name": "B", "effectIds": [], "fadeMs": 0 },
+    ]);
+    r.reset();
+    r.start("m1");
+    r.run(2000.0);
+    let points: Vec<_> = (0..50).map(|_| { r.run(20.0); aim(&r, 1) }).collect();
+    let (pan, tilt) = extent(&points);
+    assert!((pan - 40.0).abs() < 0.3 && (tilt - 40.0).abs() < 0.3);
+    r.start("m2");
+    r.run(1500.0);
+    assert_eq!(aim(&r, 1), (0.0, 0.0));
+}
+
+#[test]
+fn an_8_bit_head_and_the_mount_inversion_also_work() {
+    let mut r = heads("line", json!({}));
+    r.doc["definitions"][0]["channels"] = json!([channel("pan", 1, "PAN", 128), channel("tilt", 2, "TILT", 128)]);
+    r.doc["instances"][1]["panInvert"] = json!(true);
+    r.reset();
+    r.send(json!({ "type": "startEffect", "id": "fig" }));
+    r.run(2250.0); // un cuarto de vuelta: en la punta
+    let f = r.show.frame(1);
+    assert_eq!((f[0], f[10]), (138, 117));
+}
+
+#[test]
+fn following_the_bass_the_figure_grows_with_it() {
+    let mut r = heads("circle", json!({ "source": "bass" }));
+    r.send(json!({ "type": "startEffect", "id": "fig" }));
+    for (bass, radius) in [(1.0, 20.0), (0.25, 5.0)] {
+        for _ in 0..80 {
+            r.send(json!({ "type": "audio", "audio": { "levels": { "bass": bass, "mid": 0, "treble": 0 }, "beat": null } }));
+            r.run(20.0);
+        }
+        let (pan, tilt) = aim(&r, 1);
+        assert!((pan.hypot(tilt) - radius).abs() < 0.1);
+    }
+}
+
+// --- Paletas -------------------------------------------------------------
+
+#[test]
+fn correcting_a_palette_changes_every_scene_that_uses_it() {
+    let mut r = heads("circle", json!({}));
+    r.doc["palettes"] = json!([{ "id": "floor", "name": "Pista", "values": { "a": { "pan": 10 }, "b": { "pan": 20 } } }]);
+    r.doc["scenes"] = json!([
+        { "id": "s1", "values": { "a": { "pan": 1, "tilt": 7 } }, "refs": { "a": { "position": "floor" } } },
+        { "id": "s2", "values": { "b": { "pan": 1 } }, "refs": { "b": { "position": "floor" } } },
+        { "id": "s3", "values": { "a": { "pan": 99 } } },
+    ]);
+    r.reset();
+    r.send(json!({ "type": "recallScene", "id": "s1" }));
+    assert_eq!((r.live("a", "pan"), r.live("a", "tilt")), (10, 7));
+
+    r.doc["palettes"][0]["values"] = json!({ "a": { "pan": 55 }, "b": { "pan": 66 } });
+    r.send(json!({ "type": "doc", "doc": r.doc }));
+    r.send(json!({ "type": "recallScene", "id": "s1" }));
+    r.send(json!({ "type": "recallScene", "id": "s2" }));
+    assert_eq!((r.live("a", "pan"), r.live("b", "pan")), (55, 66));
+    r.send(json!({ "type": "recallScene", "id": "s3" }));
+    assert_eq!(r.live("a", "pan"), 99, "las que no la usan no cambian");
+}
+
+#[test]
+fn a_scene_that_points_to_a_deleted_palette_keeps_what_it_saved() {
+    let mut r = heads("circle", json!({}));
+    r.doc["scenes"] = json!([{ "id": "s", "values": { "a": { "pan": 12 } }, "refs": { "a": { "position": "nada" } } }]);
+    r.reset();
+    r.send(json!({ "type": "recallScene", "id": "s" }));
+    assert_eq!(r.live("a", "pan"), 12);
+}

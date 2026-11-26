@@ -81,19 +81,21 @@ export function buildQuinceTemplate(rig: Rig, makeId: (prefix: string) => string
     if (!groupId) return [];
     const id = makeId("effect");
     effects.push({
-      id, name, groupId, channelType, waveform: "sine", speedCpm, min, max, phaseOffsetDeg,
-      source: "clock", beatsPerCycle: 1, createdAt: now, updatedAt: now, ...music,
+      id, name, groupId, kind: "wave", figure: "circle", sizeDeg: 20, angleDeg: 0, channelType, waveform: "sine",
+      speedCpm, min, max, phaseOffsetDeg, source: "clock", beatsPerCycle: 1, createdAt: now, updatedAt: now, ...music,
     });
     return [id];
   }
 
-  // Centrados en los defaults de la plantilla (Pan 128, Tilt 90). Con 180° de
-  // desfase las dos cabezas se mueven en espejo.
-  const slowPan = effect(headsGroup, "Cabezas: paneo lento", "PAN", 6, 104, 152, 180);
-  const fastMove = [
-    ...effect(headsGroup, "Cabezas: paneo fiesta", "PAN", 18, 84, 172, 180),
-    ...effect(headsGroup, "Cabezas: cabeceo fiesta", "TILT", 23, 60, 120, 90),
-  ];
+  /** Las cabezas dibujan una figura alrededor de donde apunte la escena. */
+  function figure(name: string, shape: Effect["figure"], sizeDeg: number, speedCpm: number, music: Partial<Effect> = {}) {
+    return effect(headsGroup, name, "PAN", speedCpm, 0, 255, 180, { kind: "figure", figure: shape, sizeDeg, ...music });
+  }
+
+  // Alrededor de donde apunte la escena. Con 180° de desfase las dos cabezas
+  // van en espejo.
+  const slowPan = figure("Cabezas: círculo lento", "circle", 12, 5);
+  const fastMove = figure("Cabezas: ocho fiesta", "eight", 35, 18);
   // Velocidades distintas para que los tres colores nunca vayan a la par.
   const rainbow = [
     ...effect(parsGroup, "PAR: ola roja", "RED", 30, 0, 255, 90),
@@ -107,10 +109,7 @@ export function buildQuinceTemplate(rig: Rig, makeId: (prefix: string) => string
     ...effect(parsGroup, "PAR: azul al ritmo", "BLUE", 44, 0, 255, 90, { source: "beat", beatsPerCycle: 8 }),
     ...effect(parsGroup, "PAR: golpe de graves", "DIMMER", 120, 40, 255, 0, { source: "bass", waveform: "pulse" }),
   ];
-  const musicMove = [
-    ...effect(headsGroup, "Cabezas: paneo al ritmo", "PAN", 18, 84, 172, 180, { source: "beat", beatsPerCycle: 8 }),
-    ...effect(headsGroup, "Cabezas: cabeceo al ritmo", "TILT", 23, 60, 120, 90, { source: "beat", beatsPerCycle: 6 }),
-  ];
+  const musicMove = figure("Cabezas: ocho al ritmo", "eight", 35, 18, { source: "beat", beatsPerCycle: 8 });
 
   function moment(name: string, fadeMs: number, parLook: Look, headLook: Look, effectIds: string[] = []) {
     const scene: Scene = {

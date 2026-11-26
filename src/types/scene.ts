@@ -1,3 +1,5 @@
+import type { PaletteKind } from "@/types/palette";
+
 /**
  * Fase 4 — Scenes: una escena es una foto de los valores de canal de
  * uno o más fixtures en un momento dado. `values` está indexado por
@@ -15,6 +17,9 @@ export interface Scene {
   name: string;
   /** instanceId -> channelId -> valor DMX (0-255) capturado */
   values: Record<string, Record<string, number>>;
+  /** Paletas que tenía puestas cada luz al guardarla (types/palette.ts):
+   *  instanceId -> clase -> paletteId. Al recuperarla mandan sobre `values`. */
+  refs?: Record<string, Partial<Record<PaletteKind, string>>>;
   createdAt: number;
   updatedAt: number;
 }
