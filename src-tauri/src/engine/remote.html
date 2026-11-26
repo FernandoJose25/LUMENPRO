@@ -59,6 +59,11 @@
     text-align: center; font-size: 34px; letter-spacing: .3em; padding-left: .3em; user-select: text; -webkit-user-select: text;
   }
   #login button { background: var(--accent); color: var(--bg); border: 0; }
+  #pads { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  #pads > * { overflow-wrap: anywhere; }
+  #pads .big { grid-column: span 2; min-height: 84px; font-size: 20px; }
+  #pads .fader { grid-column: span 2; padding: 6px 2px; }
+  #pads button.active { border-color: var(--accent); color: var(--bg); background: var(--accent); }
   #login-error { min-height: 1.35em; color: var(--danger) !important; }
 </style>
 </head>
@@ -77,6 +82,7 @@
     <header><strong>LUMEN PRO</strong><span><i id="dmx-dot" class="dot"></i><span id="dmx"></span></span></header>
     <div id="offline" role="alert" hidden>Sin conexión con la laptop. Reintentando…</div>
     <div id="now"><b id="now-name"></b><small id="now-time"></small></div>
+    <div id="pads" hidden></div>
     <button id="next"></button>
     <div class="row"><button id="prev">◀ Anterior</button><button id="stop">■ Detener</button></div>
     <div id="moments"></div>
@@ -236,9 +242,65 @@ function render() {
   $("blackout").className = state.blackout ? "on" : armed ? "armed" : "";
   $("blackout").textContent = state.blackout ? "VOLVER A ENCENDER" : armed ? "CONFIRMAR" : "BLACKOUT";
   $("blackout").disabled = !online;
+  renderPads();
   renderClock();
 }
 
+// Los botones que se armaron en la laptop ("Celular" → Botones del celular).
+const padTouched = {};
+function makePad(pad) {
+  if (pad.fader) {
+    const box = document.createElement("div");
+    box.className = "fader";
+    box.innerHTML = '<label><span></span><b></b></label><input type="range" min="0" max="100">';
+    box.querySelector("span").textContent = pad.label;
+    const input = box.querySelector("input");
+    let timer = null;
+    input.oninput = () => {
+      padTouched[pad.id] = Date.now();
+      box.querySelector("b").textContent = input.value + " %";
+      if (timer) return;
+      timer = setTimeout(() => {
+        timer = null;
+        send({ type: "pad", id: pad.id, value: Number(input.value) / 100 });
+      }, 100);
+    };
+    return box;
+  }
+  const button = document.createElement("button");
+  button.textContent = pad.label;
+  if (pad.hold) {
+    // Mientras se aprieta.
+    button.onpointerdown = () => send({ type: "pad", id: pad.id, press: true });
+    button.onpointerup = button.onpointercancel = () => send({ type: "pad", id: pad.id, press: false });
+  } else {
+    button.onclick = () => send({ type: "pad", id: pad.id, press: true });
+  }
+  return button;
+}
+function renderPads() {
+  const pads = state.pads || [];
+  const box = $("pads");
+  box.hidden = pads.length === 0;
+  const shape = JSON.stringify(pads.map((p) => [p.id, p.label, p.size, p.fader, p.hold]));
+  if (box.dataset.shape !== shape) {
+    box.dataset.shape = shape;
+    box.textContent = "";
+    pads.forEach((pad) => box.appendChild(makePad(pad)));
+  }
+  pads.forEach((pad, i) => {
+    const el = box.children[i];
+    if (pad.fader) {
+      const input = el.querySelector("input");
+      if (pad.value !== null && Date.now() - (padTouched[pad.id] || 0) > 800) input.value = Math.round(pad.value * 100);
+      el.querySelector("b").textContent = input.value + " %";
+      input.disabled = !online;
+    } else {
+      el.className = (pad.size === 2 ? "big " : "") + (pad.active ? "active" : "");
+      el.disabled = !online;
+    }
+  });
+}
 function renderClock() {
   if (!state) return;
   const index = state.moments.findIndex((m) => m.id === state.activeId);

@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
 import { StatusIndicator } from "@/components/ui/StatusIndicator";
+import { PadBoard } from "@/components/pads/PadBoard";
+import { useFixtureStore } from "@/lib/fixtureStore";
 import type { RemoteControl } from "@/lib/remoteControl";
 
 /** Enciende el control por celular y muestra cómo entrar. */
@@ -34,7 +36,8 @@ export function RemoteView({ remote }: { remote: RemoteControl }) {
           ) : null}
         </Panel>
       </div>
-      <div className="min-w-0 flex-1">
+      <div className="flex min-w-0 flex-1 flex-col gap-2">
+        <PhonePads />
         <Panel title="CÓMO SE USA">
           <ol className="flex max-w-xl list-decimal flex-col gap-2 pl-4 text-sm text-text-secondary">
             <li>Conecta la laptop y el celular a la misma WiFi. No hace falta internet.</li>
@@ -49,6 +52,20 @@ export function RemoteView({ remote }: { remote: RemoteControl }) {
         </Panel>
       </div>
     </div>
+  );
+}
+
+/** Los botones que aparecen arriba en el celular. */
+function PhonePads() {
+  const { phonePads, setPhonePads } = useFixtureStore();
+  return (
+    <Panel title="BOTONES DEL CELULAR" className="h-auto">
+      <p className="mb-3 text-xs text-text-secondary">
+        Aparecen arriba de todo en el celular, en este orden. Siguiente, los momentos, intensidad, estrobo y Blackout
+        siguen estando debajo.
+      </p>
+      <PadBoard pads={phonePads} editing onChange={setPhonePads} preview />
+    </Panel>
   );
 }
 
@@ -85,6 +102,7 @@ function Access({ remote, status }: { remote: RemoteControl; status: NonNullable
             <label className="flex flex-col gap-1 text-xs text-text-secondary">
               Si no abre, prueba otra dirección
               <select
+                aria-label="Dirección"
                 value={address.url}
                 onChange={(e) => setChosenUrl(e.target.value)}
                 className="h-9 rounded-control border border-border bg-panel2 px-2 font-mono text-sm text-text-primary outline-none"

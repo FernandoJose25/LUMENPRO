@@ -6,6 +6,7 @@
 //! por pedido y una por respuesta.
 
 mod ipc;
+pub mod midi;
 pub mod process;
 mod remote;
 mod supervisor;
@@ -142,6 +143,7 @@ struct Engine {
     outputs: Mutex<Vec<Arc<Output>>>,
     remote: std::sync::OnceLock<Remote>,
     ui: Mutex<Ui>,
+    midi: midi::Midi,
 }
 
 #[derive(Deserialize)]
@@ -160,6 +162,10 @@ enum Request {
     /// Las de la última vez: las que no se puedan abrir quedan reintentando.
     SetOutputs { outputs: Vec<OutputConfig> },
     DiscoverArtnet,
+    /// Controladores enchufados y el último mensaje, para aprender.
+    MidiStatus,
+    /// Un mensaje como si viniera de un controlador.
+    MidiInject { device: String, bytes: Vec<u8> },
     RemoteStatus,
     RemoteSetEnabled { enabled: bool },
     RemoteNewPin,
@@ -185,6 +191,7 @@ impl Engine {
             universes: Mutex::new(BTreeMap::new()),
             outputs: Mutex::new(Vec::new()),
             remote: std::sync::OnceLock::new(),
+            midi: midi::Midi::default(),
             ui: Mutex::new(Ui {
                 pid: None,
                 connections: 0,
@@ -400,6 +407,11 @@ impl Engine {
                     self.add_output(output, true)?;
                 }
                 Ok(self.dmx_status())
+            }
+            Request::MidiStatus => Ok(json!({ "devices": self.midi.devices(), "last": self.midi.last() })),
+            Request::MidiInject { device, bytes } => {
+                self.midi_event(&device, &bytes);
+                Ok(Value::Null)
             }
             Request::DiscoverArtnet => {
                 let nodes = discover_artnet(DISCOVERY).map_err(|e| e.to_string())?;
@@ -705,6 +717,64 @@ mod tests {
         }
         let frame = ask(&engine, json!({ "cmd": "frame", "universe": 1 }));
         assert_eq!(json!(packet[18..530].to_vec()), frame);
+    }
+
+    /// Un controlador de mentira maneja un evento entero: momentos, Blackout,
+    /// estrobo mientras se aprieta, intensidad y la luz de los botones.
+    #[test]
+    fn a_virtual_midi_controller_runs_an_event() {
+        let engine = started("midi");
+        let mut show = doc();
+        show["controls"] = json!([
+            { "id": "1", "device": "Pad", "kind": "note", "channel": 0, "number": 36, "action": { "do": "next" } },
+            { "id": "2", "device": "", "kind": "note", "channel": 0, "number": 37, "action": { "do": "blackout" } },
+            { "id": "3", "device": "Pad", "kind": "note", "channel": 0, "number": 38, "action": { "do": "strobe" } },
+            { "id": "4", "device": "Pad", "kind": "cc", "channel": 0, "number": 7, "action": { "do": "master" } },
+            { "id": "5", "device": "Pad", "kind": "cc", "channel": 0, "number": 20, "action": { "do": "moment", "id": "b" } },
+        ]);
+        send(&engine, 2, json!([{ "type": "doc", "doc": show }]));
+        let press = |bytes: &[u8]| ask(&engine, json!({ "cmd": "midiInject", "device": "Pad", "bytes": bytes }));
+        let playback = || engine.show.lock().unwrap().session().playback;
+
+        press(&[0x90, 36, 100]);
+        press(&[0x80, 36, 0]);
+        assert_eq!(playback().active_moment_id.as_deref(), Some("a"));
+        press(&[0x90, 36, 100]);
+        press(&[0x90, 36, 0]); // note off como nota con 0
+        assert_eq!(playback().active_moment_id.as_deref(), Some("b"));
+
+        press(&[0x90, 37, 127]);
+        assert!(playback().blackout_active);
+        press(&[0x80, 37, 0]);
+        assert!(playback().blackout_active, "soltar no lo quita");
+        press(&[0x90, 37, 127]);
+        assert!(!playback().blackout_active);
+
+        press(&[0x90, 38, 127]);
+        assert!(playback().strobe_active);
+        press(&[0x80, 38, 0]);
+        assert!(!playback().strobe_active);
+
+        press(&[0xB0, 7, 64]);
+        assert_eq!(playback().master, 50.0);
+        // Un CC como botón actúa al pasar la mitad, una vez.
+        for value in [10, 70, 90, 127] {
+            press(&[0xB0, 20, value]);
+        }
+        assert_eq!(playback().active_moment_id.as_deref(), Some("b"));
+        let other = json!({ "cmd": "midiInject", "device": "Otro", "bytes": [0x90, 36, 100] });
+        ask(&engine, other);
+        assert_eq!(playback().active_moment_id.as_deref(), Some("b"), "otro controlador no usa ese botón");
+
+        let status = ask(&engine, json!({ "cmd": "midiStatus" }));
+        assert_eq!(status["last"]["device"], "Otro");
+        assert_eq!((&status["last"]["kind"], &status["last"]["number"]), (&json!("note"), &json!(36)));
+
+        let lights: Vec<(String, bool)> = {
+            let show = engine.show.lock().unwrap();
+            midi::lights(&show).into_iter().map(|(c, on)| (c.id.clone(), on)).collect()
+        };
+        assert_eq!(lights, [("1".into(), false), ("2".into(), false), ("3".into(), false), ("5".into(), true)]);
     }
 
     #[test]

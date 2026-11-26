@@ -9,6 +9,7 @@ import { ScenesView } from "@/components/scenes/ScenesView";
 import { ChasesView } from "@/components/chases/ChasesView";
 import { EffectsView } from "@/components/effects/EffectsView";
 import { PalettesView } from "@/components/palettes/PalettesView";
+import { MidiView } from "@/components/midi/MidiView";
 import { AudioView } from "@/components/audio/AudioView";
 import { LiveView } from "@/components/live/LiveView";
 import { DmxOutputView } from "@/components/dmx/DmxOutputView";
@@ -69,6 +70,7 @@ function AppShell() {
         {section === "Audio Reactive" ? <AudioView audio={audio} /> : null}
         {section === "Universes" ? <UniversesView dmx={dmx} /> : null}
         {section === "DMX Output" ? <DmxOutputView dmx={dmx} /> : null}
+        {section === "MIDI" ? <MidiView /> : null}
         {section === "Celular" ? <RemoteView remote={remote} /> : null}
         {section === "Settings" ? <SettingsView /> : null}
       </div>

@@ -9,6 +9,7 @@ import { useFixtureStore } from "@/lib/fixtureStore";
 import { ColorSwatches } from "@/components/fixtures/ColorSwatches";
 import { PanTiltPad } from "@/components/fixtures/PanTiltPad";
 import { PaletteChips } from "@/components/palettes/PalettesView";
+import { PadBoard } from "@/components/pads/PadBoard";
 import { LiveMoments } from "./LiveMoments";
 import { CHANNEL_TYPE_LABELS, type ChannelType } from "@/types/fixture";
 
@@ -44,6 +45,7 @@ export function LiveView() {
       />
 
       <LiveMoments />
+      <LivePads />
 
       <PanelGroup direction="horizontal" className="min-h-0 flex-1 gap-2">
         <ResizablePanel defaultSize={55} minSize={30}>
@@ -73,6 +75,23 @@ export function LiveView() {
         </ResizablePanel>
       </PanelGroup>
     </div>
+  );
+}
+
+/** Los botones que armó el usuario, arriba de todo. */
+function LivePads() {
+  const { livePads, setLivePads } = useFixtureStore();
+  const [editing, setEditing] = useState(false);
+  return (
+    <section aria-label="Mis botones" className="flex shrink-0 flex-col gap-2 rounded-panel border border-border bg-panel p-3">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-medium tracking-wide text-text-secondary">MIS BOTONES</span>
+        <Button size="sm" variant={editing ? "primary" : "ghost"} onClick={() => setEditing(!editing)}>
+          {editing ? "Listo" : "Editar"}
+        </Button>
+      </div>
+      {livePads.length > 0 || editing ? <PadBoard pads={livePads} editing={editing} onChange={setLivePads} /> : null}
+    </section>
   );
 }
 

@@ -4,6 +4,7 @@ import type { FixtureDefinition, FixtureInstance } from "@/types/fixture";
 import type { Group } from "@/types/group";
 import type { Moment } from "@/types/moment";
 import type { Palette } from "@/types/palette";
+import type { Control, Pad } from "@/types/controls";
 import type { Scene } from "@/types/scene";
 
 /** Lo que se programa, que es lo que Deshacer recupera. Los valores en vivo
@@ -17,9 +18,15 @@ export interface ShowDoc {
   chases: Chase[];
   effects: Effect[];
   moments: Moment[];
+  livePads: Pad[];
+  phonePads: Pad[];
+  controls: Control[];
 }
 
-const KEYS = ["definitions", "instances", "scenes", "palettes", "groups", "chases", "effects", "moments"] as const;
+const KEYS = [
+  "definitions", "instances", "scenes", "palettes", "groups", "chases", "effects", "moments", "livePads", "phonePads",
+  "controls",
+] as const;
 
 const LIMIT = 100;
 // Escribir un nombre o arrastrar una luz son muchos cambios seguidos, pero un

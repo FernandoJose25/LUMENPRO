@@ -7,6 +7,7 @@ import type { Chase, ChaseStep } from "@/types/chase";
 import type { Effect } from "@/types/effect";
 import type { Moment } from "@/types/moment";
 import type { Palette, PaletteKind } from "@/types/palette";
+import type { Action, Control, Pad } from "@/types/controls";
 import { capture, colorPaletteValues, matchPalettes, paletteValues } from "@/lib/palettes";
 import { seedDefinitions, seedInstances } from "@/data/fixtureLibrary";
 import { buildQuinceTemplate } from "@/data/quinceTemplate";
@@ -82,6 +83,11 @@ interface FixtureStoreValue extends FixtureStoreState {
   /** Las escenas que la usaban se quedan con sus valores. */
   removePalette: (paletteId: string) => void;
   applyPalette: (paletteId: string, instances: FixtureInstance[]) => void;
+  setLivePads: (pads: Pad[]) => void;
+  setPhonePads: (pads: Pad[]) => void;
+  setControls: (controls: Control[]) => void;
+  /** Un botón (press: al apretar true, al soltar false) o un fader (0–1). */
+  act: (action: Action, press?: boolean, value?: number) => void;
   updateSceneValues: (sceneId: string) => void;
   renameScene: (sceneId: string, name: string) => void;
   removeScene: (sceneId: string) => void;
@@ -162,6 +168,9 @@ function restoreState(parsed: Partial<FixtureStoreState>): FixtureStoreState {
     liveValues: parsed.liveValues ?? {},
     scenes: parsed.scenes ?? [],
     palettes: parsed.palettes ?? [],
+    livePads: parsed.livePads ?? [],
+    phonePads: parsed.phonePads ?? [],
+    controls: parsed.controls ?? [],
     moving: {},
     activeSceneId: parsed.activeSceneId ?? null,
     groups: parsed.groups ?? [],
@@ -529,6 +538,14 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
     [setChannelValues],
   );
 
+  const setLivePads = useCallback((livePads: Pad[]) => setState((s) => ({ ...s, livePads })), [setState]);
+  const setPhonePads = useCallback((phonePads: Pad[]) => setState((s) => ({ ...s, phonePads })), [setState]);
+  const setControls = useCallback((controls: Control[]) => setState((s) => ({ ...s, controls })), [setState]);
+  const act = useCallback(
+    (action: Action, press?: boolean, value?: number) => engine.send({ type: "action", action, press, value }),
+    [engine],
+  );
+
   const recallScene = useCallback((sceneId: string) => engine.send({ type: "recallScene", id: sceneId }), [engine]);
 
   const addGroup = useCallback(
@@ -845,6 +862,10 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
     renamePalette,
     removePalette,
     applyPalette,
+    setLivePads,
+    setPhonePads,
+    setControls,
+    act,
     updateSceneValues,
     renameScene,
     removeScene,

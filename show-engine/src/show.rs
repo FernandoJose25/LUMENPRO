@@ -3,7 +3,7 @@
 //! milisegundos (la misma base que `Date.now()`).
 
 use crate::frame::{self, Frame, Overlay};
-use crate::model::{Channel, ChannelType, ChannelValues, Definition, Doc, Effect, EffectKind, EffectSource};
+use crate::model::{Action, Channel, ChannelType, ChannelValues, Definition, Doc, Effect, EffectKind, EffectSource, Pad};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
@@ -61,6 +61,8 @@ pub enum Message {
     PlayChase { id: String },
     StopChase,
     Audio { audio: Option<AudioFeed> },
+    /// Un botón (press: true al apretar, false al soltar) o un fader (value 0–1).
+    Action { action: Action, #[serde(default)] press: Option<bool>, #[serde(default)] value: Option<f64> },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -377,6 +379,7 @@ impl Show {
             Message::PlayChase { id } => self.start_chase(&id, false, now),
             Message::StopChase => self.stop_chase(),
             Message::Audio { audio } => self.audio = audio.map(|feed| (feed, now)),
+            Message::Action { action, press, value } => self.act(&action, press, value, now),
         }
         Ok(())
     }
@@ -412,8 +415,106 @@ impl Show {
                     let _ = self.apply(Message::Master { value }, now);
                 }
             }
+            "pad" => {
+                let pad = self.doc.phone_pads.iter().find(|p| Some(p.id.as_str()) == command["id"].as_str());
+                if let Some(action) = pad.map(|p| p.action.clone()) {
+                    self.act(&action, command["press"].as_bool(), command["value"].as_f64(), now);
+                }
+            }
             _ => {}
         }
+    }
+
+    /// Lo mismo venga de Live, del celular o de un controlador MIDI.
+    pub fn act(&mut self, action: &Action, press: Option<bool>, value: Option<f64>, now: f64) {
+        let pressed = press == Some(true);
+        let value = value.filter(|v| v.is_finite()).map(|v| v.clamp(0.0, 1.0));
+        let message = match action {
+            Action::Strobe => press.map(|on| Message::Strobe { on }),
+            Action::Master => value.map(|v| Message::Master { value: v * 100.0 }),
+            Action::GroupFader { group_id, channel_type } => {
+                let Some(v) = value else { return };
+                let level = (v * 255.0).round() as u8;
+                let writes: Vec<(String, String)> = self
+                    .doc
+                    .rig()
+                    .filter(|(i, _)| i.group.as_ref() == Some(group_id))
+                    .flat_map(|(i, d)| {
+                        d.channels.iter().filter(|c| c.kind == *channel_type).map(move |c| (i.id.clone(), c.id.clone()))
+                    })
+                    .collect();
+                for (instance, channel) in writes {
+                    self.set_live(&instance, &channel, level);
+                }
+                return;
+            }
+            _ if !pressed => None,
+            Action::Next => Some(Message::StepMoment { direction: 1 }),
+            Action::Prev => Some(Message::StepMoment { direction: -1 }),
+            Action::Stop => Some(Message::StopMoment),
+            Action::Moment { id } => Some(Message::StartMoment { id: id.clone() }),
+            Action::Scene { id } => Some(Message::RecallScene { id: id.clone() }),
+            Action::Effect { id } if self.playback.running_effect_ids.contains(id) => {
+                Some(Message::StopEffect { id: id.clone() })
+            }
+            Action::Effect { id } => Some(Message::StartEffect { id: id.clone() }),
+            Action::Chase { id } if self.playback.chase.as_ref().is_some_and(|c| c.id == *id) => {
+                Some(Message::StopChase)
+            }
+            Action::Chase { id } => Some(Message::PlayChase { id: id.clone() }),
+            Action::Blackout => Some(Message::Blackout { on: !self.playback.blackout_active }),
+            Action::Palette { id } => {
+                let values = self.doc.palettes.iter().find(|p| p.id == *id).map(|p| p.values.clone());
+                values.map(|values| Message::Values { values })
+            }
+            Action::Nothing => None,
+        };
+        if let Some(message) = message {
+            let _ = self.apply(message, now);
+        }
+    }
+
+    /// Si lo que hace el botón está encendido ahora: para pintarlo y para la
+    /// luz del controlador.
+    pub fn is_active(&self, action: &Action) -> bool {
+        let p = &self.playback;
+        match action {
+            Action::Moment { id } => p.active_moment_id.as_ref() == Some(id) && p.moment_run.is_some(),
+            Action::Scene { id } => p.active_scene_id.as_ref() == Some(id),
+            Action::Effect { id } => p.running_effect_ids.contains(id),
+            Action::Chase { id } => p.chase.as_ref().is_some_and(|c| c.id == *id),
+            Action::Blackout => p.blackout_active,
+            Action::Strobe => p.strobe_active,
+            Action::Stop => p.moment_run.is_none(),
+            _ => false,
+        }
+    }
+
+    /// Valor de un fader, 0–1.
+    pub fn fader_value(&self, action: &Action) -> Option<f64> {
+        match action {
+            Action::Master => Some(self.playback.master / 100.0),
+            _ => None,
+        }
+    }
+
+    pub fn doc(&self) -> &Doc {
+        &self.doc
+    }
+
+    fn pads_snapshot(&self, pads: &[Pad]) -> Value {
+        json!(pads
+            .iter()
+            .map(|p| json!({
+                "id": p.id,
+                "label": p.label,
+                "size": p.size,
+                "fader": p.action.is_fader(),
+                "hold": p.action == Action::Strobe,
+                "active": self.is_active(&p.action),
+                "value": self.fader_value(&p.action),
+            }))
+            .collect::<Vec<_>>())
     }
 
     /// Todo cambio de `playback` pasa por acá para que se note.
@@ -912,6 +1013,7 @@ impl Show {
             "strobe": p.strobe_active,
             "master": p.master,
             "dmx": dmx,
+            "pads": self.pads_snapshot(&self.doc.phone_pads),
         })
     }
 }

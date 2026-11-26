@@ -17,6 +17,7 @@ export const SECTIONS = [
   "Audio Reactive",
   "Universes",
   "DMX Output",
+  "MIDI",
   "Celular",
   "Settings",
 ] as const;

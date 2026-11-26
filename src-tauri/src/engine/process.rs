@@ -99,6 +99,7 @@ pub fn engine(dir: &Path, args: &[String]) -> ! {
             let _ = engine.resume(saved);
         }
     }
+    super::midi::run(engine.clone());
     if ipc::serve(engine.clone()).is_err() {
         std::process::exit(1);
     }

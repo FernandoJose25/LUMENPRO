@@ -1,3 +1,4 @@
+import type { Action } from "@/types/controls";
 import type { ChannelValues } from "@/lib/fade";
 import type { ShowDoc } from "@/lib/history";
 
@@ -43,7 +44,8 @@ export type EngineMessage =
   | { type: "master"; value: number }
   | { type: "stepMoment"; direction: -1 | 1 }
   | { type: "stopMoment" | "stopChase" }
-  | { type: "audio"; audio: AudioMessage | null };
+  | { type: "audio"; audio: AudioMessage | null }
+  | { type: "action"; action: Action; press?: boolean; value?: number };
 
 export interface EngineChanges {
   rev: number;

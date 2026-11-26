@@ -502,6 +502,75 @@ pub struct Moment {
     pub duration_sec: Option<f64>,
 }
 
+/// Lo que hace un botón de Live, del celular o de un controlador MIDI.
+#[derive(Debug, Clone, PartialEq, Default, Deserialize)]
+#[serde(tag = "do", rename_all = "camelCase", rename_all_fields = "camelCase")]
+pub enum Action {
+    Next,
+    Prev,
+    Stop,
+    Moment { id: String },
+    Scene { id: String },
+    /// Arranca o detiene.
+    Effect { id: String },
+    Chase { id: String },
+    /// En todas las luces que tiene.
+    Palette { id: String },
+    Blackout,
+    /// Mientras se aprieta.
+    Strobe,
+    /// Fader: intensidad general.
+    Master,
+    /// Fader: un tipo de canal de un grupo.
+    GroupFader { group_id: String, channel_type: ChannelType },
+    #[default]
+    #[serde(other)]
+    Nothing,
+}
+
+impl Action {
+    pub fn is_fader(&self) -> bool {
+        matches!(self, Action::Master | Action::GroupFader { .. })
+    }
+}
+
+/// Un botón de las pantallas a medida.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Pad {
+    pub id: String,
+    pub label: String,
+    pub action: Action,
+    /// 1 normal, 2 grande.
+    #[serde(deserialize_with = "int")]
+    pub size: i32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ControlKind {
+    Cc,
+    #[default]
+    #[serde(other)]
+    Note,
+}
+
+/// Un botón o fader de un controlador MIDI, y lo que hace.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Control {
+    pub id: String,
+    /// Nombre del controlador; vacío = cualquiera.
+    pub device: String,
+    pub kind: ControlKind,
+    /// 0–15.
+    #[serde(deserialize_with = "int")]
+    pub channel: i32,
+    #[serde(deserialize_with = "int")]
+    pub number: i32,
+    pub action: Action,
+}
+
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Doc {
@@ -512,6 +581,9 @@ pub struct Doc {
     pub chases: Vec<Chase>,
     pub effects: Vec<Effect>,
     pub moments: Vec<Moment>,
+    pub live_pads: Vec<Pad>,
+    pub phone_pads: Vec<Pad>,
+    pub controls: Vec<Control>,
     /// Índice del perfil de cada instancia.
     #[serde(skip)]
     profile: Vec<Option<usize>>,

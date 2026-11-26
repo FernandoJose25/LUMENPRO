@@ -563,7 +563,7 @@ fn phone_snapshot_has_only_what_the_page_shows() {
     r.moment("a", json!({ "durationSec": 90 }));
     let s = r.show.phone_snapshot("stopped");
     let keys: Vec<_> = s.as_object().unwrap().keys().cloned().collect();
-    assert_eq!(keys, ["activeId", "blackout", "dmx", "master", "moments", "startedAt", "strobe"]);
+    assert_eq!(keys, ["activeId", "blackout", "dmx", "master", "moments", "pads", "startedAt", "strobe"]);
     assert_eq!(s["moments"], json!([{ "id": "a", "name": "A", "durationSec": 90.0 }]));
 }
 
@@ -968,4 +968,73 @@ fn a_scene_that_points_to_a_deleted_palette_keeps_what_it_saved() {
     r.reset();
     r.send(json!({ "type": "recallScene", "id": "s" }));
     assert_eq!(r.live("a", "pan"), 12);
+}
+
+// --- Botones, celular y MIDI ----------------------------------------------
+
+fn act(r: &mut Rig, action: Value, press: Option<bool>, value: Option<f64>) {
+    r.send(json!({ "type": "action", "action": action, "press": press, "value": value }));
+}
+
+#[test]
+fn buttons_act_on_press_and_toggles_switch() {
+    let mut r = Rig::new();
+    r.moment("a", json!({}));
+    r.moment("b", json!({}));
+    act(&mut r, json!({ "do": "next" }), Some(true), None);
+    act(&mut r, json!({ "do": "next" }), Some(false), None);
+    assert_eq!(r.active(), "a", "soltar no vuelve a avanzar");
+    act(&mut r, json!({ "do": "moment", "id": "b" }), Some(true), None);
+    assert_eq!(r.active(), "b");
+    for expected in [true, false] {
+        act(&mut r, json!({ "do": "effect", "id": "fx" }), Some(true), None);
+        assert_eq!(r.running() == json!(["fx"]), expected);
+        act(&mut r, json!({ "do": "blackout" }), Some(true), None);
+        assert_eq!(r.playback()["blackoutActive"], expected);
+        act(&mut r, json!({ "do": "chase", "id": "c" }), Some(true), None);
+        assert_eq!(r.playback()["chase"]["id"] == "c", expected);
+    }
+}
+
+#[test]
+fn the_strobe_lasts_while_held_and_faders_take_values() {
+    let mut r = Rig::new();
+    act(&mut r, json!({ "do": "strobe" }), Some(true), None);
+    assert_eq!(r.playback()["strobeActive"], true);
+    act(&mut r, json!({ "do": "strobe" }), Some(false), None);
+    assert_eq!(r.playback()["strobeActive"], false);
+    act(&mut r, json!({ "do": "master" }), None, Some(0.5));
+    assert_eq!(r.playback()["master"], 50.0);
+    act(&mut r, json!({ "do": "groupFader", "groupId": "pars", "channelType": "RED" }), None, Some(1.0));
+    assert_eq!((r.live("p1", "red"), r.live("p2", "red"), r.live("h1", "pan")), (255, 255, 999));
+    act(&mut r, json!({ "do": "algo nuevo" }), Some(true), Some(1.0));
+}
+
+#[test]
+fn a_palette_button_puts_it_everywhere_it_has_values() {
+    let mut r = Rig::new();
+    r.doc["palettes"] = json!([{ "id": "rosa", "values": { "p1": { "red": 255, "blue": 140 } } }]);
+    r.reset();
+    act(&mut r, json!({ "do": "palette", "id": "rosa" }), Some(true), None);
+    assert_eq!((r.live("p1", "red"), r.live("p1", "blue")), (255, 140));
+}
+
+#[test]
+fn the_phone_shows_its_buttons_lit_and_presses_them() {
+    let mut r = Rig::new();
+    r.moment("a", json!({}));
+    r.doc["phonePads"] = json!([
+        { "id": "x", "label": "Hora loca", "action": { "do": "moment", "id": "a" }, "size": 2 },
+        { "id": "y", "label": "Estrobo", "action": { "do": "strobe" }, "size": 1 },
+        { "id": "z", "label": "Intensidad", "action": { "do": "master" }, "size": 1 },
+    ]);
+    r.send(json!({ "type": "doc", "doc": r.doc }));
+    r.phone(json!({ "type": "pad", "id": "x", "press": true }));
+    r.phone(json!({ "type": "pad", "id": "y", "press": true }));
+    r.phone(json!({ "type": "pad", "id": "z", "value": 0.3 }));
+    let pads = r.show.phone_snapshot("running")["pads"].clone();
+    assert_eq!(pads[0]["active"], true);
+    assert_eq!((&pads[1]["active"], &pads[1]["hold"]), (&json!(true), &json!(true)));
+    assert_eq!((&pads[2]["fader"], &pads[2]["value"]), (&json!(true), &json!(0.3)));
+    r.phone(json!({ "type": "pad", "id": "nada", "press": true }));
 }

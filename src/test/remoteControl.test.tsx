@@ -26,7 +26,7 @@ describe("Pantalla Celular", () => {
     expect(await screen.findByRole("img", { name: "QR de http://192.168.1.20:8777" })).toBeInTheDocument();
     expect(screen.getByText("123456")).toBeInTheDocument();
 
-    await user.selectOptions(screen.getByRole("combobox"), "http://192.168.137.1:8777");
+    await user.selectOptions(screen.getByLabelText("Dirección"), "http://192.168.137.1:8777");
     expect(screen.getByRole("img", { name: "QR de http://192.168.137.1:8777" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Cambiar PIN" }));

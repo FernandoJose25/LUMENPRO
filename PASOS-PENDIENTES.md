@@ -54,6 +54,13 @@
   recorrido. Sección "Paletas" (posiciones, colores, gobos y haz): las escenas
   guardan qué paleta tenía cada luz y la siguen si se corrige. En Escenario,
   "Apuntar" lleva las cabezas a donde se toca el piso. La plantilla usa figuras.
+- **MIDI y pantallas a medida** (2026-11-26): controladores MIDI en el proceso
+  del motor (`src-tauri/src/engine/midi.rs`, con midir): se detectan solos, se
+  asigna un botón o fader moviéndolo ("Aprender") y los botones que encienden
+  algo se iluminan en el controlador. "Mis botones" en Live y botones propios en
+  el celular, con la misma lista de acciones. Probado con el `.exe` y un
+  controlador virtual (mensajes inyectados por el mismo camino): un evento
+  entero, también con la ventana cerrada. **Falta con un controlador real.**
 - **Diálogos propios** (`lib/dialogs.ts`): los de Windows congelaban la interfaz.
 - **Salida DMX conectada a la interfaz** (2026-11-24): driver del cable FTDI
   (`OpenDmxOutput`: 250 kbaudios, 8N2, BREAK por software, 30 FPS), estado real

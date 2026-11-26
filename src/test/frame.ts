@@ -8,7 +8,8 @@ export function buildFrame(input: FrameInput, universe = 1): number[] {
   const liveValues = { ...input.liveValues };
   for (const [id, channels] of Object.entries(input.moving ?? {})) liveValues[id] = { ...liveValues[id], ...channels };
   const doc: ShowDoc = {
-    definitions, instances, scenes: [], palettes: [], groups: [], chases: [], effects: [], moments: [],
+    definitions, instances, scenes: [], palettes: [], groups: [], chases: [], effects: [], moments: [], livePads: [],
+    phonePads: [], controls: [],
   };
   const show = new WasmShow();
   show.send({ type: "reset", doc, live: liveValues, activeSceneId: null, activeMomentId: null }, 0);

@@ -31,6 +31,7 @@ export function fakeEngine(overrides: Record<string, (args: Args) => unknown> = 
     /** Órdenes aplicadas, en el orden en que llegaron. */
     applied: [] as EngineMessage[],
     waiters: [] as (() => void)[],
+    midi: { devices: [] as string[], last: null as null | Record<string, unknown> },
   };
   const NAMES = { mock: "Mock (sin hardware)", open_dmx: "Cable FTDI", enttec: "Enttec", artnet: "Art-Net", sacn: "sACN" };
   const running = (config: OutputConfig): OutputStatus => ({
@@ -88,6 +89,8 @@ export function fakeEngine(overrides: Record<string, (args: Args) => unknown> = 
       return dmx();
     },
     discoverArtnet: () => [],
+    midiStatus: () => state.midi,
+    midiInject: () => null,
     remoteStatus: () => ({ ...state.remote }),
     remoteSetEnabled: ({ enabled }) => ({ ...Object.assign(state.remote, { running: enabled }) }),
     remoteNewPin: () => ({ ...Object.assign(state.remote, { pin: "654321" }) }),
