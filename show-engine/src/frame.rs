@@ -14,6 +14,8 @@ pub struct Overlay<'a> {
     pub strobe: bool,
     /// Fixture encendido a pleno para reconocerlo.
     pub identify: Option<&'a str>,
+    /// Los colores fijos de cada luz: le ganan al momento y a los effects.
+    pub held: &'a ChannelValues,
 }
 
 /// Valor para el botón Estrobo, o `None` si no se sabe cuál es. En una cabeza
@@ -38,11 +40,11 @@ fn apply_curve(channel: &Channel, value: f64) -> f64 {
     channel.dmx_min + range * curved
 }
 
-/// Valor en vivo de un canal, sin nada encima. `moving` son las figuras: le
-/// ganan a lo que haya debajo.
-fn live_value(instance: &Instance, channel: &Channel, live: &ChannelValues, moving: &ChannelValues) -> f64 {
+/// Valor en vivo de un canal, sin intensidad ni nada encima. Le ganan el color
+/// fijo y después las figuras (`moving`) a lo que haya debajo.
+fn live_value(instance: &Instance, channel: &Channel, live: &ChannelValues, moving: &ChannelValues, held: &ChannelValues) -> f64 {
     let read = |values: &ChannelValues| values.get(&instance.id).and_then(|c| c.get(&channel.id)).copied();
-    read(moving).or_else(|| read(live)).map_or(channel.default_value, f64::from)
+    read(held).or_else(|| read(moving)).or_else(|| read(live)).map_or(channel.default_value, f64::from)
 }
 
 /// Lo que vale con intensidad, estrobo, identificar, Blackout y curva.
@@ -94,10 +96,16 @@ pub fn build(doc: &Doc, live: &ChannelValues, moving: &ChannelValues, over: &Ove
             }
         }
     };
-    for (instance, definition) in doc.rig().filter(|(i, _)| i.universe == universe) {
+    let rig: Vec<_> = doc.rig().filter(|(i, _)| i.universe == universe).collect();
+    for (n, &(instance, definition)) in rig.iter().enumerate() {
+        // De dos luces que van juntas, manda la primera.
+        if rig[..n].iter().any(|(other, _)| other.twin_of(instance)) {
+            continue;
+        }
+        let held = over.held;
         // Los finos salen junto con el canal que completan.
         for (channel, role) in definition.channels.iter().zip(&definition.roles).filter(|(_, r)| !r.is_fine) {
-            let value = live_value(instance, channel, live, moving);
+            let value = live_value(instance, channel, live, moving, held);
             let inverted = is_inverted(instance, channel);
             // floor(x + 0.5) y no round(): es lo que hace Math.round en la interfaz.
             match role.fine.map(|i| &definition.channels[i]) {
@@ -107,7 +115,7 @@ pub fn build(doc: &Doc, live: &ChannelValues, moving: &ChannelValues, over: &Ove
                     put(instance.address, channel, (output + 0.5).floor().clamp(0.0, 255.0) as u8);
                 }
                 Some(fine_channel) => {
-                    let value = value + live_value(instance, fine_channel, live, moving) / 256.0;
+                    let value = value + live_value(instance, fine_channel, live, moving, held) / 256.0;
                     let value = effective(instance, definition, (channel, role), value, over) * 256.0;
                     let top = (channel.dmx_min + channel.dmx_max) * 256.0 + 255.0;
                     let output = if inverted { top - value } else { value };

@@ -563,7 +563,7 @@ fn phone_snapshot_has_only_what_the_page_shows() {
     r.moment("a", json!({ "durationSec": 90 }));
     let s = r.show.phone_snapshot("stopped");
     let keys: Vec<_> = s.as_object().unwrap().keys().cloned().collect();
-    assert_eq!(keys, ["activeId", "blackout", "dmx", "master", "moments", "pads", "startedAt", "strobe"]);
+    assert_eq!(keys, ["activeId", "blackout", "colors", "dmx", "effects", "master", "moments", "pads", "startedAt", "strobe"]);
     assert_eq!(s["moments"], json!([{ "id": "a", "name": "A", "durationSec": 90.0 }]));
 }
 
@@ -1037,4 +1037,120 @@ fn the_phone_shows_its_buttons_lit_and_presses_them() {
     assert_eq!((&pads[1]["active"], &pads[1]["hold"]), (&json!(true), &json!(true)));
     assert_eq!((&pads[2]["fader"], &pads[2]["value"]), (&json!(true), &json!(0.3)));
     r.phone(json!({ "type": "pad", "id": "nada", "press": true }));
+}
+
+// --- Color fijo y luces que van juntas --------------------------------
+
+fn with_colors(r: &mut Rig) {
+    let rgb = |red: u8, blue: u8| json!({ "red": red, "green": 0, "blue": blue });
+    r.doc["groups"] = json!([{ "id": "pars", "name": "PAR" }]);
+    r.doc["colors"] = json!([
+        { "hex": "#ff0000", "name": "Rojo", "values": { "p1": rgb(255, 0), "p2": rgb(255, 0) } },
+        { "hex": "#0000ff", "name": "Azul", "values": { "p1": rgb(0, 255), "p2": rgb(0, 255) } },
+    ]);
+    r.send(json!({ "type": "doc", "doc": r.doc }));
+}
+
+/// Rojo, verde y azul de p1 tal como salen por el cable.
+fn p1_rgb(r: &Rig) -> [u8; 3] {
+    let frame = r.show.frame(1);
+    [frame[33], frame[34], frame[35]]
+}
+
+#[test]
+fn a_held_color_wins_over_moments_and_effects_and_lets_go_without_a_trace() {
+    let mut r = Rig::new();
+    with_colors(&mut r);
+    r.moment("a", json!({ "sceneId": "green", "effectIds": ["fx"] }));
+    r.moment("b", json!({ "sceneId": "red" }));
+    r.start("a");
+    r.run(100.0);
+    act(&mut r, json!({ "do": "color", "groupId": "pars", "color": "#0000ff" }), Some(true), None);
+    assert_eq!(p1_rgb(&r), [0, 0, 255]);
+    // El effect sigue por debajo, sin verse.
+    assert_eq!(r.running(), json!(["fx"]));
+    r.run(700.0);
+    assert_eq!(p1_rgb(&r), [0, 0, 255]);
+
+    // Otro momento no lo suelta.
+    r.start("b");
+    r.run(100.0);
+    assert_eq!(p1_rgb(&r), [0, 0, 255]);
+    assert_eq!(r.playback()["heldColors"], json!({ "pars": "#0000ff" }));
+
+    // "Del momento": vuelve lo que el momento tenía.
+    act(&mut r, json!({ "do": "color", "groupId": "pars", "color": null }), Some(true), None);
+    assert_eq!(p1_rgb(&r), [200, 0, 0]);
+    assert_eq!(r.playback()["heldColors"], json!({}));
+    assert_eq!(r.doc["scenes"][0]["values"], json!({ "p1": { "red": 200 } }));
+}
+
+#[test]
+fn the_phone_picks_a_color_for_everyone_and_sees_which_is_on() {
+    let mut r = Rig::new();
+    with_colors(&mut r);
+    r.phone(json!({ "type": "color", "group": null, "color": "#ff0000" }));
+    assert_eq!(p1_rgb(&r), [255, 0, 0]);
+    let colors = r.show.phone_snapshot("running")["colors"].clone();
+    assert_eq!(colors["choices"][1], json!({ "hex": "#0000ff", "name": "Azul" }));
+    // La cabeza no toma color: no tiene fila.
+    assert_eq!(colors["rows"], json!([{ "id": "pars", "name": "PAR", "held": "#ff0000" }]));
+
+    let is_on = |r: &Rig, group: Value, color: Value| {
+        r.show.is_active(&serde_json::from_value(json!({ "do": "color", "groupId": group, "color": color })).unwrap())
+    };
+    assert!(is_on(&r, json!(null), json!("#ff0000")));
+    assert!(is_on(&r, json!("pars"), json!("#ff0000")));
+    assert!(!is_on(&r, json!("pars"), json!(null)));
+
+    // Un color que no existe no hace nada; sin color, se sueltan todos.
+    r.phone(json!({ "type": "color", "group": "pars", "color": "#123456" }));
+    assert_eq!(p1_rgb(&r), [255, 0, 0]);
+    r.phone(json!({ "type": "color", "group": null, "color": null }));
+    assert_eq!(r.playback()["heldColors"], json!({}));
+    assert!(is_on(&r, json!(null), json!(null)));
+}
+
+#[test]
+fn a_held_color_goes_away_with_its_color() {
+    let mut r = Rig::new();
+    with_colors(&mut r);
+    act(&mut r, json!({ "do": "color", "groupId": "pars", "color": "#0000ff" }), Some(true), None);
+    r.doc["colors"] = json!([]);
+    r.send(json!({ "type": "doc", "doc": r.doc }));
+    assert_eq!(r.playback()["heldColors"], json!({}));
+}
+
+#[test]
+fn two_lights_on_the_same_address_go_together() {
+    let mut r = Rig::new();
+    r.doc["effects"][0]["phaseOffsetDeg"] = json!(180);
+    r.doc["instances"].as_array_mut().unwrap().insert(
+        2,
+        json!({ "id": "p1b", "definitionId": "par", "universe": 1, "address": 33, "group": "pars" }),
+    );
+    r.reset();
+    r.send(json!({ "type": "startEffect", "id": "fx" }));
+    r.run(200.0);
+    // La gemela va igual que p1 y p2 sigue en contrafase, como si fueran dos.
+    assert_eq!((r.live("p1", "red"), r.live("p1b", "red"), r.live("p2", "red")), (222, 222, 11));
+
+    // Por el cable manda la primera.
+    r.send(json!({ "type": "stopEffect", "id": "fx" }));
+    r.set("p1b", "red", 77);
+    assert_eq!(r.show.frame(1)[33], 222);
+}
+
+#[test]
+fn the_phone_turns_effects_on_and_off() {
+    let mut r = Rig::new();
+    r.doc["effects"][0]["name"] = json!("PAR: ola roja");
+    r.doc["effects"].as_array_mut().unwrap().push(json!({ "id": "suelto", "name": "Sin grupo", "groupId": null }));
+    r.reset();
+    r.phone(json!({ "type": "effect", "id": "fx" }));
+    let effects = r.show.phone_snapshot("running")["effects"].clone();
+    // Uno sin grupo no hace nada: no se ofrece.
+    assert_eq!(effects, json!([{ "id": "fx", "name": "PAR: ola roja", "running": true }]));
+    r.phone(json!({ "type": "effect", "id": "fx" }));
+    assert_eq!(r.running(), json!([]));
 }

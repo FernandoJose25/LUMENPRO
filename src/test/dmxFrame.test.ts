@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { describePatch, effectiveValue, type FrameInput } from "@/lib/dmxFrame";
+import { describePatch, effectiveValue, withTwins, type FrameInput } from "@/lib/dmxFrame";
 import { buildFrame } from "./frame";
 import { seedDefinitions, seedInstances } from "@/data/fixtureLibrary";
 import type { ChannelType, FixtureDefinition, FixtureInstance } from "@/types/fixture";
@@ -277,5 +277,21 @@ describe("describePatch — choques de direcciones", () => {
     expect(issues([1])).toEqual([["Se pasa del canal 512"], ["Universo 2: no sale por ningún lado. Agrégale una salida."]]);
     expect(issues([1, 2])).toEqual([["Se pasa del canal 512"], []]);
     expect(issues([])).toEqual([["Se pasa del canal 512"], []]); // sin salidas ya se sabe
+  });
+});
+
+describe("Luces en la misma dirección", () => {
+  const [a, b, c] = seedInstances.filter((i) => i.definitionId === "def-lpc007");
+  const twins = [a, { ...b, address: a.address }, c];
+
+  it("lo que se le pone a una lo recibe la otra", () => {
+    expect(withTwins(twins, { [b.id]: { x: 9 } })).toEqual({ [b.id]: { x: 9 }, [a.id]: { x: 9 } });
+    expect(withTwins(twins, { [c.id]: { x: 9 } })).toEqual({ [c.id]: { x: 9 } });
+  });
+
+  it("no son un choque, y por el cable manda la primera", () => {
+    expect(describePatch(twins, seedDefinitions).flatMap((r) => r.issues)).toEqual([]);
+    const frame = frameWith({ [a.id]: { [parCh("RED")]: 10 }, [b.id]: { [parCh("RED")]: 200 } }, false, twins);
+    expect(frame[a.address]).toBe(10); // el rojo es el canal 2
   });
 });

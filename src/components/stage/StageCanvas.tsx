@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
-import type { FrameInput } from "@/lib/dmxFrame";
+import { outputOf, type FrameInput } from "@/lib/dmxFrame";
 import { drawGobo, goboMask } from "@/lib/gobos";
 import {
   approach,
@@ -97,7 +97,8 @@ export function StageCanvas({ rig, selectedId = null, onSelect, onMove, onAim }:
         const definition = s.definitions.find((d) => d.id === instance.definitionId);
         const placement = p.get(instance.id);
         if (!definition || !placement) continue;
-        const beams = lightStates(instance, definition, s).map((light, n) => {
+        // Dos que van juntas muestran lo mismo: lo que sale por el cable.
+        const beams = lightStates(outputOf(s.instances, instance), definition, s).map((light, n) => {
           let head = light.head;
           if (head) {
             const key = `${instance.id}/${n}`;

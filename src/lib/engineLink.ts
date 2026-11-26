@@ -44,7 +44,7 @@ export interface EngineHost {
 
 const TICK_MS = 40;
 
-function audioMessage(): AudioMessage | null {
+export function audioMessage(): AudioMessage | null {
   const feed = getAudioFeed();
   if (!feed) return null;
   const beats = feed.beats();

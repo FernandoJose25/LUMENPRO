@@ -347,6 +347,14 @@ pub struct Instance {
     pub tilt_invert: bool,
 }
 
+impl Instance {
+    /// Mismo modelo en la misma dirección: el cable les manda lo mismo, así
+    /// que van juntas (dos PAR en el 001).
+    pub fn twin_of(&self, other: &Instance) -> bool {
+        self.universe == other.universe && self.address == other.address && self.definition_id == other.definition_id
+    }
+}
+
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Scene {
@@ -363,6 +371,25 @@ pub struct Scene {
 #[serde(rename_all = "camelCase", default)]
 pub struct Palette {
     pub id: String,
+    #[serde(deserialize_with = "values")]
+    pub values: ChannelValues,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Group {
+    pub id: String,
+    pub name: String,
+}
+
+/// Un color de un toque, con lo que pone en cada luz que puede ponerlo. Los
+/// valores los calcula la interfaz (`quickColors` en src/lib/palettes.ts).
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct QuickColor {
+    /// "#ff0000": también es su nombre para las órdenes.
+    pub hex: String,
+    pub name: String,
     #[serde(deserialize_with = "values")]
     pub values: ChannelValues,
 }
@@ -465,6 +492,7 @@ impl Figure {
 #[serde(rename_all = "camelCase", default)]
 pub struct Effect {
     pub id: String,
+    pub name: String,
     pub group_id: Option<String>,
     pub kind: EffectKind,
     pub figure: Figure,
@@ -523,6 +551,9 @@ pub enum Action {
     Master,
     /// Fader: un tipo de canal de un grupo.
     GroupFader { group_id: String, channel_type: ChannelType },
+    /// Color fijo encima de lo que haga el momento. Sin grupo, todas las
+    /// luces ("" son las que no tienen grupo); sin color, se suelta.
+    Color { group_id: Option<String>, color: Option<String> },
     #[default]
     #[serde(other)]
     Nothing,
@@ -578,6 +609,9 @@ pub struct Doc {
     pub instances: Vec<Instance>,
     pub scenes: Vec<Scene>,
     pub palettes: Vec<Palette>,
+    pub groups: Vec<Group>,
+    /// Los colores fijos; no se guardan con el show.
+    pub colors: Vec<QuickColor>,
     pub chases: Vec<Chase>,
     pub effects: Vec<Effect>,
     pub moments: Vec<Moment>,

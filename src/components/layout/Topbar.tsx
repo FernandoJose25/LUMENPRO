@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { StatusIndicator } from "@/components/ui/StatusIndicator";
 import { useFixtureStore } from "@/lib/fixtureStore";
-import { openDownloads, useNewVersion, VERSION } from "@/lib/updates";
+import { useUpdate } from "@/lib/updates";
+import { UpdateModal } from "./UpdateModal";
 import type { EngineStatus } from "@/types/engine";
 import { BlackoutButton } from "./BlackoutButton";
 
@@ -52,7 +53,7 @@ export function Topbar({
 
       <div className="flex-1" />
 
-      <NewVersion />
+      <NewVersion lightsOn={dmx.state === "running"} />
 
       <span className="hidden font-mono text-xs text-text-secondary md:inline">FPS {fps}</span>
 
@@ -67,13 +68,17 @@ export function Topbar({
   );
 }
 
-function NewVersion() {
-  const latest = useNewVersion();
-  if (!latest) return null;
+/** Aviso al abrir; si se deja para después, queda este botón. */
+function NewVersion({ lightsOn }: { lightsOn: boolean }) {
+  const update = useUpdate();
+  if (!update.version) return null;
   return (
-    <Button size="sm" variant="primary" title={`Tienes la ${VERSION}. Abre la página para descargarla.`} onClick={openDownloads}>
-      Versión nueva: {latest}
-    </Button>
+    <>
+      <Button size="sm" variant="primary" onClick={update.show}>
+        Versión nueva: {update.version}
+      </Button>
+      <UpdateModal update={update} lightsOn={lightsOn} />
+    </>
   );
 }
 

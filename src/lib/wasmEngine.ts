@@ -21,6 +21,7 @@ export function loadWasm(bytes: BufferSource): void {
 }
 
 export async function fetchWasm(): Promise<void> {
+  if (wasm) return;
   const { default: url } = await import("@/engine/show_engine.wasm?url");
   loadWasm(await (await fetch(url)).arrayBuffer());
 }

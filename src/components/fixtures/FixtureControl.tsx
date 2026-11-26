@@ -18,8 +18,15 @@ import { PanTiltPad } from "./PanTiltPad";
  * necesita poder capturarlos y recuperarlos desde un solo lugar.
  */
 export function FixtureControl() {
-  const { selectedInstance, selectedDefinition, instances, selectInstance, getChannelValue, setChannelValue } =
-    useFixtureStore();
+  const {
+    selectedInstance,
+    selectedDefinition,
+    instances,
+    selectInstance,
+    getChannelValue,
+    setChannelValue,
+    setChannelValues,
+  } = useFixtureStore();
 
   if (!selectedInstance || !selectedDefinition) {
     return (
@@ -48,7 +55,21 @@ export function FixtureControl() {
             {selectedDefinition.channels.length} CHANNELS · U{selectedInstance.universe} · DMX {selectedInstance.address}
           </div>
         </div>
-        <StatusIndicator status="active" label="Seleccionado" />
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="ghost"
+            title="Cada canal a su valor inicial: posición, color, gobo…"
+            onClick={() =>
+              setChannelValues({
+                [selectedInstance.id]: Object.fromEntries(selectedDefinition.channels.map((c) => [c.id, c.defaultValue])),
+              })
+            }
+          >
+            Restablecer valores
+          </Button>
+          <StatusIndicator status="active" label="Seleccionado" />
+        </div>
       </div>
 
       <div className="flex max-h-[calc(100%-3.5rem)] flex-col gap-2.5 overflow-y-auto scrollbar-thin pr-1">

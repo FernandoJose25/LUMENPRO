@@ -8,6 +8,8 @@ export interface FrameInput {
   liveValues: Record<string, Record<string, number>>;
   /** Cabezas dibujando una figura: mandan sobre liveValues. */
   moving?: Record<string, Record<string, number>>;
+  /** Colores fijos: mandan sobre todo lo demás (ver palettes.ts, heldValues). */
+  held?: Record<string, Record<string, number>>;
   blackoutActive: boolean;
   /** Intensidad general, 0–100. */
   master: number;
@@ -88,7 +90,11 @@ export function effectiveValue(
   channel: FixtureChannel,
   input: FrameInput,
 ): number {
-  let value = input.moving?.[instance.id]?.[channel.id] ?? input.liveValues[instance.id]?.[channel.id] ?? channel.defaultValue;
+  let value =
+    input.held?.[instance.id]?.[channel.id] ??
+    input.moving?.[instance.id]?.[channel.id] ??
+    input.liveValues[instance.id]?.[channel.id] ??
+    channel.defaultValue;
   if (input.strobeActive && channel.type === "STROBE") value = strobeValue(channel, definition) ?? value;
   if (followsMaster(channel, definition)) value = (value * input.master) / 100;
   if (input.identifyId === instance.id && givesLight(definition)) {
@@ -98,6 +104,31 @@ export function effectiveValue(
   }
   if (input.blackoutActive && goesDarkOnBlackout(channel, definition)) return 0;
   return applyCurve(channel, value);
+}
+
+/** Mismo modelo en la misma dirección: el cable les manda lo mismo, así que
+ *  van juntas (dos PAR en el 001). Igual que `Instance::twin_of`. */
+export const isTwin = (a: FixtureInstance, b: FixtureInstance) =>
+  a.universe === b.universe && a.address === b.address && a.definitionId === b.definitionId;
+
+/** De las que van juntas, la que manda por el cable: la primera. */
+export const outputOf = (instances: FixtureInstance[], instance: FixtureInstance) =>
+  instances.find((other) => isTwin(other, instance)) ?? instance;
+
+/** Lo que se le pone a una luz se le pone también a las que van con ella. */
+export function withTwins(
+  instances: FixtureInstance[],
+  values: Record<string, Record<string, number>>,
+): Record<string, Record<string, number>> {
+  const out = { ...values };
+  for (const [instanceId, channels] of Object.entries(values)) {
+    const instance = instances.find((i) => i.id === instanceId);
+    if (!instance) continue;
+    for (const twin of instances) {
+      if (twin.id !== instanceId && isTwin(twin, instance)) out[twin.id] = { ...out[twin.id], ...channels };
+    }
+  }
+  return out;
 }
 
 /** El número más alto y no la cantidad: un perfil puede tener huecos. */
@@ -139,6 +170,7 @@ export function describePatch(
     for (const other of rows) {
       const overlaps =
         other !== row &&
+        !isTwin(other.instance, row.instance) &&
         other.instance.universe === row.instance.universe &&
         other.first <= row.last &&
         row.first <= other.last;

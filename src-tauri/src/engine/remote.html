@@ -65,6 +65,17 @@
   #pads .fader { grid-column: span 2; padding: 6px 2px; }
   #pads button.active { border-color: var(--accent); color: var(--bg); background: var(--accent); }
   #login-error { min-height: 1.35em; color: var(--danger) !important; }
+  h2 { margin: 4px 0 0; font-size: 13px; font-weight: 600; letter-spacing: .06em; color: var(--muted); text-transform: uppercase; }
+  .colors { display: flex; flex-direction: column; gap: 8px; }
+  .colors .name { font-size: 14px; color: var(--muted); }
+  .swatches { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+  .swatches button { min-height: 44px; padding: 0; }
+  .swatches button.on { outline: 3px solid var(--text); outline-offset: 1px; }
+  .swatches .moment { grid-column: 1 / -1; min-height: 40px; font-size: 14px; background: var(--panel2); }
+  .swatches .moment.on { border-color: var(--accent); color: var(--accent); outline: 0; }
+  #effects { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  #effects button { min-height: 48px; font-size: 14px; overflow-wrap: anywhere; }
+  #effects button.on { border-color: var(--accent); color: var(--bg); background: var(--accent); }
 </style>
 </head>
 <body>
@@ -86,6 +97,14 @@
     <button id="next"></button>
     <div class="row"><button id="prev">◀ Anterior</button><button id="stop">■ Detener</button></div>
     <div id="moments"></div>
+    <section id="colors" class="colors" hidden>
+      <h2>Color fijo · manda sobre el momento</h2>
+      <div id="color-rows" class="colors"></div>
+    </section>
+    <section id="effects-box" class="colors" hidden>
+      <h2>Efectos · tocar para prender o apagar</h2>
+      <div id="effects"></div>
+    </section>
     <div class="bottom">
       <label for="master">Intensidad <b id="master-value"></b></label>
       <input id="master" type="range" min="0" max="100">
@@ -243,7 +262,71 @@ function render() {
   $("blackout").textContent = state.blackout ? "VOLVER A ENCENDER" : armed ? "CONFIRMAR" : "BLACKOUT";
   $("blackout").disabled = !online;
   renderPads();
+  renderColors();
+  renderEffects();
   renderClock();
+}
+
+// Color fijo por grupo: tapa los colores del momento sin cambiarlo.
+function renderColors() {
+  const colors = state.colors || { choices: [], rows: [] };
+  const rows = colors.rows || [];
+  $("colors").hidden = rows.length === 0 || colors.choices.length === 0;
+  const lines = rows.length > 1 ? [{ id: null, name: "Todas" }].concat(rows) : rows;
+  const box = $("color-rows");
+  const shape = JSON.stringify([lines.map((l) => [l.id, l.name]), colors.choices.map((c) => c.hex)]);
+  if (box.dataset.shape !== shape) {
+    box.dataset.shape = shape;
+    box.textContent = "";
+    for (const line of lines) {
+      const name = document.createElement("div");
+      name.className = "name";
+      name.textContent = line.name;
+      const grid = document.createElement("div");
+      grid.className = "swatches";
+      for (const choice of colors.choices) {
+        const b = document.createElement("button");
+        b.style.background = choice.hex;
+        b.setAttribute("aria-label", line.name + ": " + choice.name);
+        b.dataset.hex = choice.hex;
+        b.onclick = () => send({ type: "color", group: line.id, color: choice.hex });
+        grid.appendChild(b);
+      }
+      const back = document.createElement("button");
+      back.className = "moment";
+      back.textContent = "Del momento";
+      back.dataset.hex = "";
+      back.onclick = () => send({ type: "color", group: line.id, color: null });
+      grid.appendChild(back);
+      box.appendChild(name);
+      box.appendChild(grid);
+    }
+  }
+  const heldOf = (line) =>
+    line.id !== null
+      ? rows.find((r) => r.id === line.id).held || ""
+      : rows.every((r) => r.held === rows[0].held) ? rows[0].held || "" : "?";
+  lines.forEach((line, i) => {
+    const held = heldOf(line);
+    for (const b of box.children[i * 2 + 1].children) {
+      b.classList.toggle("on", b.dataset.hex === held);
+      b.disabled = !online;
+    }
+  });
+}
+
+function renderEffects() {
+  const effects = state.effects || [];
+  $("effects-box").hidden = effects.length === 0;
+  const list = $("effects");
+  while (list.children.length > effects.length) list.lastChild.remove();
+  effects.forEach((fx, i) => {
+    const button = list.children[i] || list.appendChild(document.createElement("button"));
+    button.textContent = fx.name;
+    button.className = fx.running ? "on" : "";
+    button.disabled = !online;
+    button.onclick = () => send({ type: "effect", id: fx.id });
+  });
 }
 
 // Los botones que se armaron en la laptop ("Celular" → Botones del celular).

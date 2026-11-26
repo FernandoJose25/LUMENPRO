@@ -1,6 +1,7 @@
 import type { Action } from "@/types/controls";
 import type { ChannelValues } from "@/lib/fade";
 import type { ShowDoc } from "@/lib/history";
+import type { QuickColor } from "@/lib/palettes";
 
 /** Lo que está pasando ahora, según el motor (show-engine/src/show.rs). */
 export interface Playback {
@@ -13,7 +14,12 @@ export interface Playback {
   activeMomentId: string | null;
   momentRun: { nonce: number; startedAt: number } | null;
   chase: ChaseStatus | null;
+  /** Color fijo de cada grupo ("" = las luces sin grupo): grupo -> "#ff0000". */
+  heldColors: Record<string, string>;
 }
+
+/** Lo programado y lo que el motor calcula de ahí sin que se guarde. */
+export type EngineDoc = ShowDoc & { colors: QuickColor[] };
 
 export interface ChaseStatus {
   id: string;
@@ -31,12 +37,12 @@ export interface AudioMessage {
 export type EngineMessage =
   | {
       type: "reset";
-      doc: ShowDoc;
+      doc: EngineDoc;
       live: ChannelValues;
       activeSceneId: string | null;
       activeMomentId: string | null;
     }
-  | { type: "doc"; doc: ShowDoc }
+  | { type: "doc"; doc: EngineDoc }
   | { type: "values"; values: ChannelValues }
   | { type: "activeScene"; id: string | null }
   | { type: "recallScene" | "startEffect" | "stopEffect" | "identify" | "startMoment" | "playChase"; id: string }

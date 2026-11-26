@@ -5,7 +5,9 @@ import type { ChannelType } from "@/types/fixture";
 export type Action =
   | { do: "next" | "prev" | "stop" | "blackout" | "strobe" | "master" }
   | { do: "moment" | "scene" | "effect" | "chase" | "palette"; id: string }
-  | { do: "groupFader"; groupId: string; channelType: ChannelType };
+  | { do: "groupFader"; groupId: string; channelType: ChannelType }
+  /** Color fijo encima del momento. Sin grupo, todos; sin color, se suelta. */
+  | { do: "color"; groupId: string | null; color: string | null };
 
 export const isFader = (action: Action) => action.do === "master" || action.do === "groupFader";
 

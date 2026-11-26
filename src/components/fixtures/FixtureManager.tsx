@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
 import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
-import { askText } from "@/lib/dialogs";
+import { askConfirm, askText } from "@/lib/dialogs";
+import { factoryDefinition, hasFactoryDefinition } from "@/lib/factory";
 import { useFixtureStore } from "@/lib/fixtureStore";
 import type { FixtureDefinition, FixtureInstance } from "@/types/fixture";
-import { channelCount, nextFreeSlot } from "@/lib/dmxFrame";
+import { channelCount, isTwin, nextFreeSlot } from "@/lib/dmxFrame";
 import { ChannelFinder } from "./ChannelFinder";
 import { emptyChannel, FixtureEditor } from "./FixtureEditor";
 import { LibraryPicker } from "./LibraryPicker";
@@ -123,7 +124,7 @@ export function FixtureManager({ onOpenControl }: FixtureManagerProps) {
                 {!def.verified ? (
                   <span
                     className="rounded-full bg-state-warn/15 px-1.5 py-0.5 text-[10px] font-medium text-state-warn"
-                    title={def.verifiedNote}
+                    title={`${def.verifiedNote ?? ""} Cuando la pruebes con la luz real y todo haga lo que dice, márcala como probada.`.trim()}
                   >
                     SIN VERIFICAR
                   </span>
@@ -142,7 +143,32 @@ export function FixtureManager({ onOpenControl }: FixtureManagerProps) {
                   <Button size="sm" variant="ghost" onClick={() => setEditingDef(def)}>
                     Editar perfil
                   </Button>
+                  {hasFactoryDefinition(def) ? (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      title="Los canales como vienen de fábrica, sin tus cambios"
+                      onClick={() =>
+                        askConfirm(
+                          `¿Restablecer el perfil de ${def.model}? Sus canales vuelven a como vienen de fábrica y se pierden los cambios que les hiciste. Las direcciones no cambian.`,
+                          "Restablecer",
+                          () => void factoryDefinition(def).then((fresh) => fresh && updateDefinition(fresh)),
+                        )
+                      }
+                    >
+                      Restablecer
+                    </Button>
+                  ) : null}
                 </div>
+                <label className="mb-2 flex items-center gap-2 px-1 text-xs text-text-secondary">
+                  <input
+                    type="checkbox"
+                    className="accent-accent"
+                    checked={def.verified}
+                    onChange={(e) => updateDefinition({ ...def, verified: e.target.checked })}
+                  />
+                  Ya la probé con la luz real: cada canal hace lo que dice
+                </label>
                 <div className="flex flex-col gap-1">
                   {instances
                     .filter((i) => i.definitionId === def.id)
@@ -150,6 +176,7 @@ export function FixtureManager({ onOpenControl }: FixtureManagerProps) {
                       <InstanceRow
                         key={inst.id}
                         instance={inst}
+                        twin={instances.find((o) => o.id !== inst.id && isTwin(o, inst))}
                         onChange={updateInstance}
                         onRemove={() => removeInstance(inst.id)}
                         onOpenControl={() => onOpenControl(inst.id)}
@@ -195,12 +222,15 @@ export function FixtureManager({ onOpenControl }: FixtureManagerProps) {
 
 function InstanceRow({
   instance,
+  twin,
   onChange,
   onRemove,
   onOpenControl,
   onFindChannels,
 }: {
   instance: FixtureInstance;
+  /** Otra en la misma dirección: van juntas. */
+  twin: FixtureInstance | undefined;
   onChange: (i: FixtureInstance) => void;
   onRemove: () => void;
   onOpenControl: () => void;
@@ -211,10 +241,18 @@ function InstanceRow({
       <button
         type="button"
         onClick={onOpenControl}
-        className="flex-1 truncate text-left text-text-primary hover:text-accent"
+        className="min-w-0 flex-1 truncate text-left text-text-primary hover:text-accent"
         title="Abrir en Fixture Control"
       >
         {instance.label}
+        {twin ? (
+          <span
+            className="ml-2 text-[10px] text-accent"
+            title="Misma dirección y mismo modelo: el cable les manda lo mismo, así que hacen siempre lo mismo."
+          >
+            va junto con {twin.label}
+          </span>
+        ) : null}
       </button>
       <Button size="sm" variant="ghost" aria-label={`Identificar canales de ${instance.label}`} onClick={onFindChannels}>
         Canales

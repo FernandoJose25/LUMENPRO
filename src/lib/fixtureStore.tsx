@@ -8,15 +8,27 @@ import type { Effect } from "@/types/effect";
 import type { Moment } from "@/types/moment";
 import type { Palette, PaletteKind } from "@/types/palette";
 import type { Action, Control, Pad } from "@/types/controls";
-import { capture, colorPaletteValues, matchPalettes, paletteValues } from "@/lib/palettes";
+import {
+  capture,
+  colorMembers,
+  colorPaletteValues,
+  heldValues,
+  matchPalettes,
+  paletteValues,
+  quickColors,
+  type QuickColor,
+} from "@/lib/palettes";
+import { colorValues } from "@/lib/look";
+import { withTwins } from "@/lib/dmxFrame";
 import { seedDefinitions, seedInstances } from "@/data/fixtureLibrary";
 import { buildQuinceTemplate } from "@/data/quinceTemplate";
+import { resetTemplate } from "@/lib/factory";
 import { closeWindow, createEngineLink, type EngineHost, type EngineLink } from "@/lib/engineLink";
 import { askChoice } from "@/lib/dialogs";
 import type { ChannelValues } from "@/lib/fade";
 import { docOf, EMPTY_HISTORY, recordChange, sameDoc, travel, type ShowDoc } from "@/lib/history";
 import { STORAGE_KEY, writeShow } from "@/lib/showFile";
-import type { EngineChanges, EngineMessage, Playback } from "@/types/engine";
+import type { EngineChanges, EngineDoc, EngineMessage, Playback } from "@/types/engine";
 
 function makeId(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -41,6 +53,17 @@ interface FixtureStoreState extends ShowDoc, Playback {
   moving: ChannelValues;
 }
 
+// Se recalculan solo cuando cambian las luces, no en cada edición.
+let colorsCache: { of: [unknown, unknown]; colors: QuickColor[] } | null = null;
+
+/** Lo que se le manda al motor: lo programado y los colores fijos. */
+export function engineDoc(s: ShowDoc): EngineDoc {
+  if (colorsCache?.of[0] !== s.instances || colorsCache.of[1] !== s.definitions) {
+    colorsCache = { of: [s.instances, s.definitions], colors: quickColors(s) };
+  }
+  return { ...docOf(s), colors: colorsCache.colors };
+}
+
 /** Lo que no se guarda con el show: al abrir, nada arranca solo. La excepción
  *  son activeSceneId y activeMomentId ("Siguiente" retoma desde ahí). */
 const IDLE: Omit<Playback, "activeSceneId" | "activeMomentId"> = {
@@ -51,6 +74,7 @@ const IDLE: Omit<Playback, "activeSceneId" | "activeMomentId"> = {
   identifyId: null,
   momentRun: null,
   chase: null,
+  heldColors: {},
 };
 const NOT_SAVED = new Set([...Object.keys(IDLE), "moving"]);
 
@@ -88,6 +112,11 @@ interface FixtureStoreValue extends FixtureStoreState {
   setControls: (controls: Control[]) => void;
   /** Un botón (press: al apretar true, al soltar false) o un fader (0–1). */
   act: (action: Action, press?: boolean, value?: number) => void;
+  /** Lo que pone el color fijo en cada luz (ver heldColors). */
+  held: ChannelValues;
+  /** Color fijo para un grupo ("" = sin grupo; null = todos); sin color, se
+   *  suelta y vuelve el del momento. */
+  holdColor: (groupId: string | null, hex: string | null) => void;
   updateSceneValues: (sceneId: string) => void;
   renameScene: (sceneId: string, name: string) => void;
   removeScene: (sceneId: string) => void;
@@ -113,6 +142,8 @@ interface FixtureStoreValue extends FixtureStoreState {
   /** Mueve un step una posición hacia arriba (-1) o abajo (+1) en la secuencia. */
   moveChaseStep: (chaseId: string, stepId: string, direction: -1 | 1) => void;
   addEffect: (name: string) => Effect;
+  /** Varios ya armados (los efectos listos). */
+  addEffects: (drafts: Omit<Effect, "id" | "createdAt" | "updatedAt">[]) => Effect[];
   renameEffect: (effectId: string, name: string) => void;
   removeEffect: (effectId: string) => void;
   updateEffect: (effectId: string, patch: Partial<Omit<Effect, "id" | "createdAt">>) => void;
@@ -131,10 +162,15 @@ interface FixtureStoreValue extends FixtureStoreState {
   identify: (instanceId: string) => void;
   addMoment: (name: string) => Moment;
   updateMoment: (momentId: string, patch: Partial<Omit<Moment, "id">>) => void;
+  /** Pone ese color en la escena del momento a las luces de esa fila ("" =
+   *  sin grupo). Sin escena, le crea una. */
+  paintMoment: (momentId: string, groupKey: string, hex: string) => void;
   removeMoment: (momentId: string) => void;
   moveMoment: (momentId: string, direction: -1 | 1) => void;
   /** Agrega los momentos de una quinceañera armados sobre el rig actual. */
   addQuinceTemplate: () => void;
+  /** Vuelve los momentos, escenas y effects de la plantilla a como los arma. */
+  resetQuinceTemplate: () => void;
   /** Lanza un momento: corta los effects del anterior, el estrobo y el
    *  Blackout. */
   startMoment: (momentId: string) => void;
@@ -199,7 +235,7 @@ function initialState(engine: EngineLink): FixtureStoreState {
   const saved = loadInitialState();
   if (!engine.resumed) return saved;
   const { doc, live, playback } = engine.resumed;
-  return { ...saved, ...doc, liveValues: live, ...playback };
+  return { ...saved, ...docOf(doc), liveValues: live, ...playback };
 }
 
 function mergeValues(into: ChannelValues, values: ChannelValues): ChannelValues {
@@ -222,7 +258,7 @@ function loadInitialState(): FixtureStoreState {
 
 function resetMessage(s: FixtureStoreState): EngineMessage {
   const { liveValues: live, activeSceneId, activeMomentId } = s;
-  return { type: "reset", doc: docOf(s), live, activeSceneId, activeMomentId };
+  return { type: "reset", doc: engineDoc(s), live, activeSceneId, activeMomentId };
 }
 
 const FixtureStoreContext = createContext<FixtureStoreValue | null>(null);
@@ -245,7 +281,7 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
       if (next === before) return;
       stateRef.current = next;
       publish(next);
-      if (!sameDoc(before, next)) engine.send({ type: "doc", doc: docOf(next) });
+      if (!sameDoc(before, next)) engine.send({ type: "doc", doc: engineDoc(next) });
     },
     [engine],
   );
@@ -259,7 +295,7 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
         publish(stateRef.current);
       },
       resetMessage: () => resetMessage(stateRef.current),
-      docMessage: () => ({ type: "doc", doc: docOf(stateRef.current) }),
+      docMessage: () => ({ type: "doc", doc: engineDoc(stateRef.current) }),
       onCloseAsked: () =>
         askChoice({
           title: "Las luces están encendidas",
@@ -387,9 +423,11 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
     [state.liveValues],
   );
 
-  // Se ven al instante, sin esperar a que el motor conteste.
+  // Se ven al instante, sin esperar a que el motor conteste. Las luces que
+  // van juntas (misma dirección) reciben lo mismo.
   const setChannelValues = useCallback(
-    (values: ChannelValues) => {
+    (changed: ChannelValues) => {
+      const values = withTwins(stateRef.current.instances, changed);
       setState((s) => ({ ...s, liveValues: mergeValues(s.liveValues, values) }));
       engine.send({ type: "values", values });
     },
@@ -544,6 +582,16 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
   const act = useCallback(
     (action: Action, press?: boolean, value?: number) => engine.send({ type: "action", action, press, value }),
     [engine],
+  );
+
+  const holdColor = useCallback(
+    (groupId: string | null, color: string | null) => act({ do: "color", groupId, color }, true),
+    [act],
+  );
+  const { instances, definitions, groups, heldColors } = state;
+  const held = useMemo(
+    () => heldValues({ instances, definitions, groups }, heldColors),
+    [instances, definitions, groups, heldColors],
   );
 
   const recallScene = useCallback((sceneId: string) => engine.send({ type: "recallScene", id: sceneId }), [engine]);
@@ -709,6 +757,16 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
     }));
   }, [setState]);
 
+  const addEffects = useCallback(
+    (drafts: Omit<Effect, "id" | "createdAt" | "updatedAt">[]): Effect[] => {
+      const now = Date.now();
+      const created = drafts.map((d) => ({ ...d, id: makeId("effect"), createdAt: now, updatedAt: now }));
+      setState((s) => ({ ...s, effects: [...s.effects, ...created] }));
+      return created;
+    },
+    [setState],
+  );
+
   const addEffect = useCallback(
     (name: string): Effect => {
       // Mismo cuidado que en addChase/addGroup: el objeto se construye
@@ -815,6 +873,48 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
     });
   }, [setState]);
 
+  const resetQuinceTemplate = useCallback(
+    () => setState((s) => ({ ...s, ...resetTemplate(s, makeId) })),
+    [setState],
+  );
+
+  const paintMoment = useCallback(
+    (momentId: string, groupKey: string, hex: string) =>
+      setState((s) => {
+        const moment = s.moments.find((m) => m.id === momentId);
+        if (!moment) return s;
+        const now = Date.now();
+        let scenes = s.scenes;
+        let sceneId = moment.sceneId;
+        if (!sceneId || !scenes.some((sc) => sc.id === sceneId)) {
+          sceneId = makeId("scene");
+          scenes = [...scenes, { id: sceneId, name: moment.name, values: {}, createdAt: now, updatedAt: now }];
+        }
+        const members = colorMembers(s, groupKey);
+        scenes = scenes.map((scene) => {
+          if (scene.id !== sceneId) return scene;
+          const values = { ...scene.values };
+          const refs = { ...scene.refs };
+          for (const instance of members) {
+            const definition = s.definitions.find((d) => d.id === instance.definitionId)!;
+            // Apagada no se vería el color.
+            const dimmer = definition.channels.find((c) => c.type === "DIMMER");
+            const lit = dimmer && values[instance.id]?.[dimmer.id] === undefined ? { [dimmer.id]: 255 } : {};
+            values[instance.id] = { ...values[instance.id], ...lit, ...colorValues(definition, hex) };
+            // Una paleta de color guardada mandaría sobre esto.
+            if (refs[instance.id]?.color) {
+              const { color: _gone, ...rest } = refs[instance.id];
+              refs[instance.id] = rest;
+            }
+          }
+          return { ...scene, values, refs, updatedAt: now };
+        });
+        const moments = s.moments.map((m) => (m.id === momentId ? { ...m, sceneId } : m));
+        return { ...s, scenes, moments };
+      }),
+    [setState],
+  );
+
   const addQuinceTemplate = useCallback(() => {
     const t = buildQuinceTemplate(stateRef.current, makeId);
     setState((s) => ({
@@ -866,6 +966,8 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
     setPhonePads,
     setControls,
     act,
+    held,
+    holdColor,
     updateSceneValues,
     renameScene,
     removeScene,
@@ -884,6 +986,7 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
     updateChaseStep,
     moveChaseStep,
     addEffect,
+    addEffects,
     renameEffect,
     removeEffect,
     updateEffect,
@@ -901,6 +1004,8 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
     removeMoment,
     moveMoment,
     addQuinceTemplate,
+    resetQuinceTemplate,
+    paintMoment,
     startMoment,
     stepMoment,
     stopMoment,

@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { readFileSync } from "node:fs";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import App from "@/App";
-import { isNewer, VERSION } from "@/lib/updates";
+import { VERSION } from "@/lib/updates";
 import { fakeEngine } from "./fakeEngine";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(), isTauri: vi.fn(), Channel: class {} }));
@@ -16,37 +17,42 @@ beforeEach(() => {
 });
 
 describe("Versiones", () => {
-  it("compara como números, no como texto", () => {
-    expect(isNewer("v0.10.0", "0.9.3")).toBe(true);
-    expect(isNewer("0.2.0", "0.2.0")).toBe(false);
-    expect(isNewer("v0.2.1", "0.2.0")).toBe(true);
-    expect(isNewer("1.0", "1.0.1")).toBe(false);
-  });
-
   it("la versión es la misma en todos lados", () => {
     const tauri = JSON.parse(readFileSync("src-tauri/tauri.conf.json", "utf8")).version;
     const cargo = /^version = "(.*)"/m.exec(readFileSync("src-tauri/Cargo.toml", "utf8"))![1];
     expect([VERSION, cargo]).toEqual([tauri, tauri]);
   });
 
-  it("avisa de una versión nueva y abre la página de descargas", async () => {
-    vi.stubGlobal("fetch", async () => ({ ok: true, json: async () => ({ tag_name: "v99.0.0" }) }));
-    fakeEngine();
+  it("avisa de una versión nueva con sus novedades y la instala", async () => {
+    const user = userEvent.setup();
+    fakeEngine({ check_update: () => ({ version: "99.0.0", notes: "Color fijo desde el celular" }) });
     render(<App />);
-    const button = await screen.findByRole("button", { name: "Versión nueva: 99.0.0" });
-    button.click();
-    expect(invoke).toHaveBeenCalledWith("open_release_page");
+    const dialog = await screen.findByRole("dialog", { name: "Actualización disponible" });
+    expect(within(dialog).getByText("Color fijo desde el celular")).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Instalar ahora" }));
+    expect(invoke).toHaveBeenCalledWith("install_update", expect.objectContaining({ progress: expect.anything() }));
+    expect(within(dialog).getByRole("status")).toHaveTextContent("Descargando");
+  });
+
+  it("si se deja para después, queda un botón para volver a verlo", async () => {
+    const user = userEvent.setup();
+    fakeEngine({ check_update: () => ({ version: "99.0.0", notes: null }) });
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Ahora no" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Versión nueva: 99.0.0" }));
+    expect(screen.getByRole("dialog", { name: "Actualización disponible" })).toBeInTheDocument();
   });
 
   it("sin internet, o al día, no dice nada", async () => {
-    for (const reply of [Promise.reject(new Error("sin red")), Promise.resolve({ ok: true, json: async () => ({ tag_name: `v${VERSION}` }) })]) {
-      const fetch = vi.fn(() => reply);
-      vi.stubGlobal("fetch", fetch);
-      fakeEngine();
+    for (const reply of [() => Promise.reject(new Error("sin red")), () => null]) {
+      const check = vi.fn(reply);
+      fakeEngine({ check_update: check });
       const view = render(<App />);
-      await waitFor(() => expect(fetch).toHaveBeenCalled());
+      await waitFor(() => expect(check).toHaveBeenCalled());
       await new Promise((r) => setTimeout(r, 50));
       expect(screen.queryByRole("button", { name: /Versión nueva/ })).not.toBeInTheDocument();
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
       view.unmount();
     }
   });

@@ -1,43 +1,56 @@
-import { useEffect, useState } from "react";
-import { invoke, isTauri } from "@tauri-apps/api/core";
+import { useCallback, useEffect, useState } from "react";
+import { Channel, invoke, isTauri } from "@tauri-apps/api/core";
 
 /** La versión de este programa (package.json). */
 export const VERSION = __APP_VERSION__;
 
-const LATEST = "https://api.github.com/repos/FernandoJose25/LUMENPRO/releases/latest";
-
-/** "v0.10.2" → [0, 10, 2]. */
-const parts = (version: string) =>
-  version
-    .replace(/^v/, "")
-    .split(".")
-    .map((n) => parseInt(n, 10) || 0);
-
-export function isNewer(candidate: string, current: string): boolean {
-  const [a, b] = [parts(candidate), parts(current)];
-  for (let i = 0; i < Math.max(a.length, b.length); i++) {
-    if ((a[i] ?? 0) !== (b[i] ?? 0)) return (a[i] ?? 0) > (b[i] ?? 0);
-  }
-  return false;
+export interface UpdateState {
+  /** La versión nueva, o null si no hay (o no hay internet). */
+  version: string | null;
+  notes: string | null;
+  /** El aviso a la vista. */
+  open: boolean;
+  /** 0–100 mientras se descarga; null si no empezó. */
+  progress: number | null;
+  error: string | null;
 }
 
-/** La versión nueva publicada en GitHub, si la hay. Pregunta una vez al abrir;
- *  sin internet (en un local, lo normal) no dice nada. */
-export function useNewVersion(): string | null {
-  const [latest, setLatest] = useState<string | null>(null);
+/**
+ * Pregunta una vez al abrir si hay una versión nueva (src-tauri/src/updates.rs)
+ * y, si la hay, muestra el aviso. Instalar la descarga, apaga el motor y
+ * reinicia el programa ya actualizado.
+ */
+export function useUpdate() {
+  const [state, setState] = useState<UpdateState>({ version: null, notes: null, open: false, progress: null, error: null });
+
   useEffect(() => {
     if (!isTauri()) return;
-    const abort = new AbortController();
-    fetch(LATEST, { signal: abort.signal, headers: { Accept: "application/vnd.github+json" } })
-      .then((r) => (r.ok ? (r.json() as Promise<{ tag_name?: string }>) : null))
-      .then((release) => {
-        const tag = release?.tag_name;
-        if (tag && isNewer(tag, VERSION)) setLatest(tag.replace(/^v/, ""));
+    let alive = true;
+    invoke<{ version: string; notes: string | null } | null>("check_update")
+      .then((found) => {
+        if (alive && found) setState((s) => ({ ...s, version: found.version, notes: found.notes, open: true }));
       })
       .catch(() => {});
-    return () => abort.abort();
+    return () => {
+      alive = false;
+    };
   }, []);
-  return latest;
+
+  const install = useCallback(() => {
+    const progress = new Channel<number>();
+    progress.onmessage = (percent) => setState((s) => ({ ...s, progress: percent }));
+    setState((s) => ({ ...s, progress: 0, error: null }));
+    invoke("install_update", { progress }).catch((e) =>
+      setState((s) => ({ ...s, progress: null, error: e instanceof Error ? e.message : String(e) })),
+    );
+  }, []);
+
+  return {
+    ...state,
+    install,
+    show: () => setState((s) => ({ ...s, open: true })),
+    hide: () => setState((s) => ({ ...s, open: false })),
+  };
 }
 
 export function openDownloads(): void {

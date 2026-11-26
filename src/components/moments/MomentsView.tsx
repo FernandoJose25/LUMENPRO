@@ -4,6 +4,9 @@ import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 import { askConfirm, askText } from "@/lib/dialogs";
 import { useFixtureStore } from "@/lib/fixtureStore";
+import { SWATCHES } from "@/lib/look";
+import { colorRows, sceneColor } from "@/lib/palettes";
+import type { ChannelType } from "@/types/fixture";
 import type { Moment } from "@/types/moment";
 
 const fieldClass =
@@ -11,7 +14,8 @@ const fieldClass =
 
 /** Arma el orden del evento. Se lanzan desde Live. */
 export function MomentsView() {
-  const { moments, activeMomentId, addMoment, moveMoment, removeMoment, addQuinceTemplate } = useFixtureStore();
+  const { moments, activeMomentId, addMoment, moveMoment, removeMoment, addQuinceTemplate, resetQuinceTemplate } =
+    useFixtureStore();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = moments.find((m) => m.id === selectedId) ?? moments[0];
 
@@ -68,6 +72,21 @@ export function MomentsView() {
           <Button variant="primary" className="mt-2 w-full" onClick={handleCreate}>
             + Nuevo momento
           </Button>
+          {moments.length > 0 ? (
+            <Button
+              variant="ghost"
+              className="mt-2 w-full text-text-secondary"
+              onClick={() =>
+                askConfirm(
+                  "¿Restablecer la plantilla? Recepción, Entrada, Vals, Fotos, Brindis, Hora loca y Cierre, con sus escenas y effects, vuelven a como los arma la plantilla. Los momentos que creaste tú no se tocan.",
+                  "Restablecer",
+                  resetQuinceTemplate,
+                )
+              }
+            >
+              Restablecer plantilla
+            </Button>
+          ) : null}
           {moments.length === 0 ? (
             <>
               <Button className="mt-2 w-full" onClick={addQuinceTemplate}>
@@ -111,6 +130,67 @@ function RowButton({
   );
 }
 
+const COLOR_TYPES: ChannelType[] = ["RED", "GREEN", "BLUE", "WHITE", "AMBER", "UV", "HUE", "COLOR", "COLOR_WHEEL"];
+
+/** El color de cada grupo en este momento: se guarda en su escena. */
+function MomentColors({ moment }: { moment: Moment }) {
+  const store = useFixtureStore();
+  const { scenes, effects, paintMoment, updateMoment } = store;
+  const rows = colorRows(store);
+  if (rows.length === 0) return null;
+  const scene = scenes.find((s) => s.id === moment.sceneId);
+  // Efectos de color del momento: mientras corren, tapan el color quieto.
+  const colorEffects = effects.filter(
+    (fx) => moment.effectIds.includes(fx.id) && fx.kind === "wave" && COLOR_TYPES.includes(fx.channelType),
+  );
+
+  return (
+    <fieldset className="flex flex-col gap-2">
+      <legend className="mb-1">Color</legend>
+      {rows.map((row) => {
+        const current = scene ? sceneColor(store, scene.values, row.id) : null;
+        return (
+          <div key={row.id} className="flex flex-wrap items-center gap-1.5">
+            <span className="w-20 shrink-0 truncate text-text-primary">{row.name}</span>
+            {SWATCHES.map(({ name, hex }) => (
+              <button
+                key={hex}
+                type="button"
+                aria-label={`${moment.name}, ${row.name}: ${name}`}
+                aria-pressed={current === hex}
+                title={name}
+                onClick={() => paintMoment(moment.id, row.id, hex)}
+                className={cn(
+                  "h-7 w-7 rounded-control border hover:scale-110",
+                  current === hex ? "border-text-primary ring-2 ring-accent" : "border-border",
+                )}
+                style={{ backgroundColor: hex }}
+              />
+            ))}
+          </div>
+        );
+      })}
+      {colorEffects.length > 0 ? (
+        <p className="text-[11px] text-state-warn">
+          Este momento tiene efectos de color ({colorEffects.map((fx) => fx.name).join(", ")}): mientras corren, tapan
+          este color.{" "}
+          <button
+            type="button"
+            className="underline hover:text-text-primary"
+            onClick={() =>
+              updateMoment(moment.id, { effectIds: moment.effectIds.filter((id) => !colorEffects.some((fx) => fx.id === id)) })
+            }
+          >
+            Quitarlos de este momento
+          </button>
+        </p>
+      ) : (
+        <span className="text-[11px]">En vivo puedes cambiarlo sin tocar el momento con el Color fijo.</span>
+      )}
+    </fieldset>
+  );
+}
+
 function MomentEditor({ moment }: { moment: Moment }) {
   const { scenes, chases, effects, updateMoment, startMoment } = useFixtureStore();
   const update = (patch: Partial<Omit<Moment, "id">>) => updateMoment(moment.id, patch);
@@ -141,6 +221,8 @@ function MomentEditor({ moment }: { moment: Moment }) {
             Todo lo que la escena no define vuelve a su valor inicial: el estrobo de un momento no pasa al siguiente.
           </span>
         </label>
+
+        <MomentColors moment={moment} />
 
         <fieldset className="flex flex-col gap-1">
           <legend className="mb-1">Effects</legend>

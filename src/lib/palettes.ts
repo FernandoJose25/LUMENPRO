@@ -1,6 +1,7 @@
 import type { ChannelValues } from "@/lib/fade";
-import { colorValues, takesColor } from "@/lib/look";
+import { colorValues, SWATCHES, takesColor } from "@/lib/look";
 import type { ChannelType, FixtureChannel, FixtureDefinition, FixtureInstance } from "@/types/fixture";
+import type { Group } from "@/types/group";
 import type { Palette, PaletteKind } from "@/types/palette";
 
 const KIND_TYPES: Record<PaletteKind, ChannelType[]> = {
@@ -30,7 +31,7 @@ interface Rig {
   liveValues: ChannelValues;
 }
 
-const definitionOf = (rig: Rig, instance: FixtureInstance) =>
+const definitionOf = (rig: Pick<Rig, "definitions">, instance: FixtureInstance) =>
   rig.definitions.find((d) => d.id === instance.definitionId);
 
 /** Lo que tienen ahora esas luces en los canales de esa clase. */
@@ -47,7 +48,7 @@ export function capture(rig: Rig, kind: PaletteKind, instances: FixtureInstance[
 }
 
 /** Un color para todas las luces que puedan ponerlo, cada una a su manera. */
-export function colorPaletteValues(rig: Rig, hex: string): ChannelValues {
+export function colorPaletteValues(rig: Pick<Rig, "instances" | "definitions">, hex: string): ChannelValues {
   const values: ChannelValues = {};
   for (const instance of rig.instances) {
     const definition = definitionOf(rig, instance);
@@ -94,3 +95,76 @@ export function matchPalettes(rig: Rig, palettes: Palette[]): Record<string, Par
 /** Las luces que tienen algo de esa clase. */
 export const instancesFor = (rig: Rig, kind: PaletteKind, instances = rig.instances) =>
   instances.filter((i) => channelsOf(definitionOf(rig, i), kind).length > 0);
+
+/** Un color de un toque y lo que pone en cada luz que puede ponerlo. */
+export interface QuickColor {
+  hex: string;
+  name: string;
+  values: ChannelValues;
+}
+
+/** Los colores fijos que el motor ofrece (ver `Show::held` en show-engine). */
+export const quickColors = (rig: Pick<Rig, "instances" | "definitions">): QuickColor[] =>
+  SWATCHES.map(({ name, hex }) => ({ hex, name, values: colorPaletteValues(rig, hex) }));
+
+interface GroupedRig {
+  instances: FixtureInstance[];
+  definitions: FixtureDefinition[];
+  groups: Group[];
+}
+
+/** El grupo de una luz para el color fijo: "" si no tiene o ya no existe. */
+const colorKey = (rig: GroupedRig, instance: FixtureInstance) =>
+  instance.group && rig.groups.some((g) => g.id === instance.group) ? instance.group : "";
+
+/** Las luces de esa fila ("" = sin grupo) que pueden ponerse un color. */
+export const colorMembers = (rig: GroupedRig, key: string) =>
+  rig.instances.filter((i) => {
+    const definition = definitionOf(rig, i);
+    return colorKey(rig, i) === key && definition !== undefined && takesColor(definition);
+  });
+
+/** El color de la lista que tiene esa escena en esa fila, si lo tiene. */
+export function sceneColor(rig: GroupedRig, values: ChannelValues, key: string): string | null {
+  const members = colorMembers(rig, key);
+  if (members.length === 0) return null;
+  // Lo que la escena no tiene sale con su valor inicial.
+  const match = SWATCHES.find(({ hex }) =>
+    members.every((i) => {
+      const definition = definitionOf(rig, i)!;
+      return Object.entries(colorValues(definition, hex)).every(
+        ([channelId, v]) =>
+          (values[i.id]?.[channelId] ?? definition.channels.find((c) => c.id === channelId)?.defaultValue) === v,
+      );
+    }),
+  );
+  return match?.hex ?? null;
+}
+
+/** Los grupos que pueden tomar un color fijo, igual que `Show::color_rows`. */
+export function colorRows(rig: GroupedRig): { id: string; name: string }[] {
+  const keys = new Set(
+    rig.instances
+      .filter((i) => {
+        const definition = definitionOf(rig, i);
+        return definition && takesColor(definition);
+      })
+      .map((i) => colorKey(rig, i)),
+  );
+  const rows = rig.groups.filter((g) => keys.has(g.id)).map((g) => ({ id: g.id, name: g.name }));
+  return keys.has("") ? [...rows, { id: "", name: "Sin grupo" }] : rows;
+}
+
+/** Lo que pone el color fijo en cada luz, igual que `Show::held`. */
+export function heldValues(rig: GroupedRig, heldColors: Record<string, string>): ChannelValues {
+  const values: ChannelValues = {};
+  if (Object.keys(heldColors).length === 0) return values;
+  for (const instance of rig.instances) {
+    const hex = heldColors[colorKey(rig, instance)];
+    const definition = definitionOf(rig, instance);
+    if (hex && definition && takesColor(definition) && SWATCHES.some((s) => s.hex === hex)) {
+      values[instance.id] = colorValues(definition, hex);
+    }
+  }
+  return values;
+}

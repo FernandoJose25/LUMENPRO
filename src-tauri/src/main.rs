@@ -10,6 +10,7 @@ mod engine;
 mod link;
 mod show;
 mod stage_window;
+mod updates;
 mod webview_dir;
 
 use engine::process;
@@ -73,6 +74,7 @@ pub struct WebviewDir(pub PathBuf);
 
 fn window() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let dir = link::data_dir(app.handle())?;
             if link::yield_to_open_window(&dir) {
@@ -106,6 +108,8 @@ fn window() {
             show::load_settings,
             show::save_settings,
             stage_window::open_stage_window,
+            updates::check_update,
+            updates::install_update,
         ])
         .run(tauri::generate_context!())
         .expect("error corriendo la app de Tauri");

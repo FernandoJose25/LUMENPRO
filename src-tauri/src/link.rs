@@ -39,6 +39,11 @@ fn connect(dir: &Path) -> Result<Client, String> {
 }
 
 impl Link {
+    /// La carpeta de datos, donde están engine.json y engine.lock.
+    pub fn dir(&self) -> &Path {
+        &self.dir
+    }
+
     pub fn new(dir: PathBuf) -> Self {
         Self {
             dir,
@@ -65,7 +70,7 @@ impl Link {
 
     /// Por una conexión aparte y sin levantar el motor si no está: se usa al
     /// cerrar, que no puede quedarse esperando.
-    fn ask(&self, request: Value) -> Option<Value> {
+    pub fn ask(&self, request: Value) -> Option<Value> {
         let reply = Client::connect(&self.dir, false)?.ask(&request.to_string()).ok()?;
         serde_json::from_str::<Value>(&reply).ok().map(|mut r| r["ok"].take())
     }

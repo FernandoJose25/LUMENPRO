@@ -2,6 +2,8 @@ import type { Action } from "@/types/controls";
 import type { ShowDoc } from "@/lib/history";
 import type { Playback } from "@/types/engine";
 import { CHANNEL_TYPE_LABELS, type ChannelType } from "@/types/fixture";
+import { SWATCHES } from "@/lib/look";
+import { colorRows } from "@/lib/palettes";
 
 type Rig = ShowDoc & Playback;
 
@@ -12,8 +14,12 @@ export interface ActionOption {
   action: Action;
 }
 
-export const actionKey = (action: Action) =>
-  "id" in action ? `${action.do}:${action.id}` : action.do === "groupFader" ? `groupFader:${action.groupId}:${action.channelType}` : action.do;
+export function actionKey(action: Action): string {
+  if ("id" in action) return `${action.do}:${action.id}`;
+  if (action.do === "groupFader") return `groupFader:${action.groupId}:${action.channelType}`;
+  if (action.do === "color") return `color:${action.groupId ?? "*"}:${action.color ?? "-"}`;
+  return action.do;
+}
 
 /** Todo lo que se le puede asignar a un botón, con nombres para elegir. */
 export function actionOptions(rig: Rig): ActionOption[] {
@@ -37,6 +43,13 @@ export function actionOptions(rig: Rig): ActionOption[] {
   add("Effects (arranca / detiene)", rig.effects, "effect");
   add("Chases (arranca / detiene)", rig.chases, "chase");
   add("Paletas", rig.palettes, "palette");
+  for (const row of [{ id: null, name: "Todas" }, ...colorRows(rig)]) {
+    const colors = [...SWATCHES.map((s) => ({ hex: s.hex as string | null, name: s.name })), { hex: null, name: "la del momento" }];
+    for (const { hex, name } of colors) {
+      const action: Action = { do: "color", groupId: row.id, color: hex };
+      options.push({ key: actionKey(action), label: `${row.name}: ${name}`, group: "Color fijo", action });
+    }
+  }
   for (const group of rig.groups) {
     const types = new Set<ChannelType>();
     for (const instance of rig.instances.filter((i) => i.group === group.id)) {
@@ -77,6 +90,13 @@ export function isActive(action: Action, rig: Rig): boolean {
       return rig.blackoutActive;
     case "strobe":
       return rig.strobeActive;
+    case "color": {
+      const held = rig.heldColors;
+      if (action.groupId !== null) return (held[action.groupId] ?? null) === action.color;
+      if (action.color === null) return Object.keys(held).length === 0;
+      const rows = colorRows(rig);
+      return rows.length > 0 && rows.every((r) => held[r.id] === action.color);
+    }
     default:
       return false;
   }

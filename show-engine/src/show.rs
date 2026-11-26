@@ -104,6 +104,9 @@ pub struct Playback {
     /// `None` = detenido.
     pub moment_run: Option<MomentRun>,
     pub chase: Option<ChaseStatus>,
+    /// Color fijo de cada grupo ("" = las luces sin grupo): grupo -> "#ff0000".
+    /// Los momentos no lo sueltan.
+    pub held_colors: BTreeMap<String, String>,
 }
 
 impl Default for Playback {
@@ -118,6 +121,7 @@ impl Default for Playback {
             active_moment_id: None,
             moment_run: None,
             chase: None,
+            held_colors: BTreeMap::new(),
         }
     }
 }
@@ -421,6 +425,16 @@ impl Show {
                     self.act(&action, command["press"].as_bool(), command["value"].as_f64(), now);
                 }
             }
+            "effect" => {
+                if let Some(id) = command["id"].as_str() {
+                    self.act(&Action::Effect { id: id.into() }, Some(true), None, now);
+                }
+            }
+            "color" => {
+                let text = |key: &str| command[key].as_str().map(str::to_owned);
+                let action = Action::Color { group_id: text("group"), color: text("color") };
+                self.act(&action, Some(true), None, now);
+            }
             _ => {}
         }
     }
@@ -448,6 +462,28 @@ impl Show {
                 }
                 return;
             }
+            Action::Color { group_id, color } if pressed => {
+                let keys = match group_id {
+                    Some(group) => vec![group.clone()],
+                    None => self.color_rows().into_iter().map(|(key, _)| key).collect(),
+                };
+                let known = color.as_ref().filter(|hex| self.doc.colors.iter().any(|c| c.hex == **hex));
+                if color.is_some() && known.is_none() {
+                    return;
+                }
+                self.edit(|p| {
+                    if group_id.is_none() && known.is_none() {
+                        p.held_colors.clear();
+                    }
+                    for key in keys {
+                        match known {
+                            Some(hex) => p.held_colors.insert(key, hex.clone()),
+                            None => p.held_colors.remove(&key),
+                        };
+                    }
+                });
+                return;
+            }
             _ if !pressed => None,
             Action::Next => Some(Message::StepMoment { direction: 1 }),
             Action::Prev => Some(Message::StepMoment { direction: -1 }),
@@ -467,7 +503,7 @@ impl Show {
                 let values = self.doc.palettes.iter().find(|p| p.id == *id).map(|p| p.values.clone());
                 values.map(|values| Message::Values { values })
             }
-            Action::Nothing => None,
+            Action::Color { .. } | Action::Nothing => None,
         };
         if let Some(message) = message {
             let _ = self.apply(message, now);
@@ -486,8 +522,56 @@ impl Show {
             Action::Blackout => p.blackout_active,
             Action::Strobe => p.strobe_active,
             Action::Stop => p.moment_run.is_none(),
+            Action::Color { group_id: Some(group), color } => p.held_colors.get(group) == color.as_ref(),
+            Action::Color { group_id: None, color: None } => p.held_colors.is_empty(),
+            Action::Color { group_id: None, color: Some(hex) } => {
+                let rows = self.color_rows();
+                !rows.is_empty() && rows.iter().all(|(key, _)| p.held_colors.get(key) == Some(hex))
+            }
             _ => false,
         }
+    }
+
+    /// Los grupos que pueden tomar un color fijo, con su nombre, en el orden
+    /// de Groups; al final "" (las luces sin grupo), si hay.
+    fn color_rows(&self) -> Vec<(String, String)> {
+        let Some(first) = self.doc.colors.first() else { return Vec::new() };
+        let keys: Vec<&str> = self
+            .doc
+            .rig()
+            .filter(|(i, _)| first.values.contains_key(&i.id))
+            .map(|(i, _)| i.group.as_deref().unwrap_or(""))
+            .collect();
+        let mut rows: Vec<(String, String)> = self
+            .doc
+            .groups
+            .iter()
+            .filter(|g| keys.contains(&g.id.as_str()))
+            .map(|g| (g.id.clone(), g.name.clone()))
+            .collect();
+        if keys.iter().any(|k| k.is_empty() || !self.doc.groups.iter().any(|g| g.id == *k)) {
+            rows.push((String::new(), "Sin grupo".into()));
+        }
+        rows
+    }
+
+    /// Lo que pone el color fijo en cada luz.
+    fn held(&self) -> ChannelValues {
+        let held = &self.playback.held_colors;
+        if held.is_empty() {
+            return ChannelValues::new();
+        }
+        let known: Vec<&str> = self.doc.groups.iter().map(|g| g.id.as_str()).collect();
+        self.doc
+            .rig()
+            .filter_map(|(i, _)| {
+                // Un grupo borrado es como no tener grupo.
+                let key = i.group.as_deref().filter(|g| known.contains(g)).unwrap_or("");
+                let hex = held.get(key)?;
+                let color = self.doc.colors.iter().find(|c| c.hex == *hex)?;
+                Some((i.id.clone(), color.values.get(&i.id)?.clone()))
+            })
+            .collect()
     }
 
     /// Valor de un fader, 0–1.
@@ -551,10 +635,14 @@ impl Show {
         let moment = p.active_moment_id.clone().filter(|id| moments.iter().any(|m| m.id == *id));
         let chase_gone = self.chase.as_ref().is_some_and(|run| !chases.iter().any(|c| c.id == run.id));
         let moment_gone = moment != p.active_moment_id;
+        let colors = &self.doc.colors;
+        let held: BTreeMap<String, String> =
+            p.held_colors.iter().filter(|(_, hex)| colors.iter().any(|c| c.hex == **hex)).map(|(k, v)| (k.clone(), v.clone())).collect();
         self.edit(|p| {
             p.running_effect_ids = running;
             p.active_scene_id = scene;
             p.active_moment_id = moment;
+            p.held_colors = held;
         });
         if chase_gone {
             self.stop_chase();
@@ -826,15 +914,24 @@ impl Show {
             let Some(group) = &effect.group_id else { continue };
             let cycles = cycles_of(effect, started, beats, now);
             let level = level_of(effect, levels);
-            // Una barra de varios focos cuenta como varias luces seguidas.
-            let cells = self
-                .doc
-                .rig()
-                .filter(|(i, _)| i.group.as_ref() == Some(group))
-                .flat_map(|(member, definition)| {
-                    definition.cells(effect.channel_type).into_iter().map(move |cell| (member, cell))
-                });
-            for (index, (member, channels)) in cells.enumerate() {
+            // Una barra de varios focos cuenta como varias luces seguidas; dos
+            // que van juntas, como una sola.
+            let members: Vec<_> = self.doc.rig().filter(|(i, _)| i.group.as_ref() == Some(group)).collect();
+            let mut places: Vec<(&crate::model::Instance, usize)> = Vec::new();
+            let mut next = 0;
+            let cells = members.iter().flat_map(|&(member, definition)| {
+                let cells = definition.cells(effect.channel_type);
+                let base = match places.iter().find(|(other, _)| other.twin_of(member)) {
+                    Some(&(_, base)) => base,
+                    None => {
+                        places.push((member, next));
+                        next += cells.len();
+                        next - cells.len()
+                    }
+                };
+                cells.into_iter().enumerate().map(move |(n, cell)| (base + n, member, cell)).collect::<Vec<_>>()
+            });
+            for (index, member, channels) in cells {
                 let phase = cycles + index as f64 * effect.phase_offset_deg / 360.0;
                 let t = level.unwrap_or_else(|| effect.waveform.level(phase));
                 let value = (effect.min + (effect.max - effect.min) * t).round().clamp(0.0, 255.0) as u8;
@@ -887,14 +984,23 @@ impl Show {
             let size = effect.size_deg * smooth(*open) * level_of(effect, levels).unwrap_or(1.0);
             let (sin, cos) = effect.angle_deg.to_radians().sin_cos();
 
-            let heads: Vec<_> = self
-                .doc
-                .rig()
-                .filter(|(i, _)| i.group.as_ref() == Some(group))
-                .flat_map(|(i, d)| heads_of(d).into_iter().map(move |axes| (i, d, axes)))
-                .collect();
-            let count = heads.len();
-            for (index, (instance, definition, axes)) in heads.into_iter().enumerate() {
+            // Dos cabezas que van juntas ocupan un solo lugar.
+            let mut places: Vec<(&crate::model::Instance, usize)> = Vec::new();
+            let mut count = 0;
+            let mut heads = Vec::new();
+            for (i, d) in self.doc.rig().filter(|(i, _)| i.group.as_ref() == Some(group)) {
+                let axes = heads_of(d);
+                let base = match places.iter().find(|(other, _)| other.twin_of(i)) {
+                    Some(&(_, base)) => base,
+                    None => {
+                        places.push((i, count));
+                        count += axes.len();
+                        count - axes.len()
+                    }
+                };
+                heads.extend(axes.into_iter().enumerate().map(|(n, axes)| (base + n, i, d, axes)));
+            }
+            for (index, instance, definition, axes) in heads {
                 let place = if count > 1 { 2.0 * index as f64 / (count - 1) as f64 - 1.0 } else { 0.0 };
                 let phase = cycles + index as f64 * effect.phase_offset_deg / 360.0;
                 let (x, y) = effect.figure.at(phase, place);
@@ -958,6 +1064,7 @@ impl Show {
             master: p.master,
             strobe: p.strobe_active,
             identify: p.identify_id.as_deref(),
+            held: &self.held(),
         };
         frame::build(&self.doc, &self.live, &self.moving, &overlay, universe)
     }
@@ -1014,6 +1121,21 @@ impl Show {
             "master": p.master,
             "dmx": dmx,
             "pads": self.pads_snapshot(&self.doc.phone_pads),
+            "effects": self
+                .doc
+                .effects
+                .iter()
+                .filter(|e| e.group_id.is_some())
+                .map(|e| json!({ "id": e.id, "name": e.name, "running": p.running_effect_ids.contains(&e.id) }))
+                .collect::<Vec<_>>(),
+            "colors": {
+                "choices": self.doc.colors.iter().map(|c| json!({ "hex": c.hex, "name": c.name })).collect::<Vec<_>>(),
+                "rows": self
+                    .color_rows()
+                    .into_iter()
+                    .map(|(key, name)| json!({ "id": key, "name": name, "held": p.held_colors.get(&key) }))
+                    .collect::<Vec<_>>(),
+            },
         })
     }
 }

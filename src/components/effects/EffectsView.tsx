@@ -14,6 +14,8 @@ import {
   type WaveformType,
 } from "@/types/effect";
 import { CHANNEL_TYPE_LABELS, type ChannelType } from "@/types/fixture";
+import { EffectPresets } from "./EffectPresets";
+import { factoryEffect } from "@/lib/factory";
 
 const WAVEFORMS = Object.keys(WAVEFORM_LABELS) as WaveformType[];
 const SOURCES = Object.keys(EFFECT_SOURCE_LABELS) as EffectSource[];
@@ -76,11 +78,15 @@ function FigurePreview({ effect, heads }: { effect: Effect; heads: number }) {
 export function EffectsView() {
   const { effects, groups, addEffect, renameEffect, removeEffect } = useFixtureStore();
   const [selectedEffectId, setSelectedEffectId] = useState<string | null>(effects[0]?.id ?? null);
+  const [inPresets, setInPresets] = useState(effects.length === 0);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [draftName, setDraftName] = useState("");
 
   function handleCreate() {
-    askText("Nombre del effect", `Effect ${effects.length + 1}`, (name) => setSelectedEffectId(addEffect(name).id));
+    askText("Nombre del effect", `Effect ${effects.length + 1}`, (name) => {
+      setSelectedEffectId(addEffect(name).id);
+      setInPresets(false);
+    });
   }
 
   function startRename(id: string, currentName: string) {
@@ -136,7 +142,10 @@ export function EffectsView() {
                 <div key={fx.id} className="group relative">
                   <button
                     type="button"
-                    onClick={() => setSelectedEffectId(fx.id)}
+                    onClick={() => {
+                      setSelectedEffectId(fx.id);
+                      setInPresets(false);
+                    }}
                     onDoubleClick={() => startRename(fx.id, fx.name)}
                     title="Clic: seleccionar · Doble clic: renombrar"
                     className={cn(
@@ -164,21 +173,34 @@ export function EffectsView() {
               );
             })}
           </div>
-          <Button size="md" variant="primary" className="mt-2 w-full" onClick={handleCreate}>
+          <Button size="md" variant="primary" className="mt-2 w-full" onClick={() => setInPresets(true)}>
+            + Efectos listos
+          </Button>
+          <Button size="md" className="mt-2 w-full" onClick={handleCreate}>
             + Nuevo effect
           </Button>
         </Panel>
       </div>
 
       <div className="min-w-0 flex-1">
-        <EffectEditor effectId={selectedEffectId} />
+        {inPresets ? (
+          <EffectPresets
+            onAdded={(id) => {
+              setSelectedEffectId(id);
+              setInPresets(false);
+            }}
+          />
+        ) : (
+          <EffectEditor effectId={selectedEffectId} />
+        )}
       </div>
     </div>
   );
 }
 
 function EffectEditor({ effectId }: { effectId: string | null }) {
-  const { effects, groups, instances, runningEffectIds, updateEffect, startEffect, stopEffect } = useFixtureStore();
+  const store = useFixtureStore();
+  const { effects, groups, instances, runningEffectIds, updateEffect, startEffect, stopEffect } = store;
   const effect = effects.find((e) => e.id === effectId) ?? null;
 
   if (!effect) {
@@ -208,6 +230,11 @@ function EffectEditor({ effectId }: { effectId: string | null }) {
         {!effect.groupId ? (
           <span className="text-[11px] text-text-secondary">Asigna un grupo para poder reproducir.</span>
         ) : null}
+        <FactoryButton
+          factory={factoryEffect(store, effect)}
+          name={effect.name}
+          onReset={(draft) => updateEffect(effect.id, draft)}
+        />
       </div>
 
       <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-xs">
@@ -421,5 +448,29 @@ function EffectEditor({ effectId }: { effectId: string | null }) {
         </p>
       ) : null}
     </Panel>
+  );
+}
+
+/** Vuelve el effect a como vino de la plantilla o de los efectos listos. */
+function FactoryButton({
+  factory,
+  name,
+  onReset,
+}: {
+  factory: ReturnType<typeof factoryEffect>;
+  name: string;
+  onReset: (draft: NonNullable<ReturnType<typeof factoryEffect>>) => void;
+}) {
+  if (!factory) return null;
+  return (
+    <Button
+      size="sm"
+      variant="ghost"
+      className="ml-auto"
+      title="Vuelve velocidad, colores, figura y todo lo demás a como venía"
+      onClick={() => askConfirm(`¿Restablecer "${name}" a como venía?`, "Restablecer", () => onReset(factory))}
+    >
+      Restablecer
+    </Button>
   );
 }

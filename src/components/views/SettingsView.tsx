@@ -5,6 +5,7 @@ import { askConfirm } from "@/lib/dialogs";
 import { VERSION } from "@/lib/updates";
 import { useFixtureStore } from "@/lib/fixtureStore";
 import { exportShowFile } from "@/lib/showFile";
+import { seedDefinitions, seedInstances } from "@/data/fixtureLibrary";
 
 /** Respaldo del show: exportar una copia e importarla (en esta u otra PC). */
 export function SettingsView() {
@@ -60,6 +61,22 @@ export function SettingsView() {
             }}
           />
         </div>
+        <Button
+          variant="ghost"
+          className="mt-3 text-state-danger"
+          onClick={() =>
+            askConfirm(
+              "¿Empezar de cero? Se borra todo el show (luces, grupos, escenas, efectos, momentos y botones) y queda como recién instalado. Si quieres conservarlo, primero usa Exportar show.",
+              "Borrar todo",
+              () => {
+                importShow(JSON.stringify({ definitions: seedDefinitions, instances: seedInstances }));
+                setMessage({ text: "Show nuevo, como recién instalado.", isError: false });
+              },
+            )
+          }
+        >
+          Restablecer todo (empezar de cero)
+        </Button>
         {message ? (
           <p
             role="status"

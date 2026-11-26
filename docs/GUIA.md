@@ -10,7 +10,7 @@ Esta guía es para alguien que nunca lo usó. Se puede seguir sin luces, con el 
 2. Ábrelo. Si Windows muestra **"Windows protegió tu PC"**, toca **Más información** y después **Ejecutar de todas formas**. Pasa porque el programa no está firmado; no es un virus.
 3. Abre LUMEN PRO desde el menú Inicio.
 
-Cuando hay una versión nueva y la laptop tiene internet, arriba aparece **Versión nueva**. Tocándolo se abre la página para descargarla. Lo que ya armaste no se pierde.
+Cuando hay una versión nueva y la laptop tiene internet, al abrir aparece un aviso con las novedades. **Instalar ahora** la descarga e instala sola: las luces se apagan un momento y LUMEN PRO se vuelve a abrir con tu show. Si tocas **Ahora no**, queda arriba el botón **Versión nueva** para hacerlo después. No actualices en pleno evento.
 
 ## 2. Agregar tus luces
 
@@ -25,6 +25,10 @@ Ve a **Fixtures** y toca **+ Elegir de la biblioteca**.
 
 **La dirección.** Cada luz tiene una dirección DMX en su menú (A001, d001…). Tiene que ser la misma que muestra LUMEN PRO al lado de cada luz, en **DMX**. Si no lo es, cambia una de las dos.
 
+**Dos luces en la misma dirección.** Si pusiste dos PAR iguales en la misma dirección (por ejemplo los dos en 001), agrégalas igual como dos luces y escribe la misma dirección en las dos. Al lado aparece **va junto con…**: hacen siempre lo mismo, porque el cable les manda lo mismo, y el simulador las muestra así.
+
+**SIN VERIFICAR** quiere decir que ese perfil todavía no se probó con la luz real. Cuando la conectes y cada canal haga lo que dice, abre el equipo en **Fixtures** y marca **Ya la probé con la luz real**.
+
 ## 3. Ubicarlas en el escenario
 
 En **Escenario** se ve un simulador con las luces encendidas.
@@ -32,18 +36,25 @@ En **Escenario** se ve un simulador con las luces encendidas.
 - Arrastra cada luz a donde va a estar en el evento.
 - Elige una luz a la derecha para cambiar su altura, su giro, o si la cabeza va colgada.
 - Arrastra el fondo para mirar desde otro lado. La rueda del mouse acerca.
+- **Restablecer posiciones** devuelve todas las luces a su lugar inicial.
 
 ## 4. Armar la quinceañera
 
 Ve a **Momentos** y toca **Usar plantilla de quinceañera**. Aparecen los momentos de una fiesta típica, ya armados con tus luces: Recepción, Entrada, Vals, Fotos, Brindis, Hora loca, Hora loca con estrobo, Hora loca con música y Cierre.
 
-Pruébalos en **Escenario**: abajo hay un botón por momento.
+Pruébalos en **Escenario**: abajo hay un botón por momento, los colores y los efectos.
+
+**Vista previa.** En **Escenario**, toca **Vista previa**: lo que pruebes (momentos, colores, efectos) se ve solo en la pantalla y las luces no cambian. Si te gusta, **Mandar a las luces**; si no, **Salir**.
 
 Para cambiar uno:
 
-- **El color o la posición:** ve a **Dashboard**, elige una luz, ponla como quieres y en **Scenes** toca ⟳ en la escena de ese momento.
+- **El color:** en **Momentos**, elige el momento y toca un color en **Color**, para cada grupo (PAR, Cabezas). Si el momento tiene efectos de color, como la ola de colores de la hora loca, esos mandan mientras corren: el aviso te deja quitarlos de ese momento.
+- **La posición:** ve a **Dashboard**, elige una luz, ponla como quieres y en **Scenes** toca ⟳ en la escena de ese momento.
 - **El orden o la duración:** en **Momentos**. Si un momento tiene duración, pasa solo al siguiente cuando se cumple.
 - **Lo que se mueve:** en **Effects**. Hay de dos tipos: uno sube y baja un canal (por ejemplo los colores de los PAR) y el otro hace que las cabezas dibujen una figura (círculo, ocho, línea o abanico) alrededor de donde apuntan.
+- **Más efectos:** en **Effects → + Efectos listos** hay arcoíris, respirar, ola, persecución, destellos, golpe al ritmo, golpe de graves y figuras para las cabezas. Elige el grupo y el efecto: se ve en un escenario chico antes de agregarlo, sin tocar las luces. Después ponlo en un momento marcándolo en **Momentos → Effects**.
+
+**Si moviste algo y no recuerdas cómo estaba**, cada sección tiene **Restablecer**: en **Momentos** la plantilla vuelve a como venía (tus momentos propios no se tocan), en **Effects** un efecto vuelve a su velocidad y colores, en **Fixtures** un perfil vuelve a sus canales de fábrica, en **Dashboard** una luz vuelve a sus valores iniciales y en **Settings** se puede empezar de cero. También sirve **Undo** (Ctrl+Z).
 
 **Posiciones con nombre.** En **Escenario**, toca **Apuntar** y después el piso: las cabezas apuntan ahí. Guarda esa posición en **Paletas** como "Pista" o "Mesa principal". Si la corriges después, cambian todas las escenas que la usan.
 
@@ -66,13 +77,14 @@ Si una cabeza se mueve al revés que en el simulador, en **Escenario** elige esa
 2. En **Celular**, toca **Encender**. Si Windows pregunta por el firewall, permite el acceso.
 3. Escanea el código QR con el celular.
 
-En el celular está el botón grande **Siguiente**, los momentos, la intensidad, el estrobo y el **Blackout** (hay que tocarlo dos veces, para no apagar todo sin querer). En **Celular → Botones del celular** puedes agregar los botones que quieras arriba de todo.
+En el celular está el botón grande **Siguiente**, los momentos, el **Color fijo** de cada grupo, los **Efectos** (se prenden y apagan tocándolos), la intensidad, el estrobo y el **Blackout** (hay que tocarlo dos veces, para no apagar todo sin querer). En **Celular → Botones del celular** puedes agregar los botones que quieras arriba de todo.
 
 ## 7. Durante el evento
 
 - Toca **Siguiente** cuando cambia el momento. En la laptop también sirven **AvPág** y **RePág**, o un pasador de diapositivas.
 - **Intensidad** baja todas las luces a la vez sin perder nada.
 - **Blackout** apaga todo sin mover las cabezas. Al volver, todo queda como estaba.
+- **Color fijo** (en **Live**, **Escenario** y el celular): elige un color para los PAR o las cabezas y se queda aunque cambies de momento. Tapa los colores del momento y de sus efectos (la ola de colores se vuelve de un solo color) pero deja que sigan el dimmer, el estrobo y los movimientos. Los momentos no cambian: **Del momento** lo suelta y vuelve lo que tenían.
 - **Hora loca con música:** en **Audio Reactive** toca **Escuchar** con la música sonando. Arriba aparecen los BPM y las luces siguen el ritmo. Hay que tocarlo cada vez que se abre el programa.
 - En **Live** puedes armar **Mis botones**: los que más uses, grandes.
 - Si tienes un **controlador MIDI** (botones y faders físicos), en **MIDI** elige qué hará cada control, toca **Aprender** y muévelo.
