@@ -394,16 +394,17 @@ fn music(r: &mut Rig, source: &str) {
 }
 
 #[test]
-fn levels_drive_the_effect_and_when_the_audio_dies_it_goes_on_by_itself() {
+fn levels_drive_the_effect_and_without_music_it_stays_at_its_minimum() {
     let mut r = Rig::new();
     music(&mut r, "bass");
+    r.run(300.0);
+    assert_eq!(r.live("p1", "red"), 0, "sin escuchar, en su mínimo");
     r.send(json!({ "type": "audio", "audio": { "levels": { "bass": 0.5, "mid": 0, "treble": 0 }, "beat": null } }));
     r.run(20.0);
     assert_eq!(r.live("p1", "red"), 100);
+    // Se dejó de escuchar (o la ventana no manda nada): silencio.
     r.run(2000.0);
-    let before = r.live("p1", "red");
-    r.run(300.0);
-    assert_ne!(r.live("p1", "red"), before, "sin audio sigue con su velocidad propia");
+    assert_eq!(r.live("p1", "red"), 0);
 }
 
 #[test]

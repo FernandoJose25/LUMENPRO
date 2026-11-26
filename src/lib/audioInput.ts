@@ -19,6 +19,15 @@ export interface AudioFeed {
   /** Golpes contados, con decimales; null si no se reconoce un ritmo. */
   beats: () => number | null;
   bpm: () => number | null;
+  /** Sin un ritmo reconocido (voces, ruido, una pausa) cuenta como silencio. */
+  musicOnly?: () => boolean;
+}
+
+const SILENCE: Record<Band, number> = { bass: 0, mid: 0, treble: 0 };
+
+/** Lo que se le pasa a los effects: con "Solo con música", sin ritmo no suena nada. */
+export function heardLevels(feed: AudioFeed): Record<Band, number> {
+  return feed.musicOnly?.() && feed.beats() === null ? { ...SILENCE } : { ...feed.levels };
 }
 
 let feed: AudioFeed | null = null;
@@ -77,7 +86,7 @@ interface Session {
   stop: () => void;
 }
 
-function listen(stream: MediaStream, sensitivity: () => number): Session {
+function listen(stream: MediaStream, sensitivity: () => number, musicOnly: () => boolean): Session {
   const context = new AudioContext();
   void context.resume();
   const analyser = context.createAnalyser();
@@ -93,6 +102,7 @@ function listen(stream: MediaStream, sensitivity: () => number): Session {
     levels: { bass: 0, mid: 0, treble: 0 },
     beats: () => tracker.beats(performance.now()),
     bpm: () => tracker.bpm(),
+    musicOnly,
   };
   let before: Record<Band, number> | null = null;
   let last = performance.now();
@@ -140,10 +150,12 @@ function explain(e: unknown): string {
 interface AudioSettings {
   deviceId: string;
   sensitivity: number;
+  /** Ver AudioFeed.musicOnly. */
+  musicOnly: boolean;
 }
 
 function loadSettings(): AudioSettings {
-  return { deviceId: "", sensitivity: 60, ...readSetting<Partial<AudioSettings>>("audio") };
+  return { deviceId: "", sensitivity: 60, musicOnly: true, ...readSetting<Partial<AudioSettings>>("audio") };
 }
 
 export interface AudioInput {
@@ -154,8 +166,10 @@ export interface AudioInput {
   /** "" = la entrada predeterminada de Windows. */
   deviceId: string;
   sensitivity: number;
+  musicOnly: boolean;
   setDeviceId: (id: string) => void;
   setSensitivity: (value: number) => void;
+  setMusicOnly: (on: boolean) => void;
   start: () => Promise<void>;
   stop: () => void;
 }
@@ -234,7 +248,11 @@ export function useAudioInput(autoStart = false): AudioInput {
         stop();
         setError("Se desconectó la entrada de audio. Los effects siguen con su propia velocidad.");
       });
-      session.current = listen(stream, () => settingsRef.current.sensitivity);
+      session.current = listen(
+        stream,
+        () => settingsRef.current.sensitivity,
+        () => settingsRef.current.musicOnly,
+      );
       setAudioFeed(session.current.feed);
       setListening(true);
       // Los nombres de las entradas solo se ven después del permiso.
@@ -265,6 +283,7 @@ export function useAudioInput(autoStart = false): AudioInput {
     [changeSettings, start],
   );
   const setSensitivity = useCallback((sensitivity: number) => changeSettings({ sensitivity }), [changeSettings]);
+  const setMusicOnly = useCallback((musicOnly: boolean) => changeSettings({ musicOnly }), [changeSettings]);
 
-  return { listening, error, bpm, devices, ...settings, setDeviceId, setSensitivity, start, stop };
+  return { listening, error, bpm, devices, ...settings, setDeviceId, setSensitivity, setMusicOnly, start, stop };
 }

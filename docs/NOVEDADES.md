@@ -1,21 +1,15 @@
-## Novedades de la 0.3.0
+## Novedades de la 0.3.1
 
-**Color fijo.** Elige el color de los PAR o de las cabezas en vivo, desde la laptop o el celular, y se queda aunque cambies de momento. Tapa la ola de colores sin apagar los golpes al ritmo ni los movimientos. Tus momentos no cambian: "Del momento" lo suelta.
+**Sin música, los PAR apagados.** En "Hora loca con música", si no suena nada (o no se está escuchando), los PAR que laten con los graves se quedan apagados en vez de seguir solos. Con "Solo con música" (en Audio Reactive, viene marcado), las voces y el ruido tampoco los prenden: esperan a reconocer el ritmo.
 
-**Efectos desde el celular.** Prende y apaga cualquier efecto tocándolo.
+**Guardar lo de Live en el momento.** "Guardar cambios en «Fotos»" deja en ese momento los colores y valores que pusiste en vivo, color fijo incluido.
 
-**Color de cada momento.** En Momentos, un toque pone el color de cada grupo en ese momento (por ejemplo la Entrada en rosa).
+**Los faders de los grupos muestran el valor de verdad.** Ya no vuelven a 0 al salir de Live y regresar.
 
-**Efectos listos y vista previa.** Arcoíris, respirar, ola, persecución, destellos, golpe al ritmo y figuras para las cabezas, que se ven antes de agregarlos. En Escenario, "Vista previa" prueba momentos, colores y efectos sin tocar las luces, y "Mandar a las luces" los pone.
-
-**Dos luces en la misma dirección.** Si dos PAR iguales comparten dirección, el programa las trata como una pareja: hacen lo mismo, en el simulador también.
-
-**Restablecer.** Cada sección puede volver a como venía: la plantilla, un efecto, un perfil, las posiciones del escenario o los valores de una luz.
-
-**Se actualiza solo.** Desde esta versión, cuando haya una nueva aparece un aviso y se instala con un toque.
+**De la 0.3.0:** color fijo desde la laptop y el celular, efectos desde el celular, color de cada momento, efectos listos con vista previa, dos luces en la misma dirección, Restablecer en cada sección y actualización automática.
 
 ### Para instalar
 
-Descarga el archivo que termina en `setup.exe`. Si Windows muestra "Windows protegió tu PC", toca **Más información** y **Ejecutar de todas formas**: el programa no está firmado. Si ya tienes la 0.2.0, instala encima: tu show se queda.
+Descarga el archivo que termina en `setup.exe`. Si Windows muestra "Windows protegió tu PC", toca **Más información** y **Ejecutar de todas formas**: el programa no está firmado. Instala encima de la versión que tengas: tu show se queda. Desde la 0.3.0, las siguientes se instalan solas con el aviso.
 
 Todavía no se probó con luces, cable, celular ni controlador reales: úsalo con una consola de respaldo hasta probarlo.

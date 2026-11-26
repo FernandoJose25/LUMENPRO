@@ -5,6 +5,7 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import App from "@/App";
 import type { EngineMessage } from "@/types/engine";
 import { fakeEngine } from "./fakeEngine";
+import { STORAGE_KEY } from "@/lib/showFile";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(), isTauri: vi.fn(), Channel: class {} }));
 
@@ -119,5 +120,55 @@ describe("Luces en la misma dirección", () => {
 
     await user.click(screen.getByRole("button", { name: "DMX Output" }));
     expect(screen.queryByText(/Se pisa con/)).toBeNull();
+  });
+});
+
+describe("Live", () => {
+  it("los faders de un grupo muestran lo que tienen las luces, también al volver", async () => {
+    const { user } = await withTemplate();
+    await user.click(screen.getByRole("button", { name: "Live" }));
+    await user.click(within(screen.getByRole("region", { name: "Momentos" })).getByRole("button", { name: "Fotos" }));
+    // Fotos pone los PAR en blanco: el verde ya está arriba.
+    const groups = () => within(screen.getByText("GROUPS — MASTER").closest("section, div")!.parentElement!);
+    const green = () => groups().getAllByRole("slider", { name: "Green" })[0];
+    await waitFor(() => expect(green()).toHaveAttribute("aria-valuenow", "255"), { timeout: 4000 }); // Fotos tarda 1 s
+    fireEvent.change(green().parentElement!.querySelector("input")!, { target: { value: "0" } });
+    await waitFor(() => expect(green()).toHaveAttribute("aria-valuenow", "0"));
+    await user.click(screen.getByRole("button", { name: "Escenario" }));
+    await user.click(screen.getByRole("button", { name: "Live" }));
+    expect(green()).toHaveAttribute("aria-valuenow", "0");
+  });
+
+  it("lo que se cambió en vivo se guarda en el momento", async () => {
+    const { user, engine } = await withTemplate();
+    await user.click(screen.getByRole("button", { name: "Live" }));
+    await user.click(within(screen.getByRole("region", { name: "Momentos" })).getByRole("button", { name: "Fotos" }));
+    await user.click(within(screen.getByRole("region", { name: "Color fijo" })).getByRole("button", { name: "PAR: Rojo" }));
+    await waitFor(() => expect(playback(engine).heldColors).not.toEqual({}));
+    await user.click(screen.getByRole("button", { name: "Guardar cambios en «Fotos»" }));
+    await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Guardar" }));
+    const doc = lastDoc(engine);
+    const fotos = doc.moments.find((m) => m.name === "Fotos")!;
+    const scene = doc.scenes.find((s) => s.id === fotos.sceneId)!;
+    const par = doc.instances.find((i) => i.label === "LPC007 PAR #1")!;
+    const channels = doc.definitions.find((d) => d.id === par.definitionId)!.channels;
+    const valueOf = (type: string) => scene.values[par.id][channels.find((c) => c.type === type)!.id];
+    expect([valueOf("RED"), valueOf("GREEN"), valueOf("BLUE")]).toEqual([255, 0, 0]);
+  });
+});
+
+describe("Shows de la 0.2", () => {
+  it("el golpe de graves de la plantilla vieja queda apagado sin música", async () => {
+    const fx = { id: "g", name: "PAR: golpe de graves", source: "bass", min: 40, max: 255 };
+    const mine = { ...fx, id: "m", name: "PAR: mío", min: 40 };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ definitions: [], instances: [], effects: [fx, mine] }));
+    const engine = fakeEngine();
+    render(<App />);
+    const reset = await waitFor(() => {
+      const found = engine.applied.find((m) => m.type === "reset");
+      expect(found).toBeDefined();
+      return found as Extract<EngineMessage, { type: "reset" }>;
+    });
+    expect(reset.doc.effects.map((e) => e.min)).toEqual([0, 40]);
   });
 });

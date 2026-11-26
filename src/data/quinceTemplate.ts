@@ -107,7 +107,8 @@ export function buildQuinceTemplate(rig: Rig, makeId: (prefix: string) => string
     ...effect(parsGroup, "PAR: rojo al ritmo", "RED", 30, 0, 255, 90, { source: "beat", beatsPerCycle: 4 }),
     ...effect(parsGroup, "PAR: verde al ritmo", "GREEN", 37, 0, 255, 90, { source: "beat", beatsPerCycle: 6 }),
     ...effect(parsGroup, "PAR: azul al ritmo", "BLUE", 44, 0, 255, 90, { source: "beat", beatsPerCycle: 8 }),
-    ...effect(parsGroup, "PAR: golpe de graves", "DIMMER", 120, 40, 255, 0, { source: "bass", waveform: "pulse" }),
+    // Sin música, apagados (ver level_of en show-engine).
+    ...effect(parsGroup, "PAR: golpe de graves", "DIMMER", 120, 0, 255, 0, { source: "bass", waveform: "pulse" }),
   ];
   const musicMove = figure("Cabezas: ocho al ritmo", "eight", 35, 18, { source: "beat", beatsPerCycle: 8 });
 

@@ -1,6 +1,6 @@
 [package]
 name = "lumenpro"
-version = "0.3.0"
+version = "0.3.1"
 description = "LUMEN PRO — consola de control DMX"
 edition = "2021"
 

@@ -89,9 +89,9 @@ export const EFFECT_PRESETS: EffectPreset[] = [
   },
   {
     name: "Golpe de graves",
-    text: "Brillan con los bajos de la música.",
+    text: "Brillan con los bajos de la música; sin música, apagadas.",
     needs: "DIMMER",
-    parts: one({ waveform: "pulse", source: "bass", min: 30 }),
+    parts: one({ waveform: "pulse", source: "bass" }),
   },
   {
     name: "Círculo",

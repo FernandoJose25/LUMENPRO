@@ -262,14 +262,17 @@ fn cycles_of(effect: &Effect, started: f64, beats: Option<f64>, now: f64) -> f64
     }
 }
 
-/// Cuánto suena la parte de la música que sigue, si sigue alguna.
+/// Cuánto suena la parte de la música que sigue, si sigue alguna. Sin
+/// música (o sin escuchar) es silencio: los PAR que laten con los graves se
+/// quedan en su mínimo.
 fn level_of(effect: &Effect, levels: Option<Levels>) -> Option<f64> {
-    levels.and_then(|l| match effect.source {
+    let l = levels.unwrap_or_default();
+    match effect.source {
         EffectSource::Bass => Some(l.bass),
         EffectSource::Mid => Some(l.mid),
         EffectSource::Treble => Some(l.treble),
         EffectSource::Clock | EffectSource::Beat => None,
-    })
+    }
 }
 
 fn smooth(t: f64) -> f64 {

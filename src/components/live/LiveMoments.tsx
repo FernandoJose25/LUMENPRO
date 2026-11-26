@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { useFixtureStore } from "@/lib/fixtureStore";
+import { askConfirm } from "@/lib/dialogs";
 
 function clock(ms: number): string {
   const total = Math.max(0, Math.round(ms / 1000));
@@ -62,7 +63,7 @@ export function LiveMoments() {
 }
 
 function MomentStatus() {
-  const { moments, activeMomentId, momentRun } = useFixtureStore();
+  const { moments, activeMomentId, momentRun, saveToMoment } = useFixtureStore();
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -82,11 +83,27 @@ function MomentStatus() {
   const elapsed = now - momentRun.startedAt;
   const next = moments[index + 1];
   return (
-    <p className="font-mono text-[11px] text-text-secondary">
-      {moment.name} · {clock(elapsed)}
-      {next && moment.durationSec !== null
-        ? ` · pasa a ${next.name} en ${clock(moment.durationSec * 1000 - elapsed)}`
-        : null}
-    </p>
+    <div className="flex items-center gap-3">
+      <p className="flex-1 font-mono text-[11px] text-text-secondary">
+        {moment.name} · {clock(elapsed)}
+        {next && moment.durationSec !== null
+          ? ` · pasa a ${next.name} en ${clock(moment.durationSec * 1000 - elapsed)}`
+          : null}
+      </p>
+      <Button
+        size="sm"
+        variant="ghost"
+        title="Lo que cambiaste en vivo (colores, dimmer, posición) queda en el momento"
+        onClick={() =>
+          askConfirm(
+            `¿Guardar cómo están las luces ahora en «${moment.name}»? La próxima vez que lo lances se verá así. Sus efectos siguen igual.`,
+            "Guardar",
+            () => saveToMoment(moment.id),
+          )
+        }
+      >
+        Guardar cambios en «{moment.name}»
+      </Button>
+    </div>
   );
 }

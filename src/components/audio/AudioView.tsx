@@ -30,7 +30,9 @@ export function AudioView({ audio }: { audio: AudioInput }) {
                 ? "Sin escuchar"
                 : audio.bpm !== null
                   ? `${audio.bpm} BPM`
-                  : "Buscando el ritmo… (tarda unos 5 segundos)"}
+                  : audio.musicOnly
+                    ? "Buscando el ritmo… (unos 5 segundos; mientras, los PAR al ritmo siguen apagados)"
+                    : "Buscando el ritmo… (tarda unos 5 segundos)"}
             </span>
           </div>
           {audio.error ? (
@@ -56,6 +58,21 @@ export function AudioView({ audio }: { audio: AudioInput }) {
               </select>
             </label>
             <Fader label="Sensibilidad" value={audio.sensitivity} max={100} onChange={audio.setSensitivity} />
+            <label className="flex items-start gap-2 text-text-primary">
+              <input
+                type="checkbox"
+                className="mt-0.5 accent-accent"
+                checked={audio.musicOnly}
+                onChange={(e) => audio.setMusicOnly(e.target.checked)}
+              />
+              <span>
+                Solo con música
+                <span className="block text-[11px] text-text-secondary">
+                  Mientras no reconoce un ritmo (voces, ruido, una pausa), lo que sigue a los graves, medios o agudos
+                  se queda apagado.
+                </span>
+              </span>
+            </label>
           </div>
 
           <Meters listening={audio.listening} />
@@ -86,8 +103,8 @@ export function AudioView({ audio }: { audio: AudioInput }) {
             </ul>
           )}
           <p className="mt-3 text-[11px] text-text-secondary">
-            Si se deja de escuchar o no se reconoce el ritmo, siguen con su velocidad normal: las luces no se quedan
-            quietas.
+            Sin música (o sin escuchar), los que siguen a los graves, medios o agudos se quedan en su mínimo: con
+            mínimo 0, apagados. Los que siguen el ritmo siguen con su velocidad normal.
           </p>
         </Panel>
       </div>

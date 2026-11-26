@@ -1,5 +1,5 @@
 import { Channel, invoke, isTauri } from "@tauri-apps/api/core";
-import { getAudioFeed } from "@/lib/audioInput";
+import { getAudioFeed, heardLevels } from "@/lib/audioInput";
 import type { ChannelValues } from "@/lib/fade";
 import { fetchWasm, WasmShow } from "@/lib/wasmEngine";
 import {
@@ -48,7 +48,7 @@ export function audioMessage(): AudioMessage | null {
   const feed = getAudioFeed();
   if (!feed) return null;
   const beats = feed.beats();
-  return { levels: { ...feed.levels }, beat: beats === null ? null : { beats, bpm: feed.bpm() ?? 0 } };
+  return { levels: heardLevels(feed), beat: beats === null ? null : { beats, bpm: feed.bpm() ?? 0 } };
 }
 
 // ---------------------------------------------------------------------

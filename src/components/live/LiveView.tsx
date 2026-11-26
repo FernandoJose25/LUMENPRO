@@ -276,6 +276,10 @@ function LiveEffects({
 function LiveGroups({ groups }: { groups: ReturnType<typeof useFixtureStore>["groups"] }) {
   return (
     <Panel title="GROUPS — MASTER" className="h-full">
+      <p className="mb-3 text-[11px] text-text-secondary">
+        Lo que cambies aquí dura hasta el próximo momento. Para que quede, usa “Guardar cambios en…” arriba; para un
+        color que no lo tape la ola de colores, Color fijo.
+      </p>
       {groups.length === 0 ? (
         <p className="text-xs text-text-secondary">No hay grupos todavía — créalos en Groups.</p>
       ) : (
@@ -289,11 +293,10 @@ function LiveGroups({ groups }: { groups: ReturnType<typeof useFixtureStore>["gr
   );
 }
 
-/** Igual que GroupControl en GroupsView: fader de ESCRITURA por tipo de
- *  canal presente en el grupo, no un espejo del valor actual de cada
- *  fixture. Se repite un componente propio por grupo (en vez de reutilizar
- *  el de GroupsView) porque aquí conviven varios grupos a la vez en
- *  pantalla, cada uno con su propio estado local de posición de fader. */
+/** Un fader por tipo de canal del grupo. Muestra lo que tiene ahora la
+ *  primera luz del grupo con ese canal: así no vuelve a 0 al salir de Live y
+ *  regresar, y se ve el valor de verdad (el blanco de Fotos tiene el verde y
+ *  el azul a tope). */
 function GroupMasterRow({
   groupId,
   groupName,
@@ -303,8 +306,7 @@ function GroupMasterRow({
   groupName: string;
   groupColor: string;
 }) {
-  const { instances, definitions, setGroupChannelByType } = useFixtureStore();
-  const [localValues, setLocalValues] = useState<Record<string, number>>({});
+  const { instances, definitions, liveValues, setGroupChannelByType } = useFixtureStore();
 
   const members = instances.filter((i) => i.group === groupId);
   const channelTypes = useMemo(() => {
@@ -315,6 +317,13 @@ function GroupMasterRow({
     }
     return Array.from(types);
   }, [members, definitions]);
+  const valueOf = (type: ChannelType) => {
+    for (const member of members) {
+      const channel = definitions.find((d) => d.id === member.definitionId)?.channels.find((c) => c.type === type);
+      if (channel) return liveValues[member.id]?.[channel.id] ?? channel.defaultValue;
+    }
+    return 0;
+  };
 
   if (members.length === 0 || channelTypes.length === 0) return null;
 
@@ -337,13 +346,10 @@ function GroupMasterRow({
           <Fader
             key={type}
             label={CHANNEL_TYPE_LABELS[type]}
-            value={localValues[type] ?? 0}
+            value={valueOf(type)}
             min={0}
             max={255}
-            onChange={(v) => {
-              setLocalValues((prev) => ({ ...prev, [type]: v }));
-              setGroupChannelByType(groupId, type, v);
-            }}
+            onChange={(v) => setGroupChannelByType(groupId, type, v)}
           />
         ))}
       </div>

@@ -162,6 +162,9 @@ interface FixtureStoreValue extends FixtureStoreState {
   identify: (instanceId: string) => void;
   addMoment: (name: string) => Moment;
   updateMoment: (momentId: string, patch: Partial<Omit<Moment, "id">>) => void;
+  /** Guarda en la escena del momento cómo están las luces ahora, con el
+   *  color fijo incluido. Sin escena, le crea una. */
+  saveToMoment: (momentId: string) => void;
   /** Pone ese color en la escena del momento a las luces de esa fila ("" =
    *  sin grupo). Sin escena, le crea una. */
   paintMoment: (momentId: string, groupKey: string, hex: string) => void;
@@ -213,6 +216,9 @@ function restoreState(parsed: Partial<FixtureStoreState>): FixtureStoreState {
     chases: parsed.chases ?? [],
     effects: (parsed.effects ?? []).map((fx) => ({
       ...fx,
+      // La plantilla de la 0.2 dejaba el golpe de graves en 40: sin música se
+      // veía un brillo. Si nadie lo tocó, queda apagado como la de ahora.
+      ...(fx.source === "bass" && fx.min === 40 && fx.max === 255 && fx.name.endsWith(": golpe de graves") ? { min: 0 } : {}),
       source: fx.source ?? "clock",
       beatsPerCycle: fx.beatsPerCycle ?? 1,
       kind: fx.kind ?? "wave",
@@ -873,6 +879,26 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
     });
   }, [setState]);
 
+  const saveToMoment = useCallback(
+    (momentId: string) =>
+      setState((s) => {
+        const moment = s.moments.find((m) => m.id === momentId);
+        if (!moment) return s;
+        const now = Date.now();
+        const values = mergeValues(captureSnapshot(s), heldValues(s, s.heldColors));
+        let scenes = s.scenes;
+        let sceneId = moment.sceneId;
+        if (!sceneId || !scenes.some((sc) => sc.id === sceneId)) {
+          sceneId = makeId("scene");
+          scenes = [...scenes, { id: sceneId, name: moment.name, values: {}, createdAt: now, updatedAt: now }];
+        }
+        const refs = matchPalettes({ ...s, liveValues: values }, s.palettes);
+        scenes = scenes.map((sc) => (sc.id === sceneId ? { ...sc, values, refs, updatedAt: now } : sc));
+        return { ...s, scenes, moments: s.moments.map((m) => (m.id === momentId ? { ...m, sceneId } : m)) };
+      }),
+    [captureSnapshot, setState],
+  );
+
   const resetQuinceTemplate = useCallback(
     () => setState((s) => ({ ...s, ...resetTemplate(s, makeId) })),
     [setState],
@@ -1005,6 +1031,7 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
     moveMoment,
     addQuinceTemplate,
     resetQuinceTemplate,
+    saveToMoment,
     paintMoment,
     startMoment,
     stepMoment,

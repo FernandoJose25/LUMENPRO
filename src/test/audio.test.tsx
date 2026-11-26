@@ -175,6 +175,20 @@ describe("Effects que siguen la música", () => {
     expect(dimmer()).toBe(250);
   });
 
+  it("solo con música: sin ritmo reconocido, los graves no prenden nada", () => {
+    run({ source: "bass", min: 0, max: 250 });
+    setAudioFeed({ ...feed({ bass: 1 }, null), musicOnly: () => true });
+    expect(dimmer()).toBe(0);
+    setAudioFeed({ ...feed({ bass: 1 }, 3), musicOnly: () => true });
+    expect(dimmer()).toBe(250);
+  });
+
+  it("sin escuchar, los graves se quedan en su mínimo", () => {
+    run({ source: "bass", min: 0, max: 250 });
+    setAudioFeed(null);
+    expect(dimmer()).toBe(0);
+  });
+
   it("ritmo: la onda avanza con los golpes y no con el reloj", () => {
     run({ source: "beat", waveform: "sawtooth", min: 0, max: 200, beatsPerCycle: 4 });
     setAudioFeed(feed({}, 8));
