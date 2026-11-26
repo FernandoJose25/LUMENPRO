@@ -12,8 +12,10 @@ if (!exe) throw new Error(`No está el instalador de la ${version} en ${DIR}`);
 const signature = readFileSync(`${DIR}/${exe}.sig`, "utf8").trim();
 
 // Las novedades de esta versión: lo que va antes de "Para instalar", sin el
-// título ni los asteriscos de negrita.
+// título ni los asteriscos de negrita. En el release de Windows llega con CRLF.
 const notes = readFileSync("docs/NOVEDADES.md", "utf8")
+  .split(/\r?\n/)
+  .join("\n")
   .split(/^### /m)[0]
   .replace(/^## .*\n/, "")
   .replaceAll("**", "")
