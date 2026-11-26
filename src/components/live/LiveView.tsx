@@ -277,8 +277,8 @@ function LiveGroups({ groups }: { groups: ReturnType<typeof useFixtureStore>["gr
   return (
     <Panel title="GROUPS — MASTER" className="h-full">
       <p className="mb-3 text-[11px] text-text-secondary">
-        Lo que cambies aquí dura hasta el próximo momento. Para que quede, usa “Guardar cambios en…” arriba; para un
-        color que no lo tape la ola de colores, Color fijo.
+        Lo que cambies aquí dura hasta el próximo momento. Para que quede, usa “Guardar cambios en…” arriba; si un
+        color no cambia, puede estar puesto el Color fijo.
       </p>
       {groups.length === 0 ? (
         <p className="text-xs text-text-secondary">No hay grupos todavía — créalos en Groups.</p>

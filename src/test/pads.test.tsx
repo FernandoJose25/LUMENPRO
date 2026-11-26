@@ -64,7 +64,7 @@ describe("Live a medida", () => {
     await waitFor(() => expect(playback(engine).blackoutActive).toBe(true));
     fireEvent.change(board.getByRole("spinbutton"), { target: { value: "40" } });
     await waitFor(() => expect(playback(engine).master).toBe(40));
-  });
+  }, 60_000); // es largo: con la PC ocupada pasa de 20 s
 
   it("el estrobo dura lo que se aprieta", async () => {
     const { user, engine } = await withTemplate();

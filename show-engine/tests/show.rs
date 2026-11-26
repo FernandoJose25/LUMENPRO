@@ -1073,17 +1073,46 @@ fn a_held_color_wins_over_moments_and_effects_and_lets_go_without_a_trace() {
     r.run(700.0);
     assert_eq!(p1_rgb(&r), [0, 0, 255]);
 
-    // Otro momento no lo suelta.
-    r.start("b");
-    r.run(100.0);
-    assert_eq!(p1_rgb(&r), [0, 0, 255]);
-    assert_eq!(r.playback()["heldColors"], json!({ "pars": "#0000ff" }));
-
     // "Del momento": vuelve lo que el momento tenía.
     act(&mut r, json!({ "do": "color", "groupId": "pars", "color": null }), Some(true), None);
+    assert_eq!(r.playback()["heldColors"], json!({}));
+    r.run(700.0);
+    assert_ne!(p1_rgb(&r), [0, 0, 255]);
+    assert_eq!(r.doc["scenes"][3]["values"], json!({ "p1": { "green": 250 } }));
+}
+
+#[test]
+fn the_held_color_lasts_until_the_next_moment() {
+    let mut r = Rig::new();
+    with_colors(&mut r);
+    r.moment("a", json!({ "sceneId": "green" }));
+    r.moment("b", json!({ "sceneId": "red" }));
+    r.start("a");
+    r.run(100.0);
+    act(&mut r, json!({ "do": "color", "groupId": "pars", "color": "#0000ff" }), Some(true), None);
+    r.run(100.0);
+    assert_eq!(p1_rgb(&r), [0, 0, 255]);
+    r.start("b");
+    r.run(100.0);
     assert_eq!(p1_rgb(&r), [200, 0, 0]);
     assert_eq!(r.playback()["heldColors"], json!({}));
-    assert_eq!(r.doc["scenes"][0]["values"], json!({ "p1": { "red": 200 } }));
+}
+
+#[test]
+fn a_color_effect_turned_on_by_hand_wins_over_the_held_color() {
+    let mut r = Rig::new();
+    with_colors(&mut r);
+    r.moment("a", json!({ "sceneId": "green", "effectIds": ["fx"], "fadeMs": 500 }));
+    r.start("a");
+    // Puesto durante el fade: los effects del momento arrancan después y no lo sueltan.
+    act(&mut r, json!({ "do": "color", "groupId": "pars", "color": "#0000ff" }), Some(true), None);
+    r.run(700.0);
+    assert_eq!(r.running(), json!(["fx"]));
+    assert_eq!(r.playback()["heldColors"], json!({ "pars": "#0000ff" }));
+    // A mano, sí.
+    r.send(json!({ "type": "stopEffect", "id": "fx" }));
+    r.send(json!({ "type": "startEffect", "id": "fx" }));
+    assert_eq!(r.playback()["heldColors"], json!({}));
 }
 
 #[test]

@@ -66,10 +66,10 @@ export function AudioView({ audio }: { audio: AudioInput }) {
                 onChange={(e) => audio.setMusicOnly(e.target.checked)}
               />
               <span>
-                Solo con música
+                Solo con música (para los discursos)
                 <span className="block text-[11px] text-text-secondary">
-                  Mientras no reconoce un ritmo (voces, ruido, una pausa), lo que sigue a los graves, medios o agudos
-                  se queda apagado.
+                  Sin marcar, cualquier sonido prende lo que sigue a los graves, medios o agudos, también la voz.
+                  Marcado, espera a reconocer el ritmo de una canción: los discursos y el ruido no prenden nada.
                 </span>
               </span>
             </label>

@@ -11,8 +11,9 @@ interface HeldColorsProps {
 
 /**
  * Color fijo por grupo, encima de lo que haga el momento: los effects de
- * color quedan tapados y los de intensidad siguen. Los momentos no se tocan:
- * "Del momento" lo suelta y vuelve lo que tenían.
+ * color quedan tapados y los de intensidad siguen. Dura hasta el próximo
+ * momento o hasta que se prende a mano un effect de color del grupo. Los
+ * momentos no se tocan: "Del momento" lo suelta y vuelve lo que tenían.
  */
 export function HeldColors({ heldColors, onPick }: HeldColorsProps) {
   const store = useFixtureStore();
@@ -33,7 +34,7 @@ export function HeldColors({ heldColors, onPick }: HeldColorsProps) {
       <div className="flex items-baseline justify-between gap-2">
         <span className="text-xs font-medium tracking-wide text-text-secondary">COLOR FIJO</span>
         <span className="text-[11px] text-text-secondary">
-          Manda sobre el momento sin cambiarlo. “Del momento” lo suelta.
+          Manda hasta que cambias de momento, sin cambiarlo. “Del momento” lo suelta antes.
         </span>
       </div>
       {lines.map((line) => (

@@ -1,10 +1,10 @@
-## Novedades de la 0.3.1
+## Novedades de la 0.3.2
 
-**Sin música, los PAR apagados.** En "Hora loca con música", si no suena nada (o no se está escuchando), los PAR que laten con los graves se quedan apagados en vez de seguir solos. Con "Solo con música" (en Audio Reactive, viene marcado), las voces y el ruido tampoco los prenden: esperan a reconocer el ritmo.
+**El color fijo dura hasta el próximo momento.** Al pasar a Entrada, Fotos o el que sea, vuelven sus colores. Y si prendes a mano un efecto de color (la ola roja, por ejemplo), le gana al color fijo: lo último que tocas manda.
 
-**Guardar lo de Live en el momento.** "Guardar cambios en «Fotos»" deja en ese momento los colores y valores que pusiste en vivo, color fijo incluido.
+**La voz también prende los PAR.** Sin sonido siguen apagados, pero cualquier sonido los prende. "Solo con música" queda desmarcado: márcalo para los discursos.
 
-**Los faders de los grupos muestran el valor de verdad.** Ya no vuelven a 0 al salir de Live y regresar.
+**De la 0.3.1:** sin sonido los PAR al ritmo quedan apagados, "Guardar cambios en «momento»" en Live y faders de grupo con su valor real.
 
 **De la 0.3.0:** color fijo desde la laptop y el celular, efectos desde el celular, color de cada momento, efectos listos con vista previa, dos luces en la misma dirección, Restablecer en cada sección y actualización automática.
 

@@ -365,9 +365,15 @@ impl Show {
             Message::ActiveScene { id } => self.edit(|p| p.active_scene_id = id),
             Message::RecallScene { id } => self.recall_scene(&id),
             Message::StartEffect { id } => {
-                if self.doc.effects.iter().any(|e| e.id == id) && !self.playback.running_effect_ids.contains(&id) {
-                    self.edit(|p| p.running_effect_ids.push(id));
+                // Lo último que se toca manda: un effect de color prendido a
+                // mano se ve aunque su grupo tuviera un color fijo.
+                let colors = self.doc.effects.iter().find(|e| e.id == id).filter(|e| e.kind == EffectKind::Wave && e.channel_type.is_color());
+                if let Some(group) = colors.and_then(|e| e.group_id.clone()) {
+                    self.edit(|p| {
+                        p.held_colors.remove(&group);
+                    });
                 }
+                self.start_effect(id);
             }
             Message::StopEffect { id } => self.edit(|p| p.running_effect_ids.retain(|e| *e != id)),
             Message::Blackout { on } => self.edit(|p| p.blackout_active = on),
@@ -604,6 +610,12 @@ impl Show {
             .collect::<Vec<_>>())
     }
 
+    fn start_effect(&mut self, id: String) {
+        if self.doc.effects.iter().any(|e| e.id == id) && !self.playback.running_effect_ids.contains(&id) {
+            self.edit(|p| p.running_effect_ids.push(id));
+        }
+    }
+
     /// Todo cambio de `playback` pasa por acá para que se note.
     fn edit(&mut self, f: impl FnOnce(&mut Playback)) {
         let before = self.playback.clone();
@@ -696,6 +708,8 @@ impl Show {
             p.running_effect_ids.clear();
             p.blackout_active = false;
             p.strobe_active = false;
+            // El color fijo es para este momento: el siguiente trae los suyos.
+            p.held_colors.clear();
         });
     }
 
@@ -759,7 +773,7 @@ impl Show {
             if t >= 1.0 {
                 current.done = true;
                 for id in &moment.effect_ids {
-                    let _ = self.apply(Message::StartEffect { id: id.clone() }, now);
+                    self.start_effect(id.clone());
                 }
                 if let Some(chase) = &moment.chase_id {
                     self.start_chase(chase, true, now);

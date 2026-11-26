@@ -155,7 +155,7 @@ interface AudioSettings {
 }
 
 function loadSettings(): AudioSettings {
-  return { deviceId: "", sensitivity: 60, musicOnly: true, ...readSetting<Partial<AudioSettings>>("audio") };
+  return { deviceId: "", sensitivity: 60, musicOnly: false, ...readSetting<Partial<AudioSettings>>("audio") };
 }
 
 export interface AudioInput {

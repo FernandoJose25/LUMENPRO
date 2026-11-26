@@ -92,6 +92,12 @@ impl ChannelType {
         self == ChannelType::Dimmer || self.is_emitter() || self.is_cmy()
     }
 
+    /// Lo que decide el color: lo que tapa el color fijo.
+    pub fn is_color(self) -> bool {
+        use ChannelType::*;
+        self.is_emitter() || self.is_cmy() || matches!(self, Hue | Saturation | Cto | Color | ColorWheel)
+    }
+
     /// Los canales por rangos (estrobo, gobo, rueda de color, macros…) saltan:
     /// interpolarlos haría pasar la luz por todo lo que hay en medio.
     pub fn is_fadeable(self) -> bool {
