@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { StatusIndicator } from "@/components/ui/StatusIndicator";
 import { useFixtureStore } from "@/lib/fixtureStore";
+import { openDownloads, useNewVersion, VERSION } from "@/lib/updates";
 import type { EngineStatus } from "@/types/engine";
 import { BlackoutButton } from "./BlackoutButton";
 
@@ -51,6 +52,8 @@ export function Topbar({
 
       <div className="flex-1" />
 
+      <NewVersion />
+
       <span className="hidden font-mono text-xs text-text-secondary md:inline">FPS {fps}</span>
 
       <div className="flex items-center gap-1.5">
@@ -61,6 +64,16 @@ export function Topbar({
       <div className="h-5 w-px bg-border" />
       <BlackoutButton active={blackoutActive} onBlackout={onBlackout} onRelease={onReleaseBlackout} />
     </header>
+  );
+}
+
+function NewVersion() {
+  const latest = useNewVersion();
+  if (!latest) return null;
+  return (
+    <Button size="sm" variant="primary" title={`Tienes la ${VERSION}. Abre la página para descargarla.`} onClick={openDownloads}>
+      Versión nueva: {latest}
+    </Button>
   );
 }
 

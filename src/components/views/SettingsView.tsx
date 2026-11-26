@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
 import { askConfirm } from "@/lib/dialogs";
+import { VERSION } from "@/lib/updates";
 import { useFixtureStore } from "@/lib/fixtureStore";
 import { exportShowFile } from "@/lib/showFile";
 
@@ -84,7 +85,10 @@ function Credits() {
   };
 
   return (
-    <Panel title="BIBLIOTECA DE EQUIPOS" className="mt-2 max-w-xl">
+    <Panel title="ACERCA DE" className="mt-2 max-w-xl">
+      <p className="mb-3 text-xs text-text-secondary">
+        LUMEN PRO {VERSION}. Las versiones nuevas se descargan de GitHub; lo que armaste no se pierde al actualizar.
+      </p>
       <p className="mb-3 text-xs text-text-secondary">
         Los perfiles y las imágenes de gobos son de QLC+ (qlcplus.org), de Heikki Junnila, Massimo Callegari y sus
         colaboradores, bajo licencia Apache 2.0.

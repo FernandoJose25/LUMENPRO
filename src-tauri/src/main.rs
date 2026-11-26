@@ -45,6 +45,19 @@ fn list_serial_ports() -> Result<Vec<SerialPort>, String> {
         .collect())
 }
 
+const RELEASES: &str = "https://github.com/FernandoJose25/LUMENPRO/releases/latest";
+
+/// Abre la página de descargas en el navegador. Solo esa dirección: la
+/// interfaz no puede pedir que se abra cualquier cosa.
+#[tauri::command(async)]
+fn open_release_page() -> Result<(), String> {
+    #[cfg(windows)]
+    let opened = std::process::Command::new("explorer.exe").arg(RELEASES).spawn();
+    #[cfg(not(windows))]
+    let opened = std::process::Command::new("xdg-open").arg(RELEASES).spawn();
+    opened.map(|_| ()).map_err(|e| e.to_string())
+}
+
 /// Se crea a mano (`"create": false` en tauri.conf.json) para no mostrar nada
 /// si ya hay otra copia abierta.
 fn open_main_window(app: &AppHandle) -> tauri::Result<()> {
@@ -82,6 +95,7 @@ fn window() {
         })
         .invoke_handler(tauri::generate_handler![
             list_serial_ports,
+            open_release_page,
             link::engine_attach,
             link::engine_call,
             link::close_window,

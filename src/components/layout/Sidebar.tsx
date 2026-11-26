@@ -20,6 +20,7 @@ export const SECTIONS = [
   "MIDI",
   "Celular",
   "Settings",
+  "Guía",
 ] as const;
 
 interface SidebarProps {

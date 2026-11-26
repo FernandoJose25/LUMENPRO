@@ -10,6 +10,8 @@ Software de escritorio para controlar luces de escenario por **DMX512**: cabezas
 
 > **English summary:** Desktop DMX512 lighting console. React + TypeScript UI (design system, resizable workspace, fixture control, scenes, groups, chases with crossfades, parametric effects, beat tracking from live audio, stage simulator) plus a Rust show engine that runs in its own supervised process, so the lights keep going if the window hangs or crashes (and the window is reopened automatically); the same engine is compiled to WASM for the browser and the test suite. Open DMX (FTDI), Enttec DMX USB PRO, Art-Net and sACN outputs (several universes at once) with automatic reconnection. Integration tests with Vitest + Testing Library and unit tests in Rust.
 
+**Descargar:** el instalador para Windows está en [Releases](https://github.com/FernandoJose25/LUMENPRO/releases/latest). Cómo usarlo, paso a paso: [docs/GUIA.md](docs/GUIA.md) (también está dentro del programa). Video del simulador: [docs/video/simulador.mp4](docs/video/simulador.mp4).
+
 ![Simulador del escenario](docs/screenshots/escenario.png)
 
 ![Dashboard de LUMEN PRO](docs/screenshots/dashboard.png)
@@ -51,7 +53,7 @@ Lo diseñé y desarrollé solo, a partir de un brief de producto propio de 37 se
 | Estado | Store propio con Context; el show se guarda en `show.json` (app) o `localStorage` (navegador) |
 | Motor | Rust: crates `lumenpro_show` (nativo y WASM) y `lumenpro_dmx`, hilos, `serialport` |
 | Escritorio | Tauri 2 |
-| Calidad | Vitest + Testing Library + jsdom (236 tests contra el motor real en WASM), `cargo test` (121 tests), GitHub Actions |
+| Calidad | Vitest + Testing Library + jsdom (242 tests contra el motor real en WASM), `cargo test` (121 tests), GitHub Actions |
 
 ## Estructura
 
@@ -81,9 +83,17 @@ npm run tauri dev                     # app de escritorio con la UI
 npm run tauri build                   # instalador .exe (src-tauri/target/release/bundle/nsis)
 ```
 
+## Publicar una versión
+
+Se sube la versión en `package.json`, `src-tauri/tauri.conf.json` y `src-tauri/Cargo.toml`, se escribe `docs/NOVEDADES.md` y se sube una etiqueta (`git tag v0.3.0 && git push --tags`). GitHub Actions corre los tests, arma el instalador y lo publica en Releases; la app avisa sola que hay una versión nueva.
+
 ## Estado y siguiente paso
 
 La app se empaqueta como `.exe` y el motor corre aparte de la ventana. El show se maneja desde la laptop o el celular. Falta probarlo con el adaptador y las luces reales. El detalle está en [PASOS-PENDIENTES.md](PASOS-PENDIENTES.md).
+
+## Licencia
+
+Código visible, todos los derechos reservados: ver [LICENSE](LICENSE). El instalador se puede usar gratis.
 
 ## Créditos
 

@@ -18,6 +18,7 @@ import { MomentsView } from "@/components/moments/MomentsView";
 import { RemoteView } from "@/components/remote/RemoteView";
 import { StageView } from "@/components/stage/StageView";
 import { SettingsView } from "@/components/views/SettingsView";
+import { GuideView } from "@/components/views/GuideView";
 import { CommandPalette } from "@/components/command-palette/CommandPalette";
 import { DialogHost } from "@/components/ui/DialogHost";
 import { useAudioInput } from "@/lib/audioInput";
@@ -73,6 +74,7 @@ function AppShell() {
         {section === "MIDI" ? <MidiView /> : null}
         {section === "Celular" ? <RemoteView remote={remote} /> : null}
         {section === "Settings" ? <SettingsView /> : null}
+        {section === "Guía" ? <GuideView /> : null}
       </div>
 
       <CommandPalette sections={SECTIONS} activeSection={section} onSelectSection={setSection} />

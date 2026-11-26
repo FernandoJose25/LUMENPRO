@@ -1,0 +1,20 @@
+LUMEN PRO
+Copyright (c) 2026 Fernando Jose. Todos los derechos reservados.
+
+El código está publicado para que se pueda ver. No se concede permiso para
+copiarlo, modificarlo, distribuirlo ni usarlo en otros productos sin
+autorización por escrito del autor.
+
+El instalador publicado en GitHub (Releases) se puede descargar y usar
+gratis para controlar luces, sin modificarlo ni redistribuirlo.
+
+Componentes de terceros
+-----------------------
+Los perfiles de equipos (public/library) y las imágenes de gobos
+(public/gobos) son de Q Light Controller Plus (https://www.qlcplus.org),
+de Heikki Junnila, Massimo Callegari y sus colaboradores, bajo la licencia
+Apache 2.0: ver public/library/LICENSE.txt y public/library/NOTICE.txt.
+Esa licencia sigue rigiendo esos archivos.
+
+Las bibliotecas de npm y de Rust que usa el programa tienen sus propias
+licencias, indicadas en cada paquete.

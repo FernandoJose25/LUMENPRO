@@ -61,6 +61,12 @@
   el celular, con la misma lista de acciones. Probado con el `.exe` y un
   controlador virtual (mensajes inyectados por el mismo camino): un evento
   entero, también con la ventana cerrada. **Falta con un controlador real.**
+- **Publicar** (2026-11-26): versión 0.2.0; `.github/workflows/release.yml` arma
+  y publica el instalador al subir una etiqueta `v*`; la app avisa si hay una
+  versión nueva en GitHub. Guía para quien nunca lo usó en `docs/GUIA.md` (y en
+  la sección "Guía"). Video del simulador en `docs/video/simulador.mp4`.
+  Licencia por ahora "todos los derechos reservados" (lo más fácil de abrir
+  después); **la decide el dueño**.
 - **Diálogos propios** (`lib/dialogs.ts`): los de Windows congelaban la interfaz.
 - **Salida DMX conectada a la interfaz** (2026-11-24): driver del cable FTDI
   (`OpenDmxOutput`: 250 kbaudios, 8N2, BREAK por software, 30 FPS), estado real

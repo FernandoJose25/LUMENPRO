@@ -1,0 +1,36 @@
+name: Release
+
+# Al subir una etiqueta v0.2.0, v0.3.0…: arma el instalador de Windows y lo
+# publica en Releases. La app avisa sola que hay una versión nueva.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            src-tauri
+            show-engine
+      - run: npm ci
+      - run: npm test
+      - run: npx tauri build
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: LUMEN PRO ${{ github.ref_name }}
+          body_path: docs/NOVEDADES.md
+          files: src-tauri/target/release/bundle/nsis/*.exe
