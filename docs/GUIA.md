@@ -56,6 +56,15 @@ Para cambiar uno:
 
 **Si moviste algo y no recuerdas cómo estaba**, cada sección tiene **Restablecer**: en **Momentos** la plantilla vuelve a como venía (tus momentos propios no se tocan), en **Effects** un efecto vuelve a su velocidad y colores, en **Fixtures** un perfil vuelve a sus canales de fábrica, en **Dashboard** una luz vuelve a sus valores iniciales y en **Settings** se puede empezar de cero. También sirve **Undo** (Ctrl+Z).
 
+**El vals a tiempo con la canción.** En **Línea de tiempo**, toca **Crear la del vals** y **Cargar canción** (MP3, M4A o WAV). Se copia a la carpeta del programa y se ve su forma de onda.
+
+1. La línea blanca marca dónde estás: tócala en la regla de arriba o muévela con las flechas.
+2. Con **+ Momento**, **+ Color fijo**, **+ Efecto**, **+ Estrobo** o **+ Apagón** pones una marca donde está la línea. **+ Momento** sigue solo con el momento siguiente.
+3. Lo más rápido: dale **Reproducir** y toca los botones al ritmo de la música. Después afina cada marca arrastrándola, o tócala y escribe el segundo exacto. Al estrobo, al apagón, al color y al efecto se les puede poner cuánto **Dura**; vacío, se quedan hasta que otra marca los cambie.
+4. **Escuchar desde aquí** arranca dos segundos antes de la marca elegida. Si arrancas desde la mitad, las luces quedan como si la canción hubiera sonado desde el principio.
+
+Con la canción sonando, los momentos no pasan solos al siguiente: la canción manda. Para que la música llegue a la consola del DJ, conecta la laptop con un cable y elige por dónde sale en **Sale por**. Sin canción, las luces corren igual y terminan en la última marca.
+
 **Posiciones con nombre.** En **Escenario**, toca **Apuntar** y después el piso: las cabezas apuntan ahí. Guarda esa posición en **Paletas** como "Pista" o "Mesa principal". Si la corriges después, cambian todas las escenas que la usan.
 
 ## 5. Conectar las luces
@@ -77,7 +86,7 @@ Si una cabeza se mueve al revés que en el simulador, en **Escenario** elige esa
 2. En **Celular**, toca **Encender**. Si Windows pregunta por el firewall, permite el acceso.
 3. Escanea el código QR con el celular.
 
-En el celular está el botón grande **Siguiente**, los momentos, el **Color fijo** de cada grupo, los **Efectos** (se prenden y apagan tocándolos), la intensidad, el estrobo y el **Blackout** (hay que tocarlo dos veces, para no apagar todo sin querer). En **Celular → Botones del celular** puedes agregar los botones que quieras arriba de todo.
+En el celular está el botón grande **Siguiente**, los momentos, las **Canciones** (las líneas de tiempo: un toque las arranca y detenerlas pide dos, para no cortar el vals sin querer; la música sale de la laptop), el **Color fijo** de cada grupo, los **Efectos** (se prenden y apagan tocándolos), la intensidad, el estrobo y el **Blackout** (hay que tocarlo dos veces, para no apagar todo sin querer). En **Celular → Botones del celular** puedes agregar los botones que quieras arriba de todo.
 
 ## 7. Durante el evento
 

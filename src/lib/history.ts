@@ -6,6 +6,7 @@ import type { Moment } from "@/types/moment";
 import type { Palette } from "@/types/palette";
 import type { Control, Pad } from "@/types/controls";
 import type { Scene } from "@/types/scene";
+import type { Timeline } from "@/types/timeline";
 
 /** Lo que se programa, que es lo que Deshacer recupera. Los valores en vivo
  *  quedan fuera a propósito: deshacer a mitad del evento no debe mover luces. */
@@ -18,14 +19,15 @@ export interface ShowDoc {
   chases: Chase[];
   effects: Effect[];
   moments: Moment[];
+  timelines: Timeline[];
   livePads: Pad[];
   phonePads: Pad[];
   controls: Control[];
 }
 
 const KEYS = [
-  "definitions", "instances", "scenes", "palettes", "groups", "chases", "effects", "moments", "livePads", "phonePads",
-  "controls",
+  "definitions", "instances", "scenes", "palettes", "groups", "chases", "effects", "moments", "timelines", "livePads",
+  "phonePads", "controls",
 ] as const;
 
 const LIMIT = 100;

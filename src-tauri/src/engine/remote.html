@@ -76,6 +76,10 @@
   #effects { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   #effects button { min-height: 48px; font-size: 14px; overflow-wrap: anywhere; }
   #effects button.on { border-color: var(--accent); color: var(--bg); background: var(--accent); }
+  #timelines { display: grid; gap: 10px; }
+  #timelines button { min-height: 56px; font-size: 17px; font-variant-numeric: tabular-nums; }
+  #timelines button.on { border-color: var(--accent); color: var(--bg); background: var(--accent); }
+  #timelines button.armed { border-color: var(--danger); color: var(--danger); }
 </style>
 </head>
 <body>
@@ -97,6 +101,10 @@
     <button id="next"></button>
     <div class="row"><button id="prev">◀ Anterior</button><button id="stop">■ Detener</button></div>
     <div id="moments"></div>
+    <section id="timelines-box" class="colors" hidden>
+      <h2>Canciones · la música sale de la laptop</h2>
+      <div id="timelines"></div>
+    </section>
     <section id="colors" class="colors" hidden>
       <h2>Color fijo · hasta el próximo momento</h2>
       <div id="color-rows" class="colors"></div>
@@ -264,7 +272,41 @@ function render() {
   renderPads();
   renderColors();
   renderEffects();
+  renderTimelines();
   renderClock();
+}
+
+// Las líneas de tiempo (el vals): la canción suena en la laptop. Detenerla
+// pide un segundo toque: cortar el vals por error no tiene vuelta.
+let timelineArmed = { id: null, until: 0 };
+function renderTimelines() {
+  if (!state) return;
+  const timelines = state.timelines || [];
+  $("timelines-box").hidden = timelines.length === 0;
+  const list = $("timelines");
+  while (list.children.length > timelines.length) list.lastChild.remove();
+  timelines.forEach((t, i) => {
+    const button = list.children[i] || list.appendChild(document.createElement("button"));
+    const run = state.timeline && state.timeline.id === t.id ? state.timeline : null;
+    const playing = !!run && run.pausedAt === null;
+    const armed = playing && timelineArmed.id === t.id && Date.now() < timelineArmed.until;
+    const elapsed = run ? (run.pausedAt !== null ? run.pausedAt : Date.now() + clockOffset - run.startedAt) : 0;
+    button.className = armed ? "armed" : playing ? "on" : "";
+    button.disabled = !online;
+    button.textContent = armed
+      ? "Toca otra vez para detener " + t.name
+      : (playing ? "■ " : "▶ ") + t.name + (run ? "  " + clock(elapsed) + " / " + clock(t.durationMs) : "");
+    button.onclick = () => {
+      if (!playing) return send({ type: "timeline", id: t.id, play: true });
+      if (armed) {
+        timelineArmed = { id: null, until: 0 };
+        return send({ type: "timeline", id: t.id, play: false });
+      }
+      timelineArmed = { id: t.id, until: Date.now() + 1500 };
+      renderTimelines();
+      setTimeout(renderTimelines, 1600);
+    };
+  });
 }
 
 // Color fijo por grupo: tapa los colores del momento sin cambiarlo.
@@ -399,7 +441,10 @@ function renderClock() {
   }
   $("now-time").textContent = time;
 }
-setInterval(renderClock, 500);
+setInterval(() => {
+  renderClock();
+  renderTimelines();
+}, 500);
 
 // `from` evita saltarse un momento con un doble toque o con dos celulares:
 // la laptop ignora la orden si ya no está en ese momento.

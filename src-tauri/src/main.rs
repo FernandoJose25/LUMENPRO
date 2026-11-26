@@ -107,6 +107,8 @@ fn window() {
             show::export_show,
             show::load_settings,
             show::save_settings,
+            show::save_song,
+            show::read_song,
             stage_window::open_stage_window,
             updates::check_update,
             updates::install_update,

@@ -6,6 +6,8 @@ import { GROUP_COLORS } from "@/types/group";
 import type { Chase, ChaseStep } from "@/types/chase";
 import type { Effect } from "@/types/effect";
 import type { Moment } from "@/types/moment";
+import type { Timeline } from "@/types/timeline";
+import { noteEngineNow } from "@/lib/engineClock";
 import type { Palette, PaletteKind } from "@/types/palette";
 import type { Action, Control, Pad } from "@/types/controls";
 import {
@@ -78,6 +80,7 @@ const IDLE: Omit<Playback, "activeSceneId" | "activeMomentId"> = {
   momentRun: null,
   chase: null,
   heldColors: {},
+  timeline: null,
 };
 const NOT_SAVED = new Set([...Object.keys(IDLE), "moving"]);
 
@@ -182,6 +185,14 @@ interface FixtureStoreValue extends FixtureStoreState {
   addQuinceTemplate: () => void;
   /** Vuelve los momentos, escenas y effects de la plantilla a como los arma. */
   resetQuinceTemplate: () => void;
+  addTimeline: (name: string) => Timeline;
+  updateTimeline: (timelineId: string, patch: Partial<Omit<Timeline, "id">>) => void;
+  removeTimeline: (timelineId: string) => void;
+  /** Desde ese punto: las luces quedan como si hubiera sonado desde el
+   *  principio. También para seguir tras una pausa. */
+  playTimeline: (timelineId: string, fromMs: number) => void;
+  pauseTimeline: () => void;
+  stopTimeline: () => void;
   /** Lanza un momento: corta los effects del anterior, el estrobo y el
    *  Blackout. */
   startMoment: (momentId: string) => void;
@@ -247,6 +258,7 @@ function restoreState(parsed: Partial<FixtureStoreState>): FixtureStoreState {
       angleDeg: fx.angleDeg ?? 0,
     })),
     moments: parsed.moments ?? [],
+    timelines: parsed.timelines ?? [],
     activeMomentId: parsed.activeMomentId ?? null,
     ...IDLE,
   };
@@ -314,7 +326,8 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
 
   useEffect(() => {
     const host: EngineHost = {
-      onChanges: ({ full, values, moving, playback }: EngineChanges) => {
+      onChanges: ({ full, values, moving, playback, now }: EngineChanges) => {
+        noteEngineNow(now);
         const s = stateRef.current;
         const liveValues = full ? values : mergeValues(s.liveValues, values);
         stateRef.current = { ...s, ...playback, liveValues, moving: moving ?? s.moving };
@@ -893,6 +906,27 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
     }));
   }, [setState]);
 
+  const addTimeline = useCallback(
+    (name: string): Timeline => {
+      const created: Timeline = { id: makeId("timeline"), name: name.trim() || "Vals", song: null, durationMs: 0, cues: [] };
+      setState((s) => ({ ...s, timelines: [...s.timelines, created] }));
+      return created;
+    },
+    [setState],
+  );
+  const updateTimeline = useCallback((timelineId: string, patch: Partial<Omit<Timeline, "id">>) => {
+    setState((s) => ({ ...s, timelines: s.timelines.map((t) => (t.id === timelineId ? { ...t, ...patch } : t)) }));
+  }, [setState]);
+  const removeTimeline = useCallback((timelineId: string) => {
+    setState((s) => ({ ...s, timelines: s.timelines.filter((t) => t.id !== timelineId) }));
+  }, [setState]);
+  const playTimeline = useCallback(
+    (id: string, fromMs: number) => engine.send({ type: "playTimeline", id, fromMs: Math.max(0, Math.round(fromMs)) }),
+    [engine],
+  );
+  const pauseTimeline = useCallback(() => engine.send({ type: "pauseTimeline" }), [engine]);
+  const stopTimeline = useCallback(() => engine.send({ type: "stopTimeline" }), [engine]);
+
   const moveMoment = useCallback((momentId: string, direction: -1 | 1) => {
     setState((s) => {
       const index = s.moments.findIndex((m) => m.id === momentId);
@@ -1059,6 +1093,12 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
     addMoment,
     updateMoment,
     removeMoment,
+    addTimeline,
+    updateTimeline,
+    removeTimeline,
+    playTimeline,
+    pauseTimeline,
+    stopTimeline,
     moveMoment,
     addQuinceTemplate,
     resetQuinceTemplate,

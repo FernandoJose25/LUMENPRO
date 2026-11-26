@@ -64,6 +64,52 @@ pub fn save_settings(app: AppHandle, json: String) -> Result<(), String> {
     write_atomic(&data_path(&app, "settings.json")?, &json).map_err(|e| e.to_string())
 }
 
+/// Las canciones de las líneas de tiempo, junto al show. El nombre viene de
+/// la ventana: solo un nombre de archivo, nunca una ruta.
+fn song_path(app: &AppHandle, file: &str) -> Result<PathBuf, String> {
+    if !is_song_name(file) {
+        return Err("Ese nombre de canción no vale".into());
+    }
+    let dir = data_path(app, "canciones")?;
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir.join(file))
+}
+
+fn is_song_name(file: &str) -> bool {
+    !file.is_empty() && file.len() <= 64 && file.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.') && !file.starts_with('.')
+}
+
+/// Copia la canción elegida y devuelve con qué nombre quedó. La extensión
+/// llega en la cabecera `x-ext`; los bytes, tal cual.
+#[tauri::command]
+pub async fn save_song(app: AppHandle, request: tauri::ipc::Request<'_>) -> Result<String, String> {
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
+        return Err("No llegó la canción".into());
+    };
+    let ext: String = request
+        .headers()
+        .get("x-ext")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("mp3")
+        .chars()
+        .filter(char::is_ascii_alphanumeric)
+        .take(5)
+        .collect();
+    let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis());
+    let file = format!("cancion-{stamp}.{}", if ext.is_empty() { "mp3" } else { &ext });
+    fs::write(song_path(&app, &file)?, bytes).map_err(|e| e.to_string())?;
+    Ok(file)
+}
+
+#[tauri::command(async)]
+pub fn read_song(app: AppHandle, file: String) -> Result<tauri::ipc::Response, String> {
+    match fs::read(song_path(&app, &file)?) {
+        Ok(bytes) => Ok(tauri::ipc::Response::new(bytes)),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Err("No encuentro la canción: vuelve a cargarla".into()),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
 /// Guarda una copia en Documentos\LUMEN PRO y devuelve la ruta.
 #[tauri::command(async)]
 pub fn export_show(app: AppHandle, file_name: String, json: String) -> Result<String, String> {
@@ -87,6 +133,14 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         dir.join("show.json")
+    }
+
+    #[test]
+    fn song_names_cannot_leave_the_songs_folder() {
+        assert!(is_song_name("cancion-1764184000000.mp3"));
+        for bad in ["", "..", "../show.json", "a/b.mp3", "a\\b.mp3", ".oculto", "C:x.mp3"] {
+            assert!(!is_song_name(bad), "{bad}");
+        }
     }
 
     #[test]

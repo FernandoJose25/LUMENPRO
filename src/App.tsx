@@ -17,6 +17,7 @@ import { UniversesView } from "@/components/dmx/UniversesView";
 import { MomentsView } from "@/components/moments/MomentsView";
 import { RemoteView } from "@/components/remote/RemoteView";
 import { StageView } from "@/components/stage/StageView";
+import { TimelineView } from "@/components/timeline/TimelineView";
 import { SettingsView } from "@/components/views/SettingsView";
 import { GuideView } from "@/components/views/GuideView";
 import { CommandPalette } from "@/components/command-palette/CommandPalette";
@@ -25,6 +26,7 @@ import { useAudioInput } from "@/lib/audioInput";
 import { useDmxOutput } from "@/lib/dmxOutput";
 import { useRemoteControl } from "@/lib/remoteControl";
 import { useStagePublisher } from "@/lib/stageMirror";
+import { useTimelineAudio } from "@/lib/timelineAudio";
 
 export default function App() {
   return (
@@ -43,6 +45,7 @@ function AppShell() {
   const audio = useAudioInput(engine.wasListening);
   const remote = useRemoteControl();
   useStagePublisher();
+  useTimelineAudio();
 
   return (
     <div className="flex h-screen flex-col bg-bg">
@@ -61,6 +64,7 @@ function AppShell() {
         {section === "Dashboard" ? <DashboardView /> : null}
         {section === "Live" ? <LiveView /> : null}
         {section === "Momentos" ? <MomentsView /> : null}
+        {section === "Línea de tiempo" ? <TimelineView /> : null}
         {section === "Escenario" ? <StageView /> : null}
         {section === "Fixtures" ? <FixturesView /> : null}
         {section === "Groups" ? <GroupsView /> : null}

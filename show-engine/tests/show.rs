@@ -564,7 +564,10 @@ fn phone_snapshot_has_only_what_the_page_shows() {
     r.moment("a", json!({ "durationSec": 90 }));
     let s = r.show.phone_snapshot("stopped");
     let keys: Vec<_> = s.as_object().unwrap().keys().cloned().collect();
-    assert_eq!(keys, ["activeId", "blackout", "colors", "dmx", "effects", "master", "moments", "pads", "startedAt", "strobe"]);
+    assert_eq!(
+        keys,
+        ["activeId", "blackout", "colors", "dmx", "effects", "master", "moments", "pads", "startedAt", "strobe", "timeline", "timelines"]
+    );
     assert_eq!(s["moments"], json!([{ "id": "a", "name": "A", "durationSec": 90.0 }]));
 }
 
@@ -1183,4 +1186,192 @@ fn the_phone_turns_effects_on_and_off() {
     assert_eq!(effects, json!([{ "id": "fx", "name": "PAR: ola roja", "running": true }]));
     r.phone(json!({ "type": "effect", "id": "fx" }));
     assert_eq!(r.running(), json!([]));
+}
+
+// ----------------------------------------------------------------------
+// Línea de tiempo
+// ----------------------------------------------------------------------
+
+/// Momentos a (rojo) y b (verde), y un vals de 10 s con sus marcas.
+fn with_vals(r: &mut Rig, cues: Value) {
+    with_colors(r);
+    r.moment("a", json!({ "sceneId": "red" }));
+    r.moment("b", json!({ "sceneId": "green", "fadeMs": 1000 }));
+    let cues: Vec<Value> = cues
+        .as_array()
+        .unwrap()
+        .iter()
+        .enumerate()
+        .map(|(n, c)| {
+            let mut cue = json!({ "id": format!("q{n}"), "lengthMs": null });
+            for (k, v) in c.as_object().unwrap() {
+                cue[k] = v.clone();
+            }
+            cue
+        })
+        .collect();
+    r.doc["timelines"] = json!([{ "id": "vals", "name": "Vals", "durationMs": 10_000, "cues": cues }]);
+    r.send(json!({ "type": "doc", "doc": r.doc }));
+}
+
+fn play(r: &mut Rig, from: f64) {
+    r.send(json!({ "type": "playTimeline", "id": "vals", "fromMs": from }));
+}
+
+#[test]
+fn the_timeline_fires_each_cue_on_time() {
+    let mut r = Rig::new();
+    with_vals(&mut r, json!([
+        { "atMs": 0, "action": { "do": "moment", "id": "a" } },
+        { "atMs": 2000, "action": { "do": "moment", "id": "b" } },
+        { "atMs": 3000, "lengthMs": 1000, "action": { "do": "strobe" } },
+    ]));
+    play(&mut r, 0.0);
+    r.run(100.0);
+    assert_eq!(r.active(), json!("a"));
+    r.run(1800.0);
+    assert_eq!(r.active(), json!("a"));
+    r.run(200.0);
+    assert_eq!(r.active(), json!("b"));
+    r.run(1000.0);
+    assert_eq!(r.playback()["strobeActive"], json!(true));
+    r.run(1000.0);
+    assert_eq!(r.playback()["strobeActive"], json!(false));
+}
+
+#[test]
+fn starting_halfway_leaves_the_lights_as_if_the_song_had_played_from_the_start() {
+    let mut r = Rig::new();
+    with_vals(&mut r, json!([
+        { "atMs": 0, "action": { "do": "moment", "id": "a" } },
+        { "atMs": 1000, "action": { "do": "effect", "id": "fx" } },
+        { "atMs": 2000, "action": { "do": "moment", "id": "b" } },
+        { "atMs": 2200, "action": { "do": "color", "groupId": "pars", "color": "#ff0000" } },
+        { "atMs": 3000, "lengthMs": 1000, "action": { "do": "strobe" } },
+    ]));
+    r.send(json!({ "type": "strobe", "on": true }));
+    play(&mut r, 3500.0);
+    r.run(20.0);
+    assert_eq!(r.active(), json!("b"));
+    // El momento b ya hizo su fade: arrancó hace 1,5 s.
+    assert_eq!(r.live("p1", "green"), 250);
+    // El effect lo soltó el momento b; el color vino después.
+    assert_eq!(r.running(), json!([]));
+    assert_eq!(r.playback()["heldColors"], json!({ "pars": "#ff0000" }));
+    assert_eq!(r.playback()["strobeActive"], json!(true));
+    r.run(600.0);
+    assert_eq!(r.playback()["strobeActive"], json!(false));
+}
+
+#[test]
+fn pausing_or_stopping_takes_off_the_strobe_and_going_on_puts_it_back() {
+    let mut r = Rig::new();
+    with_vals(&mut r, json!([{ "atMs": 3000, "lengthMs": 2000, "action": { "do": "strobe" } }]));
+    play(&mut r, 3200.0);
+    r.run(20.0);
+    assert_eq!(r.playback()["strobeActive"], json!(true));
+
+    r.send(json!({ "type": "pauseTimeline" }));
+    assert_eq!(r.playback()["strobeActive"], json!(false));
+    let paused = r.playback()["timeline"]["pausedAt"].as_f64().unwrap();
+    r.run(5000.0);
+    assert_eq!(r.playback()["timeline"]["pausedAt"].as_f64().unwrap(), paused);
+
+    play(&mut r, paused);
+    r.run(20.0);
+    assert_eq!(r.playback()["strobeActive"], json!(true));
+    r.send(json!({ "type": "stopTimeline" }));
+    assert_eq!(r.playback()["strobeActive"], json!(false));
+    assert_eq!(r.playback()["timeline"], Value::Null);
+}
+
+#[test]
+fn the_song_leads_if_it_runs_ahead_or_behind_the_lights_follow() {
+    let mut r = Rig::new();
+    with_vals(&mut r, json!([{ "atMs": 1800, "action": { "do": "moment", "id": "b" } }]));
+    play(&mut r, 0.0);
+    r.run(1000.0);
+    let started = r.playback()["timeline"]["startedAt"].clone();
+    // Una diferencia chica no mueve nada.
+    r.send(json!({ "type": "timelineSync", "id": "vals", "positionMs": 1020 }));
+    assert_eq!(r.playback()["timeline"]["startedAt"], started);
+
+    r.send(json!({ "type": "timelineSync", "id": "vals", "positionMs": 1500 }));
+    r.run(260.0);
+    assert_ne!(r.active(), json!("b"));
+    r.run(60.0);
+    assert_eq!(r.active(), json!("b"));
+}
+
+#[test]
+fn while_the_song_plays_a_timed_moment_does_not_move_on_by_itself() {
+    let mut r = Rig::new();
+    with_vals(&mut r, json!([{ "atMs": 0, "action": { "do": "moment", "id": "a" } }]));
+    r.doc["moments"][0]["durationSec"] = json!(1);
+    r.send(json!({ "type": "doc", "doc": r.doc }));
+    play(&mut r, 0.0);
+    r.run(3000.0);
+    assert_eq!(r.active(), json!("a"));
+}
+
+#[test]
+fn at_the_end_of_the_song_it_stops_and_the_lights_stay() {
+    let mut r = Rig::new();
+    with_vals(&mut r, json!([{ "atMs": 9000, "action": { "do": "moment", "id": "b" } }]));
+    play(&mut r, 8000.0);
+    r.run(2100.0);
+    assert_eq!(r.playback()["timeline"], Value::Null);
+    assert_eq!(r.active(), json!("b"));
+    assert_eq!(r.live("p1", "green"), 250);
+}
+
+#[test]
+fn deleting_the_timeline_that_plays_stops_it() {
+    let mut r = Rig::new();
+    with_vals(&mut r, json!([]));
+    play(&mut r, 0.0);
+    r.doc["timelines"] = json!([]);
+    r.send(json!({ "type": "doc", "doc": r.doc }));
+    assert_eq!(r.playback()["timeline"], Value::Null);
+}
+
+#[test]
+fn a_restarted_engine_does_not_repeat_what_already_played() {
+    let mut r = Rig::new();
+    with_vals(&mut r, json!([
+        { "atMs": 0, "action": { "do": "moment", "id": "a" } },
+        { "atMs": 2000, "action": { "do": "moment", "id": "b" } },
+    ]));
+    play(&mut r, 0.0);
+    r.run(1000.0);
+    // A mano, a mitad de la canción.
+    r.start("b");
+    r.send(json!({ "type": "blackout", "on": true }));
+    let saved = serde_json::to_string(&r.show.session()).unwrap();
+    r.show = Show::new();
+    r.show.restore(serde_json::from_str::<Session>(&saved).unwrap(), r.now).unwrap();
+    r.run(500.0);
+    // La marca de a (en 0) no se repite.
+    assert_eq!((r.active(), r.playback()["blackoutActive"].clone()), (json!("b"), json!(true)));
+    // La de b, que todavía no había sonado, sí: entrar a un momento quita el apagón.
+    r.run(600.0);
+    assert_eq!(r.playback()["blackoutActive"], json!(false));
+}
+
+#[test]
+fn the_phone_and_the_buttons_start_and_stop_the_song() {
+    let mut r = Rig::new();
+    with_vals(&mut r, json!([{ "atMs": 12_000, "action": { "do": "moment", "id": "a" } }]));
+    r.phone(json!({ "type": "timeline", "id": "vals", "play": true }));
+    let s = r.show.phone_snapshot("running");
+    assert_eq!(s["timelines"], json!([{ "id": "vals", "name": "Vals", "durationMs": 12_000.0 }]));
+    assert_eq!(s["timeline"]["id"], json!("vals"));
+    r.phone(json!({ "type": "timeline", "play": false }));
+    assert_eq!(r.playback()["timeline"], Value::Null);
+
+    let button = json!({ "type": "action", "action": { "do": "timeline", "id": "vals" }, "press": true });
+    r.send(button.clone());
+    assert_eq!(r.playback()["timeline"]["id"], json!("vals"));
+    r.send(button);
+    assert_eq!(r.playback()["timeline"], Value::Null);
 }

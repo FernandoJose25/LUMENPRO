@@ -1,6 +1,8 @@
-## Novedades de la 0.3.5
+## Novedades de la 0.4.0
 
-**Varias luces a la vez en el Dashboard.** En Fixture Control toca varias luces y lo que cambies (posición, color, dimmer, estrobo, rueda) les llega a todas. Arriba, de un toque: **Todas**, las de un grupo o las de un modelo, para no ir de una en una aunque tengas muchas. Si eliges modelos distintos, cada modelo tiene sus controles, porque un mismo valor no hace lo mismo en una cabeza que en un PAR. También en Scenes.
+**Línea de tiempo: el vals a tiempo con la canción.** Nueva sección **Línea de tiempo**. Cargas la canción del vals, ves su forma de onda y pones en cada segundo un momento, un color fijo, un efecto, un golpe de estrobo o un apagón. Al darle Reproducir, todo sale a tiempo con la música. Para marcar rápido, toca los botones al ritmo mientras suena y después afina arrastrando. Se puede arrancar desde la mitad para ensayar, elegir por dónde sale la música (por ejemplo, a la consola del DJ) y arrancarla desde el celular o con un botón MIDI.
+
+**De la 0.3.5:** varias luces a la vez en el Dashboard (de un toque todas, un grupo o un modelo).
 
 **De la 0.3.4:** en el Dashboard ya se elige cualquier luz.
 

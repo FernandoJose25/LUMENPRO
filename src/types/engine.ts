@@ -16,6 +16,16 @@ export interface Playback {
   chase: ChaseStatus | null;
   /** Color fijo de cada grupo ("" = las luces sin grupo): grupo -> "#ff0000". */
   heldColors: Record<string, string>;
+  /** La línea de tiempo que suena. */
+  timeline: TimelineRun | null;
+}
+
+export interface TimelineRun {
+  id: string;
+  /** Hora del motor en que la canción estaba (o habría estado) en 0. */
+  startedAt: number;
+  /** En pausa: dónde quedó la canción, en ms. */
+  pausedAt: number | null;
 }
 
 /** Lo programado y lo que el motor calcula de ahí sin que se guarde. */
@@ -51,10 +61,17 @@ export type EngineMessage =
   | { type: "stepMoment"; direction: -1 | 1 }
   | { type: "stopMoment" | "stopChase" }
   | { type: "audio"; audio: AudioMessage | null }
-  | { type: "action"; action: Action; press?: boolean; value?: number };
+  | { type: "action"; action: Action; press?: boolean; value?: number }
+  /** Desde ese punto de la canción; también para seguir tras una pausa. */
+  | { type: "playTimeline"; id: string; fromMs: number }
+  | { type: "pauseTimeline" | "stopTimeline" }
+  /** Por dónde va la canción que suena en la ventana: el motor la sigue. */
+  | { type: "timelineSync"; id: string; positionMs: number };
 
 export interface EngineChanges {
   rev: number;
+  /** La hora del motor (ver lib/engineClock.ts). */
+  now?: number;
   /** Los valores son todos, no solo los que cambiaron. */
   full: boolean;
   values: ChannelValues;

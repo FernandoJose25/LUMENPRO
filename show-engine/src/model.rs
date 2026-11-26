@@ -560,6 +560,8 @@ pub enum Action {
     /// Color fijo encima de lo que haga el momento. Sin grupo, todas las
     /// luces ("" son las que no tienen grupo); sin color, se suelta.
     Color { group_id: Option<String>, color: Option<String> },
+    /// Arranca la línea de tiempo desde el principio, o la detiene.
+    Timeline { id: String },
     #[default]
     #[serde(other)]
     Nothing,
@@ -568,6 +570,45 @@ pub enum Action {
 impl Action {
     pub fn is_fader(&self) -> bool {
         matches!(self, Action::Master | Action::GroupFader { .. })
+    }
+}
+
+/// Una marca de la línea de tiempo: a los `at_ms` de la canción hace
+/// `action`. Con `length_ms`, al terminar deshace lo que hizo: el estrobo y el
+/// apagón se quitan, el effect o el chase se detienen, el color se suelta.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Cue {
+    pub id: String,
+    #[serde(deserialize_with = "num")]
+    pub at_ms: f64,
+    pub length_ms: Option<f64>,
+    pub action: Action,
+}
+
+impl Cue {
+    pub fn end_ms(&self) -> Option<f64> {
+        self.length_ms.filter(|l| l.is_finite() && *l > 0.0).map(|l| self.at_ms + l)
+    }
+}
+
+/// Lo que pasa en cada segundo de una canción (el vals). La canción la
+/// reproduce la ventana; el motor lleva la cuenta y dispara las marcas.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Timeline {
+    pub id: String,
+    pub name: String,
+    /// Lo que dura la canción.
+    #[serde(deserialize_with = "num")]
+    pub duration_ms: f64,
+    pub cues: Vec<Cue>,
+}
+
+impl Timeline {
+    /// Termina con la canción, o con la última marca si va más allá.
+    pub fn end_ms(&self) -> f64 {
+        self.cues.iter().map(|c| c.end_ms().unwrap_or(c.at_ms)).fold(self.duration_ms.max(0.0), f64::max)
     }
 }
 
@@ -621,6 +662,7 @@ pub struct Doc {
     pub chases: Vec<Chase>,
     pub effects: Vec<Effect>,
     pub moments: Vec<Moment>,
+    pub timelines: Vec<Timeline>,
     pub live_pads: Vec<Pad>,
     pub phone_pads: Vec<Pad>,
     pub controls: Vec<Control>,

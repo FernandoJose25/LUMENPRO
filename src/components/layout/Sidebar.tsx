@@ -7,6 +7,7 @@ export const SECTIONS = [
   "Dashboard",
   "Live",
   "Momentos",
+  "Línea de tiempo",
   "Escenario",
   "Fixtures",
   "Groups",

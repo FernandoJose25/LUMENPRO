@@ -3,7 +3,9 @@
 //! milisegundos (la misma base que `Date.now()`).
 
 use crate::frame::{self, Frame, Overlay};
-use crate::model::{Action, Channel, ChannelType, ChannelValues, Definition, Doc, Effect, EffectKind, EffectSource, Pad};
+use crate::model::{
+    Action, Channel, ChannelType, ChannelValues, Cue, Definition, Doc, Effect, EffectKind, EffectSource, Pad, Timeline,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
@@ -17,6 +19,9 @@ const MAX_STEP_MS: f64 = 50.0;
 const LEVELS_STALE_MS: f64 = 500.0;
 /// El ritmo sí se puede seguir contando un rato aunque la ventana se trabe.
 const BEATS_STALE_MS: f64 = 10_000.0;
+/// La canción y el reloj del motor pueden separarse un poco: recién con esta
+/// diferencia las luces se corren a donde va la canción.
+const SYNC_TOLERANCE_MS: f64 = 40.0;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct AudioFeed {
@@ -63,6 +68,12 @@ pub enum Message {
     Audio { audio: Option<AudioFeed> },
     /// Un botón (press: true al apretar, false al soltar) o un fader (value 0–1).
     Action { action: Action, #[serde(default)] press: Option<bool>, #[serde(default)] value: Option<f64> },
+    /// Desde ese punto de la canción (también para seguir tras una pausa).
+    PlayTimeline { id: String, #[serde(default)] from_ms: f64 },
+    PauseTimeline,
+    StopTimeline,
+    /// Por dónde va la canción que suena en la ventana.
+    TimelineSync { id: String, position_ms: f64 },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -70,6 +81,22 @@ pub enum Message {
 pub struct MomentRun {
     pub nonce: u64,
     pub started_at: f64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TimelineRun {
+    pub id: String,
+    /// Hora en que la canción estaba (o habría estado) en 0.
+    pub started_at: f64,
+    /// En pausa: dónde quedó la canción, en ms.
+    pub paused_at: Option<f64>,
+}
+
+impl TimelineRun {
+    pub fn position(&self, now: f64) -> f64 {
+        self.paused_at.unwrap_or(now - self.started_at)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -107,6 +134,8 @@ pub struct Playback {
     /// Color fijo de cada grupo ("" = las luces sin grupo): grupo -> "#ff0000".
     /// Los momentos no lo sueltan.
     pub held_colors: BTreeMap<String, String>,
+    /// La línea de tiempo que suena.
+    pub timeline: Option<TimelineRun>,
 }
 
 impl Default for Playback {
@@ -122,8 +151,34 @@ impl Default for Playback {
             moment_run: None,
             chase: None,
             held_colors: BTreeMap::new(),
+            timeline: None,
         }
     }
+}
+
+/// Lo que dispara una marca: al llegar, o al terminar si tiene duración.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum Edge {
+    /// Primero lo que termina: un estrobo que sigue a otro queda prendido.
+    End,
+    /// Después los momentos, que sueltan colores y effects…
+    Moment,
+    /// …y al final lo demás, que va encima del momento.
+    Start,
+}
+
+/// Las marcas en el orden en que suenan.
+fn edges(timeline: &Timeline) -> Vec<(f64, Edge, &Cue)> {
+    let mut edges: Vec<(f64, Edge, &Cue)> = Vec::new();
+    for cue in &timeline.cues {
+        let start = if matches!(cue.action, Action::Moment { .. }) { Edge::Moment } else { Edge::Start };
+        edges.push((cue.at_ms, start, cue));
+        if let Some(end) = cue.end_ms() {
+            edges.push((end, Edge::End, cue));
+        }
+    }
+    edges.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+    edges
 }
 
 /// Foto completa, para retomar si el motor se reinicia en pleno show.
@@ -252,6 +307,8 @@ pub struct Show {
     last_tick: f64,
     identify_until: f64,
     audio: Option<(AudioFeed, f64)>,
+    /// Hasta dónde de la canción ya se dispararon las marcas.
+    timeline_cursor: f64,
 }
 
 /// Vueltas completas que lleva un effect.
@@ -311,7 +368,7 @@ impl Show {
     /// Hay algo moviéndose solo.
     pub fn is_playing(&self) -> bool {
         let p = &self.playback;
-        p.moment_run.is_some() || p.chase.is_some() || !p.running_effect_ids.is_empty()
+        p.moment_run.is_some() || p.chase.is_some() || !p.running_effect_ids.is_empty() || p.timeline.is_some()
     }
 
     /// Retoma donde iba: los fades a medias se terminan desde donde quedaron.
@@ -321,6 +378,8 @@ impl Show {
         self.next_nonce = session.playback.moment_run.map_or(0, |r| r.nonce);
         let chase = session.playback.chase.clone();
         self.playback = Playback { identify_id: None, chase: None, ..session.playback };
+        // Lo que ya sonó no se repite.
+        self.timeline_cursor = self.playback.timeline.as_ref().map_or(0.0, |run| run.position(now));
         if let Some(chase) = chase {
             self.start_chase(&chase.id, self.active_moment_chase() == Some(chase.id.as_str()), now);
             self.begin_step(chase.step_index, now);
@@ -393,6 +452,19 @@ impl Show {
             Message::StopChase => self.stop_chase(),
             Message::Audio { audio } => self.audio = audio.map(|feed| (feed, now)),
             Message::Action { action, press, value } => self.act(&action, press, value, now),
+            Message::PlayTimeline { id, from_ms } => self.play_timeline(&id, from_ms, now),
+            Message::PauseTimeline => self.pause_timeline(now),
+            Message::StopTimeline => self.stop_timeline(now),
+            Message::TimelineSync { id, position_ms } => {
+                let run = self.playback.timeline.as_ref().filter(|r| r.id == id && r.paused_at.is_none());
+                if run.is_some_and(|r| position_ms.is_finite() && (r.position(now) - position_ms).abs() > SYNC_TOLERANCE_MS) {
+                    self.edit(|p| {
+                        if let Some(run) = p.timeline.as_mut() {
+                            run.started_at = now - position_ms;
+                        }
+                    });
+                }
+            }
         }
         Ok(())
     }
@@ -444,6 +516,11 @@ impl Show {
                 let action = Action::Color { group_id: text("group"), color: text("color") };
                 self.act(&action, Some(true), None, now);
             }
+            "timeline" => match (command["id"].as_str(), command["play"].as_bool()) {
+                (Some(id), Some(true)) => self.play_timeline(id, 0.0, now),
+                (_, Some(false)) => self.stop_timeline(now),
+                _ => {}
+            },
             _ => {}
         }
     }
@@ -507,6 +584,8 @@ impl Show {
                 Some(Message::StopChase)
             }
             Action::Chase { id } => Some(Message::PlayChase { id: id.clone() }),
+            Action::Timeline { id } if self.timeline_playing(id) => Some(Message::StopTimeline),
+            Action::Timeline { id } => Some(Message::PlayTimeline { id: id.clone(), from_ms: 0.0 }),
             Action::Blackout => Some(Message::Blackout { on: !self.playback.blackout_active }),
             Action::Palette { id } => {
                 let values = self.doc.palettes.iter().find(|p| p.id == *id).map(|p| p.values.clone());
@@ -531,6 +610,7 @@ impl Show {
             Action::Blackout => p.blackout_active,
             Action::Strobe => p.strobe_active,
             Action::Stop => p.moment_run.is_none(),
+            Action::Timeline { id } => self.timeline_playing(id),
             Action::Color { group_id: Some(group), color } => p.held_colors.get(group) == color.as_ref(),
             Action::Color { group_id: None, color: None } => p.held_colors.is_empty(),
             Action::Color { group_id: None, color: Some(hex) } => {
@@ -653,11 +733,14 @@ impl Show {
         let colors = &self.doc.colors;
         let held: BTreeMap<String, String> =
             p.held_colors.iter().filter(|(_, hex)| colors.iter().any(|c| c.hex == **hex)).map(|(k, v)| (k.clone(), v.clone())).collect();
+        let timelines = &self.doc.timelines;
+        let timeline = p.timeline.clone().filter(|run| timelines.iter().any(|t| t.id == run.id));
         self.edit(|p| {
             p.running_effect_ids = running;
             p.active_scene_id = scene;
             p.active_moment_id = moment;
             p.held_colors = held;
+            p.timeline = timeline;
         });
         if chase_gone {
             self.stop_chase();
@@ -782,12 +865,130 @@ impl Show {
         }
         self.moment_fade = Some(current);
 
+        // Con la canción sonando, ella dice cuándo cambiar de momento.
+        if self.playback.timeline.as_ref().is_some_and(|run| run.paused_at.is_none()) {
+            return;
+        }
         let index = self.doc.moments.iter().position(|m| m.id == moment.id).unwrap_or(0);
         let next = self.doc.moments.get(index + 1).map(|m| m.id.clone());
         if let (Some(next), Some(seconds)) = (next, moment.duration_sec) {
             if elapsed >= seconds * 1000.0 {
                 self.start_moment(&next, now);
             }
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Línea de tiempo
+    // ------------------------------------------------------------------
+
+    fn timeline_playing(&self, id: &str) -> bool {
+        self.playback.timeline.as_ref().is_some_and(|run| run.id == id && run.paused_at.is_none())
+    }
+
+    /// Desde `from`, las luces quedan como si la canción hubiera sonado desde
+    /// el principio: así se ensaya desde el estribillo.
+    fn play_timeline(&mut self, id: &str, from: f64, now: f64) {
+        let Some(timeline) = self.doc.timelines.iter().find(|t| t.id == id).cloned() else { return };
+        let from = if from.is_finite() { from.clamp(0.0, timeline.end_ms()) } else { 0.0 };
+        self.stop_moment();
+        let started_at = now - from;
+        self.edit(|p| {
+            p.held_colors.clear();
+            p.strobe_active = false;
+            p.blackout_active = false;
+            p.timeline = Some(TimelineRun { id: id.into(), started_at, paused_at: None });
+        });
+        self.timeline_cursor = f64::NEG_INFINITY;
+        self.fire_until(&timeline, started_at, from);
+    }
+
+    fn pause_timeline(&mut self, now: f64) {
+        let Some(run) = self.playback.timeline.clone().filter(|r| r.paused_at.is_none()) else { return };
+        let position = run.position(now);
+        self.end_held_cues(&run.id, position, now);
+        self.edit(|p| {
+            if let Some(run) = p.timeline.as_mut() {
+                run.paused_at = Some(position);
+            }
+        });
+    }
+
+    /// Las luces quedan como están, salvo el estrobo o el apagón que la
+    /// canción tenía puestos por un rato.
+    fn stop_timeline(&mut self, now: f64) {
+        let Some(run) = self.playback.timeline.clone() else { return };
+        if run.paused_at.is_none() {
+            self.end_held_cues(&run.id, run.position(now), now);
+        }
+        self.edit(|p| p.timeline = None);
+    }
+
+    /// Deshace las marcas con duración que están sonando en `position`.
+    fn end_held_cues(&mut self, id: &str, position: f64, now: f64) {
+        let Some(timeline) = self.doc.timelines.iter().find(|t| t.id == id) else { return };
+        let held: Vec<Cue> = timeline
+            .cues
+            .iter()
+            .filter(|c| c.at_ms < position && c.end_ms().is_some_and(|end| end >= position))
+            .cloned()
+            .collect();
+        for cue in held {
+            self.fire(&cue, Edge::End, now);
+        }
+    }
+
+    /// Dispara lo que va de lo ya disparado hasta `to` (sin incluirlo).
+    fn fire_until(&mut self, timeline: &Timeline, started_at: f64, to: f64) {
+        let due: Vec<(f64, Edge, Cue)> = edges(timeline)
+            .into_iter()
+            .filter(|(at, _, _)| *at >= self.timeline_cursor && *at < to)
+            .map(|(at, edge, cue)| (at, edge, cue.clone()))
+            .collect();
+        self.timeline_cursor = to;
+        for (at, edge, cue) in due {
+            self.fire(&cue, edge, started_at + at);
+        }
+    }
+
+    /// `at` es la hora en que tocaba: un momento que se alcanza tarde (al
+    /// empezar desde la mitad) ya llega con su fade hecho.
+    fn fire(&mut self, cue: &Cue, edge: Edge, at: f64) {
+        if edge == Edge::End {
+            match &cue.action {
+                Action::Effect { id } => self.edit(|p| p.running_effect_ids.retain(|e| e != id)),
+                Action::Chase { id } if self.chase.as_ref().is_some_and(|c| c.id == *id) => self.stop_chase(),
+                Action::Blackout => self.edit(|p| p.blackout_active = false),
+                Action::Strobe => self.edit(|p| p.strobe_active = false),
+                Action::Color { group_id, .. } => {
+                    self.act(&Action::Color { group_id: group_id.clone(), color: None }, Some(true), None, at)
+                }
+                _ => {}
+            }
+            return;
+        }
+        let message = match &cue.action {
+            Action::Moment { id } => Message::StartMoment { id: id.clone() },
+            Action::Effect { id } => Message::StartEffect { id: id.clone() },
+            Action::Chase { id } => Message::PlayChase { id: id.clone() },
+            Action::Blackout => Message::Blackout { on: true },
+            Action::Strobe => Message::Strobe { on: true },
+            // Otra línea de tiempo desde una marca se pisaría con esta.
+            Action::Timeline { .. } | Action::Master | Action::GroupFader { .. } | Action::Nothing => return,
+            other => return self.act(other, Some(true), None, at),
+        };
+        let _ = self.apply(message, at);
+    }
+
+    fn tick_timeline(&mut self, now: f64) {
+        let Some(run) = self.playback.timeline.clone().filter(|r| r.paused_at.is_none()) else { return };
+        let Some(timeline) = self.doc.timelines.iter().find(|t| t.id == run.id).cloned() else { return };
+        let position = run.position(now);
+        if position >= timeline.end_ms() {
+            self.fire_until(&timeline, run.started_at, f64::INFINITY);
+            self.edit(|p| p.timeline = None);
+        } else {
+            self.fire_until(&timeline, run.started_at, position);
         }
     }
 
@@ -1064,6 +1265,7 @@ impl Show {
     // ------------------------------------------------------------------
 
     pub fn tick(&mut self, now: f64) {
+        self.tick_timeline(now);
         self.tick_moment(now);
         self.tick_chase(now);
         self.tick_effects(now);
@@ -1094,7 +1296,8 @@ impl Show {
     pub fn changes(&self, since: u64) -> Value {
         // Más adelante que yo: es de un motor anterior.
         let full = since < self.reset_rev || since > self.rev;
-        let mut out = json!({ "rev": self.rev, "full": full });
+        // `now`: la hora del motor, para que la ventana ponga la canción donde va.
+        let mut out = json!({ "rev": self.rev, "full": full, "now": self.last_tick });
         if full {
             out["values"] = json!(self.live);
         } else {
@@ -1145,6 +1348,13 @@ impl Show {
                 .filter(|e| e.group_id.is_some())
                 .map(|e| json!({ "id": e.id, "name": e.name, "running": p.running_effect_ids.contains(&e.id) }))
                 .collect::<Vec<_>>(),
+            "timelines": self
+                .doc
+                .timelines
+                .iter()
+                .map(|t| json!({ "id": t.id, "name": t.name, "durationMs": t.end_ms() }))
+                .collect::<Vec<_>>(),
+            "timeline": p.timeline,
             "colors": {
                 "choices": self.doc.colors.iter().map(|c| json!({ "hex": c.hex, "name": c.name })).collect::<Vec<_>>(),
                 "rows": self

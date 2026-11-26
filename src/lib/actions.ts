@@ -32,7 +32,11 @@ export function actionOptions(rig: Rig): ActionOption[] {
     [{ do: "master" }, "Intensidad general (fader)"],
   ];
   const options: ActionOption[] = fixed.map(([action, label]) => ({ key: actionKey(action), label, group: "Show", action }));
-  const add = (group: string, items: { id: string; name: string }[], kind: "moment" | "scene" | "effect" | "chase" | "palette") => {
+  const add = (
+    group: string,
+    items: { id: string; name: string }[],
+    kind: "moment" | "scene" | "effect" | "chase" | "palette" | "timeline",
+  ) => {
     for (const item of items) {
       const action: Action = { do: kind, id: item.id };
       options.push({ key: actionKey(action), label: item.name, group, action });
@@ -43,6 +47,7 @@ export function actionOptions(rig: Rig): ActionOption[] {
   add("Effects (arranca / detiene)", rig.effects, "effect");
   add("Chases (arranca / detiene)", rig.chases, "chase");
   add("Paletas", rig.palettes, "palette");
+  add("Líneas de tiempo (arranca / detiene)", rig.timelines, "timeline");
   for (const row of [{ id: null, name: "Todas" }, ...colorRows(rig)]) {
     const colors = [...SWATCHES.map((s) => ({ hex: s.hex as string | null, name: s.name })), { hex: null, name: "la del momento" }];
     for (const { hex, name } of colors) {
@@ -86,6 +91,8 @@ export function isActive(action: Action, rig: Rig): boolean {
       return rig.runningEffectIds.includes(action.id);
     case "chase":
       return rig.chase?.id === action.id;
+    case "timeline":
+      return rig.timeline?.id === action.id && rig.timeline.pausedAt === null;
     case "blackout":
       return rig.blackoutActive;
     case "strobe":
