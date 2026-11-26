@@ -110,17 +110,45 @@ describe("Scenes — flujo real de usuario (guardar → cambiar → recuperar)",
   });
 });
 
-describe("Fixture Control — elegir la luz", () => {
-  it("cualquier luz del rig se elige desde el panel (el Dashboard no tiene otra forma)", async () => {
+describe("Fixture Control — elegir las luces", () => {
+  it("se eligen varias tocándolas, y siempre queda al menos una", async () => {
     const user = userEvent.setup();
     setup();
-    const lights = screen.getByRole("group", { name: "Luz a controlar" });
-    const par = within(lights).getByRole("button", { name: "LPC007 PAR #1" });
+    const lights = within(screen.getByRole("group", { name: "Luz a controlar" }));
+    const head = lights.getByRole("button", { name: "BEAM 280 ORUS #1" });
+    const par = lights.getByRole("button", { name: "LPC007 PAR #1" });
+    expect(head).toHaveAttribute("aria-pressed", "true");
     expect(par).toHaveAttribute("aria-pressed", "false");
 
     await user.click(par);
-
+    expect(head).toHaveAttribute("aria-pressed", "true");
     expect(par).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("2 luces")).toBeInTheDocument();
+
+    await user.click(head);
+    expect(head).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByText(/· DMX 33$/)).toBeInTheDocument();
+
+    await user.click(par);
+    expect(par).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("de un toque todas o las de un modelo, y un fader mueve a todas las de su modelo", async () => {
+    const user = userEvent.setup();
+    setup();
+    const sets = within(screen.getByRole("group", { name: "Elegir varias" }));
+    await user.click(sets.getByRole("button", { name: "Todas (6)" }));
+    expect(screen.getByText("6 luces")).toBeInTheDocument();
+
+    const pars = within(screen.getByRole("region", { name: "LPC007 (PAR LED RGB 3in1)" }));
+    fireEvent.change(pars.getAllByRole("spinbutton")[0], { target: { value: "100" } });
+    const lit = Object.values(readDebug().liveValues as Record<string, Record<string, number>>).filter((channels) =>
+      Object.values(channels).includes(100),
+    );
+    expect(lit).toHaveLength(4);
+
+    await user.click(sets.getByRole("button", { name: "280W 3in1 Moving Head (2)" }));
+    expect(screen.getByText("2 luces")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "LPC007 (PAR LED RGB 3in1)" })).toBeNull();
   });
 });

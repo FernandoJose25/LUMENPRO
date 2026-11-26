@@ -1,6 +1,8 @@
-## Novedades de la 0.3.4
+## Novedades de la 0.3.5
 
-**En el Dashboard ya se elige cualquier luz.** Fixture Control tiene arriba una fila con todas tus luces: toca la que quieras controlar. Antes ahí solo se podía la que estaba elegida (las demás se elegían desde Fixtures). También en Scenes.
+**Varias luces a la vez en el Dashboard.** En Fixture Control toca varias luces y lo que cambies (posición, color, dimmer, estrobo, rueda) les llega a todas. Arriba, de un toque: **Todas**, las de un grupo o las de un modelo, para no ir de una en una aunque tengas muchas. Si eliges modelos distintos, cada modelo tiene sus controles, porque un mismo valor no hace lo mismo en una cabeza que en un PAR. También en Scenes.
+
+**De la 0.3.4:** en el Dashboard ya se elige cualquier luz.
 
 **De la 0.3.3:** color fijo para las cabezas (con Estrobo destellan en ese color; la rueda está sin confirmar, revísala con la luz conectada) y el aviso de versión nueva también llega con el programa abierto.
 

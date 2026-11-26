@@ -44,7 +44,10 @@ const PERSIST_EVERY_MS = 1000;
  * mostrarlo (ver lib/engineLink.ts).
  */
 interface FixtureStoreState extends ShowDoc, Playback {
+  /** La primera de las elegidas (la que se muestra si se ve solo una). */
   selectedInstanceId: string | null;
+  /** Las que mueve Fixture Control, todas a la vez. */
+  selectedInstanceIds: string[];
   /** Valores de canal en vivo: instanceId -> channelId -> valor. Blackout,
    *  intensidad y estrobo generales NO los tocan: se aplican en la salida, así
    *  nada puede pisarlos y al quitarlos todo vuelve como estaba. */
@@ -82,7 +85,12 @@ interface FixtureStoreValue extends FixtureStoreState {
   engine: EngineLink;
   selectedInstance: FixtureInstance | null;
   selectedDefinition: FixtureDefinition | null;
+  /** Las elegidas, en el orden del rig. */
+  selectedInstances: FixtureInstance[];
+  /** Elige solo esa. */
   selectInstance: (instanceId: string | null) => void;
+  /** Elige varias a la vez. */
+  selectInstances: (instanceIds: string[]) => void;
   addDefinition: (def: FixtureDefinition) => void;
   updateDefinition: (def: FixtureDefinition) => void;
   removeDefinition: (defId: string) => void;
@@ -210,10 +218,12 @@ function withWheel(definition: FixtureDefinition): FixtureDefinition {
 function restoreState(parsed: Partial<FixtureStoreState>): FixtureStoreState {
   // Migración suave: shows guardados antes de que existieran liveValues/
   // scenes/... no deben romper el load, solo completan con vacío.
+  const selectedInstanceId = parsed.selectedInstanceId ?? seedInstances[0]?.id ?? null;
   return {
     definitions: (parsed.definitions ?? seedDefinitions).map(withWheel),
     instances: parsed.instances ?? seedInstances,
-    selectedInstanceId: parsed.selectedInstanceId ?? seedInstances[0]?.id ?? null,
+    selectedInstanceId,
+    selectedInstanceIds: parsed.selectedInstanceIds ?? (selectedInstanceId ? [selectedInstanceId] : []),
     liveValues: parsed.liveValues ?? {},
     scenes: parsed.scenes ?? [],
     palettes: parsed.palettes ?? [],
@@ -391,9 +401,13 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
     engine.send(resetMessage(stateRef.current));
   }, [engine, setState]);
 
-  const selectInstance = useCallback((instanceId: string | null) => {
-    setState((s) => ({ ...s, selectedInstanceId: instanceId }));
+  const selectInstances = useCallback((instanceIds: string[]) => {
+    setState((s) => ({ ...s, selectedInstanceId: instanceIds[0] ?? null, selectedInstanceIds: instanceIds }));
   }, [setState]);
+  const selectInstance = useCallback(
+    (instanceId: string | null) => selectInstances(instanceId ? [instanceId] : []),
+    [selectInstances],
+  );
 
   const addDefinition = useCallback((def: FixtureDefinition) => {
     setState((s) => ({ ...s, definitions: [...s.definitions, def] }));
@@ -430,6 +444,7 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
       ...s,
       instances: s.instances.filter((i) => i.id !== instanceId),
       selectedInstanceId: s.selectedInstanceId === instanceId ? null : s.selectedInstanceId,
+      selectedInstanceIds: s.selectedInstanceIds.filter((id) => id !== instanceId),
     }));
   }, [setState]);
 
@@ -967,9 +982,13 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
   const stepMoment = useCallback((direction: -1 | 1) => engine.send({ type: "stepMoment", direction }), [engine]);
   const stopMoment = useCallback(() => engine.send({ type: "stopMoment" }), [engine]);
 
+  const selectedInstances = useMemo(
+    () => state.instances.filter((i) => state.selectedInstanceIds.includes(i.id)),
+    [state.instances, state.selectedInstanceIds],
+  );
   const selectedInstance = useMemo(
-    () => state.instances.find((i) => i.id === state.selectedInstanceId) ?? null,
-    [state.instances, state.selectedInstanceId],
+    () => state.instances.find((i) => i.id === state.selectedInstanceId) ?? selectedInstances[0] ?? null,
+    [state.instances, state.selectedInstanceId, selectedInstances],
   );
   const selectedDefinition = useMemo(
     () => state.definitions.find((d) => d.id === selectedInstance?.definitionId) ?? null,
@@ -981,7 +1000,9 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
     engine,
     selectedInstance,
     selectedDefinition,
+    selectedInstances,
     selectInstance,
+    selectInstances,
     addDefinition,
     updateDefinition,
     removeDefinition,
