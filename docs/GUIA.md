@@ -49,7 +49,7 @@ Pruébalos en **Escenario**: abajo hay un botón por momento, los colores y los 
 Para cambiar uno:
 
 - **El color:** en **Momentos**, elige el momento y toca un color en **Color**, para cada grupo (PAR, Cabezas). Si el momento tiene efectos de color, como la ola de colores de la hora loca, esos mandan mientras corren: el aviso te deja quitarlos de ese momento.
-- **La posición:** ve a **Dashboard**, elige una luz, ponla como quieres y en **Scenes** toca ⟳ en la escena de ese momento.
+- **La posición:** ve a **Dashboard**, elige la luz en la fila de nombres de **Fixture Control**, ponla como quieres y en **Scenes** toca ⟳ en la escena de ese momento.
 - **El orden o la duración:** en **Momentos**. Si un momento tiene duración, pasa solo al siguiente cuando se cumple.
 - **Lo que se mueve:** en **Effects**. Hay de dos tipos: uno sube y baja un canal (por ejemplo los colores de los PAR) y el otro hace que las cabezas dibujen una figura (círculo, ocho, línea o abanico) alrededor de donde apuntan.
 - **Más efectos:** en **Effects → + Efectos listos** hay arcoíris, respirar, ola, persecución, destellos, golpe al ritmo, golpe de graves y figuras para las cabezas. Elige el grupo y el efecto: se ve en un escenario chico antes de agregarlo, sin tocar las luces. Después ponlo en un momento marcándolo en **Momentos → Effects**.

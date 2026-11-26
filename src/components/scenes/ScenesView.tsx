@@ -15,7 +15,7 @@ export function ScenesView() {
         <ScenesPanel />
       </div>
       <div className="w-[380px] shrink-0">
-        <FixtureControl />
+        <FixtureControl picker />
       </div>
     </div>
   );

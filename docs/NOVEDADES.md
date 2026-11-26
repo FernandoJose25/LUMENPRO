@@ -1,8 +1,8 @@
-## Novedades de la 0.3.3
+## Novedades de la 0.3.4
 
-**Color fijo para las cabezas.** Las BEAM 280 ya aparecen en Color fijo (en Live, Escenario y el celular): la rueda de colores gira al color más parecido al que elijas. Con Estrobo, destellan en ese color. La rueda es la típica de las beam 280 de 10R y está sin confirmar: revísala con la luz conectada.
+**En el Dashboard ya se elige cualquier luz.** Fixture Control tiene arriba una fila con todas tus luces: toca la que quieras controlar. Antes ahí solo se podía la que estaba elegida (las demás se elegían desde Fixtures). También en Scenes.
 
-**El aviso de versión nueva también llega con el programa abierto.** Antes solo se buscaba al abrirlo; ahora también cada media hora.
+**De la 0.3.3:** color fijo para las cabezas (con Estrobo destellan en ese color; la rueda está sin confirmar, revísala con la luz conectada) y el aviso de versión nueva también llega con el programa abierto.
 
 **De la 0.3.2:** el color fijo dura hasta el próximo momento, un efecto de color prendido a mano le gana, y la voz también prende los PAR ("Solo con música" para los discursos).
 

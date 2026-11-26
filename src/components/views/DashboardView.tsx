@@ -21,7 +21,7 @@ export function DashboardView() {
       <PanelResizeHandle className="w-1 rounded-full bg-transparent transition-colors hover:bg-accent/40 data-[resize-handle-active]:bg-accent" />
 
       <ResizablePanel defaultSize={42} minSize={28}>
-        <FixtureControl />
+        <FixtureControl picker />
       </ResizablePanel>
     </PanelGroup>
   );

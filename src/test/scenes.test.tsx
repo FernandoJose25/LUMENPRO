@@ -17,7 +17,7 @@ function setup() {
   localStorage.clear();
   return render(
     <FixtureStoreProvider>
-      <FixtureControl />
+      <FixtureControl picker />
       <ScenesPanel />
       <Debug />
     </FixtureStoreProvider>,
@@ -107,5 +107,20 @@ describe("Scenes — flujo real de usuario (guardar → cambiar → recuperar)",
     await user.click(screen.getByTitle("Borrar escena"));
     expect(readDebug().scenes).toHaveLength(0);
     expect(screen.queryByRole("button", { name: /Escena A/i })).not.toBeInTheDocument();
+  });
+});
+
+describe("Fixture Control — elegir la luz", () => {
+  it("cualquier luz del rig se elige desde el panel (el Dashboard no tiene otra forma)", async () => {
+    const user = userEvent.setup();
+    setup();
+    const lights = screen.getByRole("group", { name: "Luz a controlar" });
+    const par = within(lights).getByRole("button", { name: "LPC007 PAR #1" });
+    expect(par).toHaveAttribute("aria-pressed", "false");
+
+    await user.click(par);
+
+    expect(par).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText(/· DMX 33$/)).toBeInTheDocument();
   });
 });

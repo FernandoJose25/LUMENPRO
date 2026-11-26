@@ -17,7 +17,7 @@ import { PanTiltPad } from "./PanTiltPad";
  * antes se perdían al cambiar de fixture seleccionado, y Scenes (Fase 4)
  * necesita poder capturarlos y recuperarlos desde un solo lugar.
  */
-export function FixtureControl() {
+export function FixtureControl({ picker = false }: { picker?: boolean }) {
   const {
     selectedInstance,
     selectedDefinition,
@@ -73,6 +73,17 @@ export function FixtureControl() {
       </div>
 
       <div className="flex max-h-[calc(100%-3.5rem)] flex-col gap-2.5 overflow-y-auto scrollbar-thin pr-1">
+        {/* El Dashboard y Scenes no tienen otra forma de cambiar de luz
+            (en Fixtures se elige en la lista). */}
+        {picker && instances.length > 1 ? (
+          <div role="group" aria-label="Luz a controlar" className="flex flex-wrap gap-1.5 pb-1">
+            {instances.map((i) => (
+              <Button key={i.id} size="sm" selected={i.id === selectedInstance.id} onClick={() => selectInstance(i.id)}>
+                {i.label}
+              </Button>
+            ))}
+          </div>
+        ) : null}
         <PanTiltPad instances={[selectedInstance]} />
         <ColorSwatches instances={[selectedInstance]} />
         <PaletteChips instanceIds={[selectedInstance.id]} />
