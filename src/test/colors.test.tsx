@@ -99,7 +99,12 @@ describe("Efectos listos", () => {
     await user.click(screen.getByRole("button", { name: "Effects" }));
     await user.click(screen.getByRole("button", { name: "+ Efectos listos" }));
     await user.selectOptions(screen.getByLabelText("Para"), "PAR");
-    await user.click(screen.getByRole("button", { name: /^Persecución/ }));
+    // Van por tipo de luz: abierto solo el del primero.
+    expect(screen.getByRole("button", { name: /^PAR y luces de color/ })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.queryByRole("button", { name: /^PersecuciónSe encienden/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Cabezas móviles/ })).toBeNull();
+    await user.click(screen.getByRole("button", { name: /^Brillo y estrobo/ }));
+    await user.click(screen.getByRole("button", { name: /^PersecuciónSe encienden/ }));
     await user.click(screen.getByRole("button", { name: "Agregar “PAR: persecución”" }));
     const added = lastDoc(engine).effects.find((fx) => fx.name === "PAR: persecución")!;
     expect(added).toMatchObject({ channelType: "DIMMER", waveform: "square", phaseOffsetDeg: 90 });

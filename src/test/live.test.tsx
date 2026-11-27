@@ -66,6 +66,13 @@ async function createEffect(user: ReturnType<typeof userEvent.setup>, name: stri
   await user.click(screen.getByRole("button", { name: /\+ Nuevo effect/i }));
 }
 
+const liveEffects = () => within(screen.getByText("EFFECTS — LIVE").closest(".rounded-panel") as HTMLElement);
+
+/** En Live los effects van por grupo, cerrados hasta que se abren. */
+async function openLiveGroup(user: ReturnType<typeof userEvent.setup>, name: string) {
+  await user.click(liveEffects().getByRole("button", { name: new RegExp(name), expanded: false }));
+}
+
 describe("LiveView — disparo de escenas, effects, grupos y blackout", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -121,11 +128,43 @@ describe("LiveView — disparo de escenas, effects, grupos y blackout", () => {
     // El botón de Live Mode incluye el prefijo ▶/■, a diferencia del
     // botón de selección de EffectsView (que solo muestra el nombre) —
     // eso evita ambigüedad entre los dos "Effect Test" en pantalla.
+    expect(screen.queryByRole("button", { name: /▶ Effect Test/i })).toBeNull();
+    await openLiveGroup(user, "Grupo Test");
     await user.click(screen.getByRole("button", { name: /▶ Effect Test/i }));
     expect(readDebug().runningEffectIds).toHaveLength(1);
+    // Cerrado, se ve que hay algo prendido y se apaga sin abrirlo.
+    await user.click(liveEffects().getByRole("button", { name: /Grupo Test.*1 prendido/, expanded: true }));
+    expect(liveEffects().queryByRole("button", { name: /■ Effect Test/ })).toBeNull();
+    await user.click(liveEffects().getByRole("button", { name: "■ Apagar" }));
+    expect(readDebug().runningEffectIds).toHaveLength(0);
 
+    await openLiveGroup(user, "Grupo Test");
+    await user.click(screen.getByRole("button", { name: /▶ Effect Test/i }));
     await user.click(screen.getByRole("button", { name: /■ Effect Test/i }));
     expect(readDebug().runningEffectIds).toHaveLength(0);
+  });
+
+  it("la vista previa de un effect en Live no toca las luces y desde ahí se puede prender", async () => {
+    const user = userEvent.setup();
+    localStorage.clear();
+    render(
+      <FixtureStoreProvider>
+        <GroupsView />
+        <EffectsView />
+        <LiveView />
+        <Debug />
+      </FixtureStoreProvider>,
+    );
+    const groupId = await createGroupWithFirstFixture(user, "Grupo Test");
+    await createEffect(user, "Effect Test");
+    await user.selectOptions(screen.getByLabelText("Grupo objetivo"), groupId);
+    await openLiveGroup(user, "Grupo Test");
+    await user.click(screen.getByRole("button", { name: "Vista previa de Effect Test" }));
+    const dialog = screen.getByRole("dialog", { name: "Vista previa: Effect Test" });
+    expect(readDebug().runningEffectIds).toHaveLength(0);
+    await user.click(within(dialog).getByRole("button", { name: "▶ Prender en las luces" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(readDebug().runningEffectIds).toHaveLength(1);
   });
 
   it("mover el fader master de un grupo en Live Mode escribe en liveValues del miembro", async () => {
@@ -174,6 +213,7 @@ describe("LiveView — disparo de escenas, effects, grupos y blackout", () => {
     await createEffect(user, "Effect Test");
     const groupSelect = screen.getByLabelText("Grupo objetivo");
     await user.selectOptions(groupSelect, groupId);
+    await openLiveGroup(user, "Grupo Vacío");
     await user.click(screen.getByRole("button", { name: /▶ Effect Test/i }));
     expect(readDebug().runningEffectIds).toHaveLength(1);
 

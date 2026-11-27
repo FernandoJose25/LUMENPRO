@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { engineDoc, useFixtureStore } from "@/lib/fixtureStore";
 import { PreviewShow } from "@/lib/preview";
 import { HeldColors } from "@/components/live/HeldColors";
+import { EffectGroups } from "@/components/effects/EffectGroups";
 import type { EngineMessage } from "@/types/engine";
 import type { ChannelValues } from "@/lib/fade";
 import { readAxis, writeAxis } from "@/lib/panTilt";
@@ -25,7 +26,8 @@ export function StageView() {
   const playback = preview.show?.playback ?? store;
   const [windowError, setWindowError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const defaults = useMemo(() => defaultPlacements(instances, definitions), [instances, definitions]);
+  const [openEffects, setOpenEffects] = useState<string[]>([]);
+  const defaults =useMemo(() => defaultPlacements(instances, definitions), [instances, definitions]);
   const placementOf = (i: FixtureInstance) => i.placement ?? defaults.get(i.id);
 
   function place(i: FixtureInstance, patch: Partial<Placement>) {
@@ -96,11 +98,17 @@ export function StageView() {
           onPick={(groupId, color) => send({ type: "action", action: { do: "color", groupId, color }, press: true })}
         />
         {effects.some((fx) => fx.groupId) ? (
-          <div className="flex shrink-0 flex-wrap items-center gap-1.5 rounded-panel border border-border bg-panel p-2">
-            <span className="mr-1 text-xs font-medium tracking-wide text-text-secondary">EFECTOS</span>
-            {effects
-              .filter((fx) => fx.groupId)
-              .map((fx) => {
+          <div className="flex max-h-56 shrink-0 flex-col gap-1.5 overflow-y-auto rounded-panel border border-border bg-panel p-2">
+            <span className="text-xs font-medium tracking-wide text-text-secondary">EFECTOS</span>
+            <EffectGroups
+              effects={effects.filter((fx) => fx.groupId)}
+              groups={store.groups}
+              running={playback.runningEffectIds}
+              isOpen={(id) => openEffects.includes(id)}
+              onToggle={(id) => setOpenEffects(openEffects.includes(id) ? openEffects.filter((o) => o !== id) : [...openEffects, id])}
+              itemsClassName="flex flex-wrap gap-1.5 pl-5"
+            >
+              {(fx) => {
                 const running = playback.runningEffectIds.includes(fx.id);
                 return (
                   <Button
@@ -113,7 +121,8 @@ export function StageView() {
                     {fx.name}
                   </Button>
                 );
-              })}
+              }}
+            </EffectGroups>
           </div>
         ) : null}
         <div className="flex shrink-0 items-center gap-3">
@@ -167,14 +176,26 @@ export function StageView() {
             ))}
           </div>
           {selected ? (
-            <PlacementEditor
-              key={selected.id}
-              instance={selected}
-              head={definitions.some((d) => d.id === selected.definitionId && isHead(d))}
-              placement={placementOf(selected)}
-              onPlace={(patch) => place(selected, patch)}
-              onChange={(patch) => updateInstance({ ...selected, ...patch })}
-            />
+            <>
+              {/* Con las luces colgadas: cuál es cuál, para ponerla aquí donde está. */}
+              <Button
+                size="sm"
+                className="mt-3 w-full"
+                selected={store.identifyId === selected.id}
+                title="Enciende 3 segundos la luz de verdad: así sabes cuál es y la pones donde está"
+                onClick={() => store.identify(selected.id)}
+              >
+                Identificar {selected.label}
+              </Button>
+              <PlacementEditor
+                key={selected.id}
+                instance={selected}
+                head={definitions.some((d) => d.id === selected.definitionId && isHead(d))}
+                placement={placementOf(selected)}
+                onPlace={(patch) => place(selected, patch)}
+                onChange={(patch) => updateInstance({ ...selected, ...patch })}
+              />
+            </>
           ) : (
             <p className="mt-3 text-xs text-text-secondary">Elige una luz para ubicarla.</p>
           )}

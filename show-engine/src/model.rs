@@ -426,6 +426,8 @@ pub enum Waveform {
     Sawtooth,
     Triangle,
     Pulse,
+    /// Cada luz prendida o apagada al azar; cambia en cada ciclo.
+    Random,
     #[default]
     #[serde(other)]
     Sine,
@@ -434,12 +436,18 @@ pub enum Waveform {
 impl Waveform {
     /// 0–1. `phase` acumula ciclos: solo importa la parte decimal.
     pub fn level(self, phase: f64) -> f64 {
+        self.level_at(phase, 0)
+    }
+
+    /// Igual, para la luz `index` del grupo (al azar, cada una distinta).
+    pub fn level_at(self, phase: f64, index: usize) -> f64 {
         let p = phase - phase.floor();
         match self {
             Waveform::Square => f64::from(p < 0.5),
             Waveform::Sawtooth => p,
             Waveform::Triangle => 2.0 * p.min(1.0 - p),
             Waveform::Pulse => (1.0 - p) * (1.0 - p),
+            Waveform::Random => f64::from(hash(index as u64, phase.floor() as i64) < 0.5),
             Waveform::Sine => 0.5 + 0.5 * (std::f64::consts::TAU * p).sin(),
         }
     }
@@ -482,6 +490,30 @@ pub enum PixelPattern {
     Meter,
     /// Se llena y se vacía con el color.
     Fill,
+    /// Un punto que va y vuelve, con estela.
+    Bounce,
+    /// Uno sí y uno no, con dos colores que se turnan.
+    Alternate,
+    /// Una mitad de un color y la otra del otro, turnándose (policía).
+    Halves,
+    /// Rojos y naranjas que titilan como llamas.
+    Fire,
+    /// Destellos de colores al azar.
+    Confetti,
+    /// Todos juntos van pasando por los colores.
+    ColorCycle,
+    /// Todos juntos saltan a otro color en cada ciclo.
+    Jump,
+    /// Se abre desde el centro y se cierra.
+    Center,
+    /// Un segmento a la vez, de golpe y sin estela (la "cortadora").
+    Cutter,
+    /// Ráfagas de destellos al azar, como relámpagos.
+    Lightning,
+    /// Todos destellan juntos, un golpe por ciclo.
+    Flash,
+    /// Un color barre la barra y después el otro lo borra.
+    Wipe,
     /// Los colores del arcoíris corren por la barra.
     #[default]
     #[serde(other)]
@@ -490,13 +522,80 @@ pub enum PixelPattern {
 
 impl PixelPattern {
     /// Rojo, verde y azul (0–1) del punto `i` de `n`. `cycles`: vueltas que
-    /// lleva; `level`: lo que suena (0–1), si sigue la música.
-    pub fn color(self, i: usize, n: usize, cycles: f64, level: Option<f64>, color: [f64; 3]) -> [f64; 3] {
+    /// lleva; `level`: lo que suena (0–1), si sigue la música; `color2`: el
+    /// segundo color de los que alternan (negro si no hay).
+    pub fn color(self, i: usize, n: usize, cycles: f64, level: Option<f64>, color: [f64; 3], color2: [f64; 3]) -> [f64; 3] {
         let n = n.max(1);
         let place = i as f64 / n as f64;
         let frac = |x: f64| x - x.floor();
         let scaled = |b: f64| color.map(|c| c * b);
+        // Medio ciclo cada uno.
+        let turn = (cycles * 2.0).floor() as i64;
         match self {
+            PixelPattern::Bounce => {
+                let head = Waveform::Triangle.level(cycles) * (n - 1) as f64;
+                let tail = (n as f64 * 0.25).max(1.0);
+                scaled((1.0 - (i as f64 - head).abs() / tail).max(0.0))
+            }
+            PixelPattern::Alternate => {
+                if (i as i64 + turn).rem_euclid(2) == 0 {
+                    color
+                } else {
+                    color2
+                }
+            }
+            PixelPattern::Halves => {
+                let first = i < n.div_ceil(2);
+                if first == (turn.rem_euclid(2) == 0) {
+                    color
+                } else {
+                    color2
+                }
+            }
+            PixelPattern::Fire => {
+                let steps = cycles * 6.0;
+                let (k, t) = (steps.floor() as i64, frac(steps));
+                let (a, b) = (hash(i as u64, k), hash(i as u64, k + 1));
+                let f = a + (b - a) * t;
+                let bright = 0.45 + 0.55 * f;
+                [bright, bright * (0.12 + 0.5 * f * f), 0.0]
+            }
+            PixelPattern::Confetti => {
+                let steps = cycles * 4.0;
+                let k = steps.floor() as i64;
+                if hash(i as u64, k) < 0.3 {
+                    hsv(hash(i as u64 + 977, k)).map(|c| c * (1.0 - frac(steps)))
+                } else {
+                    [0.0; 3]
+                }
+            }
+            PixelPattern::ColorCycle => hsv(frac(cycles)),
+            // Siete colores bien distintos, nunca dos veces seguidas el mismo.
+            PixelPattern::Jump => hsv((cycles.floor() as i64 * 3).rem_euclid(7) as f64 / 7.0),
+            PixelPattern::Center => {
+                let mid = (n - 1) as f64 / 2.0;
+                let far = if mid > 0.0 { (i as f64 - mid).abs() / mid } else { 0.0 };
+                let open = level.unwrap_or_else(|| Waveform::Triangle.level(cycles));
+                let edge = 1.0 / n as f64;
+                scaled(((open * (1.0 + edge) - far) / edge).clamp(0.0, 1.0))
+            }
+            PixelPattern::Cutter => scaled(f64::from((frac(cycles) * n as f64) as usize == i)),
+            PixelPattern::Lightning => {
+                let burst = hash(4242, turn) < 0.5;
+                let steps = cycles * 12.0;
+                let lit = burst && hash(i as u64, steps.floor() as i64) < 0.6;
+                scaled(if lit { 1.0 - 0.5 * frac(steps) } else { 0.0 })
+            }
+            PixelPattern::Flash => scaled(level.unwrap_or_else(|| f64::from(frac(cycles) < 0.15))),
+            PixelPattern::Wipe => {
+                let half = frac(cycles) * 2.0;
+                let (from, to) = if half < 1.0 { (color2, color) } else { (color, color2) };
+                if (i as f64) < frac(half) * n as f64 {
+                    to
+                } else {
+                    from
+                }
+            }
             PixelPattern::Rainbow => hsv(frac(place + cycles)),
             PixelPattern::Chase => {
                 let head = frac(cycles) * n as f64;
@@ -565,9 +664,23 @@ pub enum Figure {
     Eight,
     Line,
     Fan,
+    Square,
+    Diamond,
+    Triangle,
+    /// Cada cabeza va de un punto al azar a otro, sin parar (ballyhoo).
+    Random,
     #[default]
     #[serde(other)]
     Circle,
+}
+
+/// Recorre las esquinas en orden, a velocidad pareja por lado.
+fn polygon(corners: &[(f64, f64)], phase: f64) -> (f64, f64) {
+    let side = (phase - phase.floor()) * corners.len() as f64;
+    let n = (side as usize).min(corners.len() - 1);
+    let t = side - n as f64;
+    let (a, b) = (corners[n], corners[(n + 1) % corners.len()]);
+    (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t)
 }
 
 impl Figure {
@@ -581,6 +694,21 @@ impl Figure {
             Figure::Line => (a.sin(), 0.0),
             // Se abre y se cierra.
             Figure::Fan => (place * (0.5 - 0.5 * a.cos()), 0.0),
+            // En el sentido del círculo, empezando arriba.
+            Figure::Square => polygon(&[(1.0, 1.0), (1.0, -1.0), (-1.0, -1.0), (-1.0, 1.0)], phase + 0.875),
+            Figure::Diamond => polygon(&[(0.0, 1.0), (1.0, 0.0), (0.0, -1.0), (-1.0, 0.0)], phase),
+            Figure::Triangle => polygon(&[(0.0, 1.0), (0.866, -0.5), (-0.866, -0.5)], phase),
+            Figure::Random => {
+                // Dos puntos por ciclo; cada cabeza los suyos.
+                let seed = ((place + 1.0) * 1000.0).round() as u64;
+                let steps = phase * 2.0;
+                let k = steps.floor() as i64;
+                let t = steps - steps.floor();
+                let t = t * t * (3.0 - 2.0 * t);
+                let at = |k: i64| (2.0 * hash(seed, k) - 1.0, 2.0 * hash(seed + 7919, k) - 1.0);
+                let (from, to) = (at(k), at(k + 1));
+                (from.0 + (to.0 - from.0) * t, from.1 + (to.1 - from.1) * t)
+            }
         }
     }
 }
@@ -615,6 +743,8 @@ pub struct Effect {
     /// Píxeles: qué dibujan y de qué color (los que no son arcoíris).
     pub pattern: PixelPattern,
     pub color: Option<String>,
+    /// Píxeles: el otro color de los que alternan; sin él, apagado.
+    pub color2: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]

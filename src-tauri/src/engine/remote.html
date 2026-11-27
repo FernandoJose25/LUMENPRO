@@ -81,9 +81,13 @@
   .swatches button.on { outline: 3px solid var(--text); outline-offset: 1px; }
   .swatches .moment { grid-column: 1 / -1; min-height: 40px; font-size: 14px; background: var(--panel2); }
   .swatches .moment.on { border-color: var(--accent); color: var(--accent); outline: 0; }
-  #effects { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  #effects { display: flex; flex-direction: column; gap: 10px; }
+  #effects .fx-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  #effects .fx-grid[hidden] { display: none; }
   #effects button { min-height: 48px; font-size: 14px; overflow-wrap: anywhere; }
-  #effects button.on { border-color: var(--accent); color: var(--bg); background: var(--accent); }
+  #effects .fx-head { text-align: left; padding: 0 14px; font-weight: 600; background: var(--panel2); }
+  #effects .fx-head.on { border-color: var(--accent); color: var(--accent); }
+  #effects .fx-grid button.on { border-color: var(--accent); color: var(--bg); background: var(--accent); }
   #specials { display: grid; gap: 10px; }
   #specials .special { display: grid; grid-template-columns: 1fr 1.6fr; gap: 8px; }
   #specials .special.solo { grid-template-columns: 1fr; }
@@ -130,7 +134,7 @@
       <div id="color-rows" class="colors"></div>
     </section>
     <section id="effects-box" class="colors full-only" hidden>
-      <h2>Efectos · tocar para prender o apagar</h2>
+      <h2>Efectos · abre un grupo y toca para prender o apagar</h2>
       <div id="effects"></div>
     </section>
     <div class="bottom">
@@ -431,17 +435,64 @@ function renderColors() {
   });
 }
 
+// Los efectos van por grupo (PAR, Cabezas…), cerrados hasta que se abren.
+// Cada celular recuerda cuáles dejó abiertos.
+const FX_OPEN = "lumenpro.fxOpen";
+const fxOpen = new Set(JSON.parse(localStorage.getItem(FX_OPEN) || "[]"));
+const fxBoxes = new Map();
+
 function renderEffects() {
   const effects = state.effects || [];
   $("effects-box").hidden = effects.length === 0;
   const list = $("effects");
-  while (list.children.length > effects.length) list.lastChild.remove();
-  effects.forEach((fx, i) => {
-    const button = list.children[i] || list.appendChild(document.createElement("button"));
-    button.textContent = fx.name;
-    button.className = fx.running ? "on" : "";
-    button.disabled = !online;
-    button.onclick = () => send({ type: "effect", id: fx.id });
+  const groups = [];
+  for (const fx of effects) {
+    const name = fx.group || "Sin grupo";
+    let group = groups.find((g) => g.name === name);
+    if (!group) groups.push((group = { name, effects: [] }));
+    group.effects.push(fx);
+  }
+  for (const [name, box] of fxBoxes) {
+    if (!groups.some((g) => g.name === name)) {
+      box.root.remove();
+      fxBoxes.delete(name);
+    }
+  }
+  groups.forEach((group, i) => {
+    let box = fxBoxes.get(group.name);
+    if (!box) {
+      const root = document.createElement("div");
+      const head = root.appendChild(document.createElement("button"));
+      const grid = root.appendChild(document.createElement("div"));
+      head.type = "button";
+      grid.className = "fx-grid";
+      head.onclick = () => {
+        if (!fxOpen.delete(group.name)) fxOpen.add(group.name);
+        localStorage.setItem(FX_OPEN, JSON.stringify([...fxOpen]));
+        renderEffects();
+      };
+      box = { root, head, grid };
+      fxBoxes.set(group.name, box);
+    }
+    if (list.children[i] !== box.root) list.insertBefore(box.root, list.children[i] || null);
+    const open = fxOpen.has(group.name);
+    const on = group.effects.filter((fx) => fx.running).length;
+    box.head.textContent = (open ? "▾ " : "▸ ") + group.name + " · " + group.effects.length +
+      (on ? " · " + on + (on === 1 ? " prendido" : " prendidos") : "");
+    box.head.className = "fx-head" + (on ? " on" : "");
+    box.head.setAttribute("aria-expanded", String(open));
+    box.grid.hidden = !open;
+    const grid = box.grid;
+    while (grid.children.length > group.effects.length) grid.lastChild.remove();
+    group.effects.forEach((fx, j) => {
+      const button = grid.children[j] || grid.appendChild(document.createElement("button"));
+      // Sin repetir el grupo: "PAR: ola roja" queda "ola roja".
+      const prefix = group.name.toLowerCase() + ": ";
+      button.textContent = fx.name.toLowerCase().startsWith(prefix) ? fx.name.slice(prefix.length) : fx.name;
+      button.className = fx.running ? "on" : "";
+      button.disabled = !online;
+      button.onclick = () => send({ type: "effect", id: fx.id });
+    });
   });
 }
 

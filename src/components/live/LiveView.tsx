@@ -14,6 +14,9 @@ import { LiveMoments } from "./LiveMoments";
 import { HeldColors } from "./HeldColors";
 import { Specials } from "./Specials";
 import { CHANNEL_TYPE_LABELS, type ChannelType } from "@/types/fixture";
+import { EffectGroups } from "@/components/effects/EffectGroups";
+import { EffectPreviewDialog } from "@/components/effects/EffectPreview";
+import { readSetting, writeSetting } from "@/lib/settings";
 
 /**
  * Live Mode (pendiente del roadmap — ver LUMENPRO-que-sigue.md) — pantalla
@@ -254,32 +257,70 @@ function LiveEffects({
   effects: ReturnType<typeof useFixtureStore>["effects"];
   runningEffectIds: string[];
 }) {
-  const { startEffect, stopEffect } = useFixtureStore();
+  const { groups, startEffect, stopEffect } = useFixtureStore();
+  // Cerrados hasta que se abren; cada PC recuerda cuáles dejó abiertos.
+  const [open, setOpen] = useState<string[]>(() => readSetting<string[]>("live.effectGroups") ?? []);
+  const [previewing, setPreviewing] = useState<string | null>(null);
+  const preview = effects.find((fx) => fx.id === previewing);
+
+  function toggle(id: string) {
+    const next = open.includes(id) ? open.filter((o) => o !== id) : [...open, id];
+    setOpen(next);
+    writeSetting("live.effectGroups", next);
+  }
 
   return (
     <Panel title="EFFECTS — LIVE" className="h-full">
       {effects.length === 0 ? (
         <p className="text-xs text-text-secondary">No hay effects todavía — créalos en Effects.</p>
       ) : (
-        <div className="flex flex-wrap content-start gap-2">
-          {effects.map((fx) => {
+        <EffectGroups
+          effects={effects}
+          groups={groups}
+          running={runningEffectIds}
+          isOpen={(id) => open.includes(id)}
+          onToggle={toggle}
+          onStopAll={(ids) => ids.forEach(stopEffect)}
+          itemsClassName="flex flex-wrap content-start gap-2 pl-5"
+        >
+          {(fx) => {
             const isRunning = runningEffectIds.includes(fx.id);
             return (
-              <Button
-                key={fx.id}
-                size="lg"
-                variant={isRunning ? "danger" : "secondary"}
-                disabled={!fx.groupId}
-                title={!fx.groupId ? "Sin grupo objetivo asignado" : undefined}
-                onClick={() => (isRunning ? stopEffect(fx.id) : startEffect(fx.id))}
-              >
-                {isRunning ? "■ " : "▶ "}
-                {fx.name}
-              </Button>
+              <span key={fx.id} className="flex items-stretch">
+                <Button
+                  size="lg"
+                  variant={isRunning ? "danger" : "secondary"}
+                  disabled={!fx.groupId}
+                  title={!fx.groupId ? "Sin grupo objetivo asignado" : undefined}
+                  onClick={() => (isRunning ? stopEffect(fx.id) : startEffect(fx.id))}
+                  className="rounded-r-none"
+                >
+                  {isRunning ? "■ " : "▶ "}
+                  {fx.name}
+                </Button>
+                <Button
+                  size="lg"
+                  variant="ghost"
+                  disabled={!fx.groupId}
+                  aria-label={`Vista previa de ${fx.name}`}
+                  title="Ver cómo es, sin tocar las luces"
+                  onClick={() => setPreviewing(fx.id)}
+                  className="rounded-l-none border-l-0 px-2"
+                >
+                  👁
+                </Button>
+              </span>
             );
-          })}
-        </div>
+          }}
+        </EffectGroups>
       )}
+      {preview ? (
+        <EffectPreviewDialog
+          effect={preview}
+          onClose={() => setPreviewing(null)}
+          onStart={runningEffectIds.includes(preview.id) ? undefined : () => startEffect(preview.id)}
+        />
+      ) : null}
     </Panel>
   );
 }

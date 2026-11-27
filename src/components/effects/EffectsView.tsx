@@ -14,8 +14,10 @@ import {
   type WaveformType,
 } from "@/types/effect";
 import { CHANNEL_TYPE_LABELS, type ChannelType } from "@/types/fixture";
-import { PIXEL_LABELS, type PixelPattern } from "@/types/effect";
+import { PIXEL_LABELS, PIXEL_USES_COLOR, PIXEL_USES_COLOR2, type PixelPattern } from "@/types/effect";
 import { EffectPresets } from "./EffectPresets";
+import { EffectGroups } from "./EffectGroups";
+import { EffectPreviewDialog } from "./EffectPreview";
 import { factoryEffect } from "@/lib/factory";
 
 const WAVEFORMS = Object.keys(WAVEFORM_LABELS) as WaveformType[];
@@ -25,7 +27,16 @@ const FIGURES = Object.keys(FIGURE_LABELS) as FigureType[];
 
 const fieldClass = "h-9 rounded-control border border-border bg-panel2 px-2 text-text-primary outline-none";
 
-/** El mismo cálculo que show-engine (Figure::at), para dibujarla. */
+function polygon(corners: [number, number][], phase: number): [number, number] {
+  const side = (phase - Math.floor(phase)) * corners.length;
+  const n = Math.min(Math.floor(side), corners.length - 1);
+  const t = side - n;
+  const [a, b] = [corners[n], corners[(n + 1) % corners.length]];
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+}
+
+/** El mismo cálculo que show-engine (Figure::at), para dibujarla. "Al azar"
+ *  solo se parece: el motor usa su propio sorteo. */
 function figureAt(figure: FigureType, phase: number, place: number): [number, number] {
   const a = 2 * Math.PI * (phase - Math.floor(phase));
   switch (figure) {
@@ -35,6 +46,22 @@ function figureAt(figure: FigureType, phase: number, place: number): [number, nu
       return [Math.sin(a), 0];
     case "fan":
       return [place * (0.5 - 0.5 * Math.cos(a)), 0];
+    case "square":
+      return polygon([[1, 1], [1, -1], [-1, -1], [-1, 1]], phase + 0.875);
+    case "diamond":
+      return polygon([[0, 1], [1, 0], [0, -1], [-1, 0]], phase);
+    case "triangle":
+      return polygon([[0, 1], [0.866, -0.5], [-0.866, -0.5]], phase);
+    case "random": {
+      const steps = phase * 2;
+      const k = Math.floor(steps);
+      const t = (steps - k) * (steps - k) * (3 - 2 * (steps - k));
+      const rand = (k: number, axis: number) => {
+        const x = Math.sin((k + 1) * 12.9898 + (place + 2) * 78.233 + axis * 37.719) * 43758.5453;
+        return 2 * (x - Math.floor(x)) - 1;
+      };
+      return [0, 1].map((axis) => rand(k, axis) + (rand(k + 1, axis) - rand(k, axis)) * t) as [number, number];
+    }
     default:
       return [Math.sin(a), Math.cos(a)];
   }
@@ -44,9 +71,11 @@ function figureAt(figure: FigureType, phase: number, place: number): [number, nu
 function FigurePreview({ effect, heads }: { effect: Effect; heads: number }) {
   const count = Math.max(1, Math.min(heads, 8));
   const [sin, cos] = [Math.sin((effect.angleDeg * Math.PI) / 180), Math.cos((effect.angleDeg * Math.PI) / 180)];
+  // Al azar, unas vueltas: en una sola apenas se ve el recorrido.
+  const turns = effect.figure === "random" ? 4 : 1;
   const paths = Array.from({ length: count }, (_, h) => {
     const place = count > 1 ? (2 * h) / (count - 1) - 1 : 0;
-    const steps = effect.figure === "fan" ? [0.5] : Array.from({ length: 65 }, (_, i) => i / 64);
+    const steps = effect.figure === "fan" ? [0.5] : Array.from({ length: 64 * turns + 1 }, (_, i) => i / 64);
     if (effect.figure === "fan") {
       const [x] = figureAt("fan", 0.5, place);
       return `M50,50 L${50 + 40 * x * cos},${50 - 40 * x * sin}`;
@@ -77,8 +106,10 @@ function FigurePreview({ effect, heads }: { effect: Effect; heads: number }) {
  * start/stop.
  */
 export function EffectsView() {
-  const { effects, groups, addEffect, renameEffect, removeEffect } = useFixtureStore();
+  const { effects, groups, runningEffectIds, addEffect, renameEffect, removeEffect } = useFixtureStore();
   const [selectedEffectId, setSelectedEffectId] = useState<string | null>(effects[0]?.id ?? null);
+  // Aquí se edita: todos abiertos, se cierran con su botón.
+  const [closed, setClosed] = useState<Set<string>>(new Set());
   const [inPresets, setInPresets] = useState(effects.length === 0);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [draftName, setDraftName] = useState("");
@@ -117,8 +148,18 @@ export function EffectsView() {
               <span className="text-text-primary">Groups</span>.
             </p>
           ) : null}
-          <div className="flex flex-col gap-1.5">
-            {effects.map((fx) => {
+          <EffectGroups
+            effects={effects}
+            groups={groups}
+            running={runningEffectIds}
+            isOpen={(id) => !closed.has(id)}
+            onToggle={(id) => {
+              const next = new Set(closed);
+              if (!next.delete(id)) next.add(id);
+              setClosed(next);
+            }}
+          >
+            {(fx) => {
               const isSelected = fx.id === selectedEffectId;
               const isRenaming = renamingId === fx.id;
 
@@ -157,7 +198,13 @@ export function EffectsView() {
                     )}
                   >
                     <span className="truncate">{fx.name}</span>
-                    <span className="text-[10px] text-text-secondary">{fx.kind === "figure" ? FIGURE_LABELS[fx.figure] : WAVEFORM_LABELS[fx.waveform]}</span>
+                    <span className="shrink-0 pl-1 text-[10px] text-text-secondary">
+                      {fx.kind === "figure"
+                        ? FIGURE_LABELS[fx.figure]
+                        : fx.kind === "pixels"
+                          ? "Píxeles"
+                          : WAVEFORM_LABELS[fx.waveform].split(" (")[0]}
+                    </span>
                   </button>
                   <button
                     type="button"
@@ -172,8 +219,8 @@ export function EffectsView() {
                   </button>
                 </div>
               );
-            })}
-          </div>
+            }}
+          </EffectGroups>
           <Button size="md" variant="primary" className="mt-2 w-full" onClick={() => setInPresets(true)}>
             + Efectos listos
           </Button>
@@ -203,6 +250,7 @@ function EffectEditor({ effectId }: { effectId: string | null }) {
   const store = useFixtureStore();
   const { effects, groups, instances, runningEffectIds, updateEffect, startEffect, stopEffect } = store;
   const effect = effects.find((e) => e.id === effectId) ?? null;
+  const [previewing, setPreviewing] = useState(false);
 
   if (!effect) {
     return (
@@ -228,6 +276,16 @@ function EffectEditor({ effectId }: { effectId: string | null }) {
         >
           {isRunning ? "■ Detener" : "▶ Reproducir"}
         </Button>
+        <Button size="md" disabled={!effect.groupId} onClick={() => setPreviewing(true)}>
+          Vista previa
+        </Button>
+        {previewing ? (
+          <EffectPreviewDialog
+            effect={effect}
+            onClose={() => setPreviewing(false)}
+            onStart={isRunning ? undefined : () => startEffect(effect.id)}
+          />
+        ) : null}
         {!effect.groupId ? (
           <span className="text-[11px] text-text-secondary">Asigna un grupo para poder reproducir.</span>
         ) : null}
@@ -328,16 +386,35 @@ function EffectEditor({ effectId }: { effectId: string | null }) {
                 ))}
               </select>
             </label>
-            <label className={cn("flex flex-col gap-1", ["rainbow", "meter"].includes(effect.pattern ?? "rainbow") && "hidden")}>
-              <span className="text-text-secondary">Color</span>
-              <input
-                type="color"
-                aria-label="Color de los puntos"
-                value={effect.color ?? "#ffffff"}
-                onChange={(e) => updateEffect(effect.id, { color: e.target.value })}
-                className="h-9 w-20 cursor-pointer rounded-control border border-border bg-panel2"
-              />
-            </label>
+            <div className="flex gap-4">
+              <label className={cn("flex flex-col gap-1", !PIXEL_USES_COLOR.includes(effect.pattern ?? "rainbow") && "hidden")}>
+                <span className="text-text-secondary">Color</span>
+                <input
+                  type="color"
+                  aria-label="Color de los puntos"
+                  value={effect.color ?? "#ffffff"}
+                  onChange={(e) => updateEffect(effect.id, { color: e.target.value })}
+                  className="h-9 w-20 cursor-pointer rounded-control border border-border bg-panel2"
+                />
+              </label>
+              <label className={cn("flex flex-col gap-1", !PIXEL_USES_COLOR2.includes(effect.pattern ?? "rainbow") && "hidden")}>
+                <span className="text-text-secondary">Segundo color</span>
+                <span className="flex items-center gap-1">
+                  <input
+                    type="color"
+                    aria-label="Segundo color"
+                    value={effect.color2 ?? "#000000"}
+                    onChange={(e) => updateEffect(effect.id, { color2: e.target.value })}
+                    className="h-9 w-20 cursor-pointer rounded-control border border-border bg-panel2"
+                  />
+                  {effect.color2 ? (
+                    <Button size="sm" variant="ghost" title="Sin segundo color: apagado" onClick={() => updateEffect(effect.id, { color2: null })}>
+                      Apagado
+                    </Button>
+                  ) : null}
+                </span>
+              </label>
+            </div>
           </>
         ) : null}
 

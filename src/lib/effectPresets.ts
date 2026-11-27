@@ -1,4 +1,4 @@
-import type { Effect } from "@/types/effect";
+import type { Effect, PixelPattern } from "@/types/effect";
 import type { ChannelType, FixtureDefinition, FixtureInstance } from "@/types/fixture";
 import type { Group } from "@/types/group";
 
@@ -19,16 +19,30 @@ const BASE: Omit<EffectDraft, "name" | "groupId"> = {
   beatsPerCycle: 1,
 };
 
+/** Por tipo de luz, para no tenerlos todos juntos. */
+export type EffectCategory = "color" | "dimmer" | "move" | "pixels" | "strobe";
+
+export const EFFECT_CATEGORIES: { id: EffectCategory; name: string }[] = [
+  { id: "move", name: "Cabezas móviles y beam" },
+  { id: "pixels", name: "Barras y tiras de LEDs" },
+  { id: "strobe", name: "Estrobos LED tipo Stormy (cortadora)" },
+  { id: "color", name: "PAR y luces de color" },
+  { id: "dimmer", name: "Brillo y estrobo (cualquier luz)" },
+];
+
 export interface EffectPreset {
   name: string;
   text: string;
-  /** Lo que tienen que tener las luces del grupo para que se note. */
-  needs: ChannelType;
-  /** Solo para barras o tiras de varios puntos. */
+  category: EffectCategory;
+  /** Alguna luz del grupo tiene que tener uno de estos canales para que se note. */
+  needs: ChannelType[];
+  /** Solo para barras, tiras o estrobos de varios segmentos. */
   pixels?: boolean;
   /** Uno por canal: un arcoíris son tres. */
   parts: { name: string; patch: Partial<EffectDraft> }[];
 }
+
+type Entry = [name: string, text: string, patch: Partial<EffectDraft>];
 
 const one = (patch: Partial<EffectDraft>) => [{ name: "", patch }];
 const figure = (patch: Partial<EffectDraft>): Partial<EffectDraft> => ({
@@ -37,42 +51,25 @@ const figure = (patch: Partial<EffectDraft>): Partial<EffectDraft> => ({
   phaseOffsetDeg: 180,
   ...patch,
 });
+const pixels = (pattern: PixelPattern, patch: Partial<EffectDraft> = {}): Partial<EffectDraft> => ({
+  kind: "pixels",
+  channelType: "RED",
+  speedCpm: 30,
+  pattern,
+  ...patch,
+});
+const beat = (beatsPerCycle: number): Partial<EffectDraft> => ({ source: "beat", beatsPerCycle });
 
-const pixels = (patch: Partial<EffectDraft>) => one({ kind: "pixels", channelType: "RED", speedCpm: 30, ...patch });
+function list(category: EffectCategory, needs: ChannelType[], entries: Entry[], extra: Partial<EffectPreset> = {}) {
+  return entries.map(([name, text, patch]): EffectPreset => ({ name, text, category, needs, parts: one(patch), ...extra }));
+}
 
-export const EFFECT_PRESETS: EffectPreset[] = [
-  {
-    name: "Píxeles: arcoíris que corre",
-    text: "Los colores del arcoíris corren a lo largo de la barra o la tira.",
-    needs: "RED",
-    pixels: true,
-    parts: pixels({ pattern: "rainbow" }),
-  },
-  {
-    name: "Píxeles: punto que corre",
-    text: "Un punto de color recorre la barra dejando estela, al ritmo.",
-    needs: "RED",
-    pixels: true,
-    parts: pixels({ pattern: "chase", color: "#ff00ff", source: "beat", beatsPerCycle: 4 }),
-  },
-  {
-    name: "Píxeles: destellos",
-    text: "Puntos blancos que destellan al azar, como brillitos.",
-    needs: "RED",
-    pixels: true,
-    parts: pixels({ pattern: "sparkle", color: "#ffffff", speedCpm: 40 }),
-  },
-  {
-    name: "Píxeles: vúmetro",
-    text: "La barra se llena con los graves: verde abajo, rojo arriba.",
-    needs: "RED",
-    pixels: true,
-    parts: pixels({ pattern: "meter", source: "bass" }),
-  },
+const COLOR: EffectPreset[] = [
   {
     name: "Arcoíris",
     text: "Los colores van y vienen solos, cada luz a su tiempo.",
-    needs: "RED",
+    category: "color",
+    needs: ["RED"],
     parts: [
       { name: "rojo", patch: { channelType: "RED", speedCpm: 30, phaseOffsetDeg: 90 } },
       { name: "verde", patch: { channelType: "GREEN", speedCpm: 37, phaseOffsetDeg: 90 } },
@@ -82,80 +79,108 @@ export const EFFECT_PRESETS: EffectPreset[] = [
   {
     name: "Arcoíris al ritmo",
     text: "Igual, pero siguiendo los golpes de la música.",
-    needs: "RED",
+    category: "color",
+    needs: ["RED"],
     parts: [
-      { name: "rojo", patch: { channelType: "RED", phaseOffsetDeg: 90, source: "beat", beatsPerCycle: 4 } },
-      { name: "verde", patch: { channelType: "GREEN", phaseOffsetDeg: 90, source: "beat", beatsPerCycle: 6 } },
-      { name: "azul", patch: { channelType: "BLUE", phaseOffsetDeg: 90, source: "beat", beatsPerCycle: 8 } },
+      { name: "rojo", patch: { channelType: "RED", phaseOffsetDeg: 90, ...beat(4) } },
+      { name: "verde", patch: { channelType: "GREEN", phaseOffsetDeg: 90, ...beat(6) } },
+      { name: "azul", patch: { channelType: "BLUE", phaseOffsetDeg: 90, ...beat(8) } },
     ],
   },
-  {
-    name: "Respirar",
-    text: "Suben y bajan despacio, todas juntas. Para el vals o la entrada.",
-    needs: "DIMMER",
-    parts: one({ speedCpm: 10, min: 40 }),
-  },
-  {
-    name: "Ola",
-    text: "Una ola de luz que recorre el grupo.",
-    needs: "DIMMER",
-    parts: one({ speedCpm: 30, phaseOffsetDeg: 90 }),
-  },
-  {
-    name: "Persecución",
-    text: "Se encienden de a una, en fila.",
-    needs: "DIMMER",
-    parts: one({ waveform: "square", speedCpm: 60, phaseOffsetDeg: 90 }),
-  },
-  {
-    name: "Destellos",
-    text: "Fogonazos cortos, salteados.",
-    needs: "DIMMER",
-    parts: one({ waveform: "pulse", speedCpm: 90, phaseOffsetDeg: 137 }),
-  },
-  {
-    name: "Golpe al ritmo",
-    text: "Un fogonazo en cada golpe de la música; entre golpes, a oscuras.",
-    needs: "DIMMER",
-    parts: one({ waveform: "pulse", source: "beat", beatsPerCycle: 1 }),
-  },
-  {
-    name: "Golpe de graves",
-    text: "Brillan con los bajos de la música; sin música, apagadas.",
-    needs: "DIMMER",
-    parts: one({ waveform: "pulse", source: "bass" }),
-  },
-  {
-    name: "Círculo",
-    text: "Las cabezas dibujan un círculo lento donde estén apuntando.",
-    needs: "PAN",
-    parts: one(figure({ figure: "circle", sizeDeg: 15, speedCpm: 10 })),
-  },
-  {
-    name: "Ocho",
-    text: "Un ocho rápido, en espejo. Para la hora loca.",
-    needs: "PAN",
-    parts: one(figure({ figure: "eight", sizeDeg: 30, speedCpm: 18 })),
-  },
-  {
-    name: "Barrido",
-    text: "Van de un lado al otro.",
-    needs: "PAN",
-    parts: one(figure({ figure: "line", sizeDeg: 35, speedCpm: 15 })),
-  },
-  {
-    name: "Abanico",
-    text: "Se abren y se cierran como un abanico.",
-    needs: "PAN",
-    parts: one(figure({ figure: "fan", sizeDeg: 40, speedCpm: 12, phaseOffsetDeg: 0 })),
-  },
-  {
-    name: "Ocho al ritmo",
-    text: "El ocho, siguiendo los golpes de la música.",
-    needs: "PAN",
-    parts: one(figure({ figure: "eight", sizeDeg: 30, source: "beat", beatsPerCycle: 8 })),
-  },
+  ...list("color", ["RED"], [
+    ["Colores que corren", "Cada luz con un color del arcoíris, y los colores pasan de una a la otra.", pixels("rainbow", { speedCpm: 20 })],
+    ["Todos cambian de color", "Todas juntas pasan suave por todos los colores.", pixels("colorCycle", { speedCpm: 12 })],
+    ["Salto de color", "Todas juntas saltan a otro color cada dos segundos.", pixels("jump")],
+    ["Salto de color al ritmo", "Cada dos golpes de la música, todas a otro color. Para la hora loca.", pixels("jump", beat(2))],
+    ["Policía", "Mitad rojo y mitad azul, turnándose rápido.", pixels("halves", { color: "#ff0000", color2: "#0000ff", speedCpm: 60 })],
+    ["Dos colores alternados", "Uno sí y uno no: fucsia y celeste se turnan con el ritmo.", pixels("alternate", { color: "#ff00ff", color2: "#00ffff", ...beat(2) })],
+    ["Rosa y dorado", "Rosado y dorado turnándose despacio. Para la entrada de la quinceañera.", pixels("alternate", { color: "#ff2a8a", color2: "#ffaa00", speedCpm: 8 })],
+    ["Hielo", "Azul y blanco, despacio. Para el vals.", pixels("alternate", { color: "#0040ff", color2: "#ffffff", speedCpm: 10 })],
+    ["Fuego", "Rojos y naranjas que titilan como llamas.", pixels("fire")],
+    ["Confeti de colores", "Destellos de colores al azar.", pixels("confetti")],
+    ["Persecución de color", "Un color que salta de luz en luz.", pixels("chase", { color: "#00ffff", speedCpm: 40 })],
+    ["Ida y vuelta", "Un color que va y vuelve por la fila de luces, al ritmo.", pixels("bounce", { color: "#ff00ff", ...beat(4) })],
+    ["Barrido de color", "El naranja barre las luces y el morado lo tapa.", pixels("wipe", { color: "#ff8800", color2: "#8000ff", speedCpm: 15 })],
+    ["Rojo con los graves", "El rojo late con los bajos de la música; sin música, apagado.", { channelType: "RED", waveform: "pulse", source: "bass" }],
+  ]),
 ];
+
+const DIMMER: EffectPreset[] = list("dimmer", ["DIMMER"], [
+  ["Respirar", "Suben y bajan despacio, todas juntas. Para el vals o la entrada.", { speedCpm: 10, min: 40 }],
+  ["Ola", "Una ola de luz que recorre el grupo.", { speedCpm: 30, phaseOffsetDeg: 90 }],
+  ["Ola rápida", "La misma ola, al doble y más apretada.", { speedCpm: 90, phaseOffsetDeg: 60 }],
+  ["Persecución", "Se encienden de a una, en fila.", { waveform: "square", speedCpm: 60, phaseOffsetDeg: 90 }],
+  ["Escalera", "Suben de a poco y se apagan de golpe, una tras otra.", { waveform: "sawtooth", speedCpm: 30, phaseOffsetDeg: 45 }],
+  ["Rebote", "La luz va y vuelve por la fila.", { waveform: "triangle", speedCpm: 40, phaseOffsetDeg: 90 }],
+  ["Destellos", "Fogonazos cortos, salteados.", { waveform: "pulse", speedCpm: 90, phaseOffsetDeg: 137 }],
+  ["Al azar", "Cada luz se prende o se apaga por su cuenta.", { waveform: "random", speedCpm: 60 }],
+  ["Al azar al ritmo", "Igual, cambiando en cada golpe de la música.", { waveform: "random", ...beat(1) }],
+  ["Latido", "Late como un corazón, todas juntas.", { waveform: "pulse", speedCpm: 70, min: 30 }],
+  ["Estrobo", "Parpadeo rápido de todas juntas.", { waveform: "square", speedCpm: 480 }],
+  ["Estrobo al ritmo", "Dos fogonazos por cada golpe de la música.", { waveform: "pulse", ...beat(0.5) }],
+  ["Golpe al ritmo", "Un fogonazo en cada golpe de la música; entre golpes, a oscuras.", { waveform: "pulse", ...beat(1) }],
+  ["Golpe de graves", "Brillan con los bajos de la música; sin música, apagadas.", { waveform: "pulse", source: "bass" }],
+  ["Brillo con los agudos", "Brillan con los platillos y las voces agudas.", { waveform: "pulse", source: "treble" }],
+]);
+
+const MOVE: EffectPreset[] = list("move", ["PAN"], [
+  ["Círculo", "Las cabezas dibujan un círculo lento donde estén apuntando.", figure({ figure: "circle", sizeDeg: 15, speedCpm: 10 })],
+  ["Círculo grande", "Un círculo amplio, cada cabeza a destiempo.", figure({ figure: "circle", sizeDeg: 40, speedCpm: 12, phaseOffsetDeg: 90 })],
+  ["Remolino", "Círculos chicos y rápidos.", figure({ figure: "circle", sizeDeg: 12, speedCpm: 40, phaseOffsetDeg: 90 })],
+  ["Círculo al ritmo", "El círculo, una vuelta cada cuatro golpes.", figure({ figure: "circle", sizeDeg: 20, ...beat(4) })],
+  ["Ocho", "Un ocho rápido, en espejo. Para la hora loca.", figure({ figure: "eight", sizeDeg: 30, speedCpm: 18 })],
+  ["Ocho al ritmo", "El ocho, siguiendo los golpes de la música.", figure({ figure: "eight", sizeDeg: 30, ...beat(8) })],
+  ["Barrido", "Van de un lado al otro.", figure({ figure: "line", sizeDeg: 35, speedCpm: 15 })],
+  ["Tijeras", "Se cruzan como tijeras: una para un lado y la otra para el otro. Ideal con beams y humo.", figure({ figure: "line", sizeDeg: 40, speedCpm: 20 })],
+  ["Tijeras al ritmo", "Las tijeras, un cruce cada dos golpes.", figure({ figure: "line", sizeDeg: 40, ...beat(2) })],
+  ["Ola horizontal", "De un lado al otro, una tras otra, como una ola.", figure({ figure: "line", sizeDeg: 30, speedCpm: 15, phaseOffsetDeg: 60 })],
+  ["Ola vertical", "Suben y bajan una tras otra.", figure({ figure: "line", angleDeg: 90, sizeDeg: 25, speedCpm: 15, phaseOffsetDeg: 60 })],
+  ["Péndulo", "Todas suben y bajan juntas, despacio.", figure({ figure: "line", angleDeg: 90, sizeDeg: 30, speedCpm: 12, phaseOffsetDeg: 0 })],
+  ["Abanico", "Se abren y se cierran como un abanico.", figure({ figure: "fan", sizeDeg: 40, speedCpm: 12, phaseOffsetDeg: 0 })],
+  ["Abanico al ritmo", "El abanico se abre y se cierra cada cuatro golpes.", figure({ figure: "fan", sizeDeg: 40, phaseOffsetDeg: 0, ...beat(4) })],
+  ["Cuadrado", "Dibujan un cuadrado.", figure({ figure: "square", sizeDeg: 20, speedCpm: 10 })],
+  ["Rombo", "Dibujan un rombo, en espejo.", figure({ figure: "diamond", sizeDeg: 25, speedCpm: 12 })],
+  ["Triángulo", "Dibujan un triángulo.", figure({ figure: "triangle", sizeDeg: 20, speedCpm: 12 })],
+  ["Ballyhoo", "Cada cabeza barre el salón por su cuenta, sin parar. El clásico de discoteca.", figure({ figure: "random", sizeDeg: 35, speedCpm: 20, phaseOffsetDeg: 0 })],
+  ["Ballyhoo con los graves", "El ballyhoo, más grande mientras más suenan los bajos.", figure({ figure: "random", sizeDeg: 40, speedCpm: 20, phaseOffsetDeg: 0, source: "bass" })],
+]);
+
+const PIXELS: EffectPreset[] = list(
+  "pixels",
+  ["RED"],
+  [
+    ["Píxeles: arcoíris que corre", "Los colores del arcoíris corren a lo largo de la barra o la tira.", pixels("rainbow")],
+    ["Píxeles: punto que corre", "Un punto de color recorre la barra dejando estela, al ritmo.", pixels("chase", { color: "#ff00ff", ...beat(4) })],
+    ["Píxeles: destellos", "Puntos blancos que destellan al azar, como brillitos.", pixels("sparkle", { color: "#ffffff", speedCpm: 40 })],
+    ["Píxeles: vúmetro", "La barra se llena con los graves: verde abajo, rojo arriba.", pixels("meter", { source: "bass" })],
+    ["Píxeles: auto fantástico", "Un punto rojo que va y vuelve.", pixels("bounce", { color: "#ff0000" })],
+    ["Píxeles: se abre desde el centro", "Se abre desde el medio hacia las puntas y se cierra.", pixels("center", { color: "#00aaff" })],
+    ["Píxeles: centro con los graves", "Se abre desde el medio con los bajos de la música.", pixels("center", { color: "#ff00ff", source: "bass" })],
+    ["Píxeles: se llena y se vacía", "Se llena de color de una punta a la otra y se vacía.", pixels("fill", { color: "#ffaa00" })],
+  ],
+  { pixels: true },
+);
+
+// Sirven para cualquier luz de varios segmentos, también los de solo blanco.
+const STROBE: EffectPreset[] = list(
+  "strobe",
+  ["RED", "WHITE", "DIMMER"],
+  [
+    ["Cortadora", "Un segmento a la vez, de lado a lado y de golpe. El efecto clásico del Stormy.", pixels("cutter", { color: "#ffffff", speedCpm: 60 })],
+    ["Cortadora al ritmo", "Una pasada completa en cada golpe de la música.", pixels("cutter", { color: "#ffffff", ...beat(1) })],
+    ["Cortadora en color", "La cortadora en celeste.", pixels("cutter", { color: "#00aaff", speedCpm: 60 })],
+    ["Cortadora de ida y vuelta", "Va y vuelve rápido de punta a punta.", pixels("bounce", { color: "#ffffff", speedCpm: 90 })],
+    ["Relámpagos", "Ráfagas de destellos al azar, como una tormenta.", pixels("lightning", { color: "#ffffff" })],
+    ["Flash al golpe", "Todos los segmentos destellan juntos en cada golpe.", pixels("flash", { color: "#ffffff", ...beat(1) })],
+    ["Flash con los graves", "Destellan con los bajos de la música; sin música, apagados.", pixels("flash", { color: "#ffffff", source: "bass" })],
+    ["Chispazos", "Segmentos sueltos que destellan rápido.", pixels("sparkle", { color: "#ffffff", speedCpm: 90 })],
+    ["Destellos de colores", "Destellos de colores rápidos.", pixels("confetti", { speedCpm: 120 })],
+    ["Mitad y mitad", "Una mitad y la otra, rápido.", pixels("halves", { color: "#ffffff", speedCpm: 120 })],
+  ],
+  { pixels: true },
+);
+
+export const EFFECT_PRESETS: EffectPreset[] = [...MOVE, ...PIXELS, ...STROBE, ...COLOR, ...DIMMER];
 
 interface Rig {
   instances: FixtureInstance[];
@@ -176,12 +201,18 @@ export function groupHasPixels(rig: Rig, groupId: string): boolean {
   );
 }
 
+/** Los efectos listos que se notan en ese grupo. */
+export function presetsFor(rig: Rig, groupId: string): EffectPreset[] {
+  const pixels = groupHasPixels(rig, groupId);
+  return EFFECT_PRESETS.filter((p) => p.needs.some((type) => groupHas(rig, groupId, type)) && (!p.pixels || pixels));
+}
+
 /** Los effects de ese preset para ese grupo, listos para agregar. */
 export function presetEffects(preset: EffectPreset, group: Group): EffectDraft[] {
   return preset.parts.map((part) => ({
     ...BASE,
     ...part.patch,
-    name: `${group.name}: ${preset.name.toLowerCase()}${part.name ? ` ${part.name}` : ""}`,
+    name: `${group.name}: ${preset.name.toLowerCase()}`.concat(part.name ? ` ${part.name}` : ""),
     groupId: group.id,
   }));
 }

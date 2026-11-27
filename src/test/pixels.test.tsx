@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import App from "@/App";
 import type { EngineMessage } from "@/types/engine";
-import { EFFECT_PRESETS, groupHas, groupHasPixels } from "@/lib/effectPresets";
+import { EFFECT_PRESETS, groupHas, groupHasPixels, presetsFor } from "@/lib/effectPresets";
 import { seedDefinitions, seedInstances } from "@/data/fixtureLibrary";
 import { fakeEngine } from "./fakeEngine";
 import { willAnswer } from "./dialogs";
@@ -49,5 +49,29 @@ describe("Barras y tiras de LEDs", () => {
     expect(groupHasPixels(rig, "pars")).toBe(false);
     expect(groupHasPixels(rig, "tiras")).toBe(true);
     expect(groupHas(rig, "tiras", "RED")).toBe(true);
+  });
+
+  it("cada tipo de luz tiene sus efectos, y los del Stormy sirven también con segmentos de solo blanco", () => {
+    expect(EFFECT_PRESETS.length).toBeGreaterThanOrEqual(60);
+    expect(new Set(EFFECT_PRESETS.map((p) => p.name)).size).toBe(EFFECT_PRESETS.length);
+    const channel = seedDefinitions[1].channels[0];
+    const white = {
+      ...seedDefinitions[1],
+      id: "blanco",
+      channels: ["a", "b", "c"].map((id) => ({ ...channel, id, type: "DIMMER" as const })),
+      heads: [["a"], ["b"], ["c"]],
+    };
+    const rig = {
+      definitions: [...seedDefinitions, white],
+      instances: [
+        ...seedInstances.map((i) => ({ ...i, group: "pars" })),
+        { ...seedInstances[2], id: "s1", definitionId: "blanco", group: "stormy" },
+      ],
+    };
+    const names = (group: string) => presetsFor(rig, group).map((p) => p.name);
+    expect(names("stormy")).toEqual(expect.arrayContaining(["Cortadora", "Relámpagos", "Flash al golpe"]));
+    expect(names("stormy")).not.toContain("Fuego");
+    expect(names("pars")).not.toContain("Cortadora");
+    expect(presetsFor(rig, "pars").map((p) => p.category)).toContain("color");
   });
 });

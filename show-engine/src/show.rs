@@ -1444,7 +1444,7 @@ impl Show {
             });
             for (index, member, channels) in cells {
                 let phase = cycles + index as f64 * effect.phase_offset_deg / 360.0;
-                let t = level.unwrap_or_else(|| effect.waveform.level(phase));
+                let t = level.unwrap_or_else(|| effect.waveform.level_at(phase, index));
                 let value = (effect.min + (effect.max - effect.min) * t).round().clamp(0.0, 255.0) as u8;
                 for channel in channels {
                     writes.push((member.id.clone(), channel.id.clone(), value));
@@ -1469,16 +1469,23 @@ impl Show {
             let cycles = cycles_of(effect, started, beats, fx);
             let level = level_of(effect, levels);
             let color = crate::model::rgb_of(effect.color.as_deref());
+            let color2 = effect.color2.as_deref().map_or([0.0; 3], |hex| crate::model::rgb_of(Some(hex)));
 
-            // Cada punto: sus canales rojo, verde, azul; sin color, su dimmer.
+            // Cada punto: sus canales rojo, verde, azul (y blanco, si tiene
+            // uno por punto); sin color, su dimmer.
             let mut places: Vec<(&crate::model::Instance, usize)> = Vec::new();
             let mut pixels: Vec<Pixel> = Vec::new();
             let mut count = 0;
             for (instance, definition) in self.doc.rig().filter(|(i, _)| i.group.as_ref() == Some(group)) {
                 let rgb = [ChannelType::Red, ChannelType::Green, ChannelType::Blue].map(|k| definition.cells(k));
+                // Un blanco suelto para toda la barra no es de ningún punto.
+                let white = Some(definition.cells(ChannelType::White)).filter(|w| w.len() == rgb[0].len()).unwrap_or_default();
                 let heads: Vec<Vec<(usize, &Channel)>> = if rgb[0].iter().any(|c| !c.is_empty()) {
                     (0..rgb[0].len())
-                        .map(|h| (0..3).flat_map(|k| rgb[k].get(h).into_iter().flatten().map(move |c| (k, *c))).collect())
+                        .map(|h| {
+                            let colors = (0..3).flat_map(|k| rgb[k].get(h).into_iter().flatten().map(move |c| (k, *c)));
+                            colors.chain(white.get(h).into_iter().flatten().map(|c| (4, *c))).collect()
+                        })
                         .collect()
                 } else {
                     definition.cells(ChannelType::Dimmer).into_iter().map(|cell| cell.into_iter().map(|c| (3, c)).collect()).collect()
@@ -1495,10 +1502,15 @@ impl Show {
                 pixels.extend(heads.into_iter().enumerate().map(|(n, head)| (base + n, instance, head)));
             }
             for (index, instance, channels) in pixels {
-                let rgb = effect.pattern.color(index, count, cycles, level, color);
+                let rgb = effect.pattern.color(index, count, cycles, level, color, color2);
                 for (k, channel) in channels {
-                    // k 3: un punto sin color, por su brillo.
-                    let t = if k == 3 { rgb.iter().copied().fold(0.0, f64::max) } else { rgb[k] };
+                    // k 3: un punto sin color, por su brillo; k 4: su blanco,
+                    // lo que los tres tienen en común.
+                    let t = match k {
+                        3 => rgb.iter().copied().fold(0.0, f64::max),
+                        4 => rgb.iter().copied().fold(1.0, f64::min),
+                        _ => rgb[k],
+                    };
                     let value = (effect.min + (effect.max - effect.min) * t).round().clamp(0.0, 255.0) as u8;
                     writes.push((instance.id.clone(), channel.id.clone(), value));
                 }
@@ -1725,7 +1737,11 @@ impl Show {
                 .effects
                 .iter()
                 .filter(|e| e.group_id.is_some())
-                .map(|e| json!({ "id": e.id, "name": e.name, "running": p.running_effect_ids.contains(&e.id) }))
+                .map(|e| {
+                    // El celular los junta por grupo.
+                    let group = self.doc.groups.iter().find(|g| e.group_id.as_ref() == Some(&g.id)).map(|g| &g.name);
+                    json!({ "id": e.id, "name": e.name, "group": group, "running": p.running_effect_ids.contains(&e.id) })
+                })
                 .collect::<Vec<_>>(),
             "timelines": self
                 .doc

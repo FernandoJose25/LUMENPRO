@@ -1,6 +1,12 @@
-## Novedades de la 0.9.0
+## Novedades de la 0.10.0
 
-**Tu consola en el celular.** Los botones del celular (y los de Live) van en páginas, con pestañas, y cada uno con su color. En el celular, **Mi consola** deja solo tus botones, el Estrobo y el Blackout, para manejar el evento con tu propia pantalla; **Completo** vuelve a todo.
+**Más de 60 efectos listos, por tipo de luz.** En **Effects → + Efectos listos** van separados: cabezas móviles y beam (tijeras, olas, péndulo, cuadrado, rombo, ballyhoo…), barras y tiras de LEDs, estrobos LED tipo Stormy (cortadora, relámpagos, flash al golpe), PAR y luces de color (policía, fuego, salto de color al ritmo, rosa y dorado…) y brillo para cualquier luz. Cada uno se ve en el escenario antes de agregarlo.
+
+**Efectos por grupo en Live y en el celular.** Ya no van todos juntos: cada grupo (PAR, Cabezas, Barras…) tiene su botón para abrirlo, muestra cuántos tiene prendidos y se apaga de un toque. El **👁** muestra un efecto en una ventana sin tocar las luces.
+
+**Identificar desde el Escenario,** para ubicar cada luz donde está colgada.
+
+**De la 0.9.0:** tu consola en el celular (páginas, colores y "Mi consola").
 
 **De la 0.8.0:** barras y tiras de LEDs punto por punto (efectos de píxeles y tiras WLED).
 

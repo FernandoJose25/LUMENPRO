@@ -848,6 +848,36 @@ fn a_fan_opens_symmetrically() {
 }
 
 #[test]
+fn a_square_and_a_diamond_go_round_their_corners() {
+    let points = trace(&mut heads("square", json!({})));
+    let (pan, tilt) = extent(&points);
+    assert!((pan - 40.0).abs() < 1.0 && (tilt - 40.0).abs() < 1.0, "{pan} {tilt}");
+    // Siempre sobre un lado: pan o tilt a tope.
+    for (pan, tilt) in &points {
+        assert!(pan.abs().max(tilt.abs()) > 19.0, "{pan} {tilt}");
+    }
+    let points = trace(&mut heads("diamond", json!({})));
+    for (pan, tilt) in &points {
+        assert!((pan.abs() + tilt.abs() - 20.0).abs() < 0.5, "rombo: {pan} {tilt}");
+    }
+}
+
+#[test]
+fn at_random_each_head_wanders_on_its_own_without_jumps() {
+    let mut r = heads("random", json!({ "speedCpm": 30 }));
+    let points = trace(&mut r);
+    for w in points.windows(2) {
+        assert!((w[1].0 - w[0].0).hypot(w[1].1 - w[0].1) < 3.0, "salto");
+    }
+    for (pan, tilt) in &points {
+        assert!(pan.abs() <= 20.1 && tilt.abs() <= 20.1);
+    }
+    let (pan, tilt) = extent(&points);
+    assert!(pan + tilt > 2.0, "se mueve: {pan} {tilt}");
+    assert_ne!(aim(&r, 1), aim(&r, 11), "cada cabeza por su lado");
+}
+
+#[test]
 fn the_phase_offset_spreads_the_heads_along_the_figure() {
     let mut r = heads("circle", json!({ "phaseOffsetDeg": 180 }));
     trace(&mut r);
@@ -1182,11 +1212,13 @@ fn the_phone_turns_effects_on_and_off() {
     let mut r = Rig::new();
     r.doc["effects"][0]["name"] = json!("PAR: ola roja");
     r.doc["effects"].as_array_mut().unwrap().push(json!({ "id": "suelto", "name": "Sin grupo", "groupId": null }));
+    r.doc["groups"] = json!([{ "id": "pars", "name": "PAR" }]);
     r.reset();
     r.phone(json!({ "type": "effect", "id": "fx" }));
     let effects = r.show.phone_snapshot("running")["effects"].clone();
-    // Uno sin grupo no hace nada: no se ofrece.
-    assert_eq!(effects, json!([{ "id": "fx", "name": "PAR: ola roja", "running": true }]));
+    // Uno sin grupo no hace nada: no se ofrece. Van con su grupo, para
+    // juntarlos en el celular.
+    assert_eq!(effects, json!([{ "id": "fx", "name": "PAR: ola roja", "group": "PAR", "running": true }]));
     r.phone(json!({ "type": "effect", "id": "fx" }));
     assert_eq!(r.running(), json!([]));
 }
@@ -1788,6 +1820,85 @@ fn the_meter_fills_with_the_bass_green_at_the_bottom_red_at_the_top() {
     let (bottom, top) = (pixel(&r, 0), pixel(&r, 3));
     assert!(bottom[1] > bottom[0], "abajo verde: {bottom:?}");
     assert!(top[0] > top[1], "arriba rojo: {top:?}");
+}
+
+#[test]
+fn the_cutter_flashes_one_segment_at_a_time_without_a_trail() {
+    let mut r = Rig::new();
+    // Una vuelta por segundo: 250 ms por segmento.
+    led_bar(&mut r, "cutter", json!({ "color": "#ffffff", "speedCpm": 60 }));
+    let lit = |r: &Rig| (0..4).filter(|&n| pixel(r, n) == [255, 255, 255]).collect::<Vec<_>>();
+    let dark = |r: &Rig| (0..4).filter(|&n| pixel(r, n) == [0, 0, 0]).count();
+    assert_eq!((lit(&r), dark(&r)), (vec![0], 3));
+    r.run(250.0);
+    assert_eq!((lit(&r), dark(&r)), (vec![1], 3));
+}
+
+#[test]
+fn alternate_and_halves_swap_their_two_colours_each_half_cycle() {
+    let mut r = Rig::new();
+    led_bar(&mut r, "alternate", json!({ "color": "#ff0000", "color2": "#0000ff", "speedCpm": 60 }));
+    assert_eq!([pixel(&r, 0), pixel(&r, 1), pixel(&r, 2)], [[255, 0, 0], [0, 0, 255], [255, 0, 0]]);
+    r.run(500.0);
+    assert_eq!([pixel(&r, 0), pixel(&r, 1)], [[0, 0, 255], [255, 0, 0]]);
+
+    let mut r = Rig::new();
+    led_bar(&mut r, "halves", json!({ "color": "#ff0000" }));
+    assert_eq!([pixel(&r, 1), pixel(&r, 2)], [[255, 0, 0], [0, 0, 0]], "sin segundo color, apagado");
+}
+
+#[test]
+fn the_new_drawings_stay_within_their_colours() {
+    for pattern in ["bounce", "fire", "confetti", "colorCycle", "jump", "center", "lightning", "flash", "wipe"] {
+        let mut r = Rig::new();
+        led_bar(&mut r, pattern, json!({ "color": "#00ff00", "speedCpm": 45 }));
+        let mut seen = std::collections::BTreeSet::new();
+        for _ in 0..40 {
+            r.run(37.0);
+            for n in 0..4 {
+                let p = pixel(&r, n);
+                assert!(p.iter().all(|v| *v <= 255), "{pattern}: {p:?}");
+                seen.insert(p);
+            }
+        }
+        assert!(seen.len() > 1, "{pattern} se mueve");
+    }
+}
+
+#[test]
+fn a_bar_with_a_white_per_point_lights_it_when_the_colour_is_white() {
+    let mut r = Rig::new();
+    let channels: Vec<Value> = (0..2)
+        .flat_map(|h| {
+            ["RED", "GREEN", "BLUE", "WHITE"].iter().enumerate().map(move |(k, kind)| channel(&format!("{kind}{h}"), (h * 4 + k + 1) as i32, kind, 0))
+        })
+        .collect();
+    let heads: Vec<Value> = (0..2).map(|h| json!(["RED", "GREEN", "BLUE", "WHITE"].map(|k| format!("{k}{h}")))).collect();
+    r.doc["definitions"].as_array_mut().unwrap().push(json!({ "id": "rgbw", "channels": channels, "heads": heads }));
+    r.doc["instances"].as_array_mut().unwrap().push(json!({ "id": "w1", "definitionId": "rgbw", "universe": 1, "address": 200, "group": "w" }));
+    r.doc["effects"].as_array_mut().unwrap().push(json!({ "id": "px", "groupId": "w", "kind": "pixels", "pattern": "alternate",
+        "color": "#ffffff", "color2": "#ff0000", "speedCpm": 0, "min": 0, "max": 255 }));
+    r.reset();
+    r.send(json!({ "type": "startEffect", "id": "px" }));
+    r.run(20.0);
+    assert_eq!(r.live("w1", "WHITE0"), 255);
+    assert_eq!((r.live("w1", "RED1"), r.live("w1", "WHITE1")), (255, 0), "rojo: sin blanco");
+}
+
+#[test]
+fn at_random_each_par_is_on_or_off_on_its_own() {
+    let mut r = Rig::new();
+    r.doc["effects"][0]["waveform"] = json!("random");
+    r.reset();
+    r.send(json!({ "type": "startEffect", "id": "fx" }));
+    let mut both = std::collections::BTreeSet::new();
+    for _ in 0..30 {
+        r.run(1000.0);
+        let (a, b) = (r.live("p1", "red"), r.live("p2", "red"));
+        assert!([11, 222].contains(&a) && [11, 222].contains(&b), "{a} {b}");
+        both.insert((a, b));
+    }
+    assert!(both.len() >= 3, "a veces juntas y a veces no: {both:?}");
 }
 
 #[test]
