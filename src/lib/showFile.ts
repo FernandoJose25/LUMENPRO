@@ -27,7 +27,9 @@ export function writeShow(json: string): Promise<void> {
     // Modo privado o cuota llena: se sigue en memoria (y en disco, si lo hay).
   }
   if (!isTauri()) return Promise.resolve();
-  const write = writeQueue.catch(() => {}).then(() => invoke<void>("save_show", { json }));
+  // El día, para el respaldo del primer guardado de cada día.
+  const day = new Date().toLocaleDateString("sv");
+  const write = writeQueue.catch(() => {}).then(() => invoke<void>("save_show", { json, day }));
   writeQueue = write;
   return write;
 }
@@ -36,6 +38,15 @@ function exportFileName(now: Date): string {
   const p = (n: number) => String(n).padStart(2, "0");
   const date = `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}`;
   return `lumenpro-show-${date}-${p(now.getHours())}${p(now.getMinutes())}.json`;
+}
+
+/** Los días con respaldo automático, del más nuevo al más viejo. */
+export function listBackups(): Promise<string[]> {
+  return isTauri() ? invoke<string[]>("list_backups") : Promise.resolve([]);
+}
+
+export function readBackup(day: string): Promise<string> {
+  return invoke<string>("read_backup", { day });
 }
 
 /** Guarda una copia del show y devuelve dónde quedó. */

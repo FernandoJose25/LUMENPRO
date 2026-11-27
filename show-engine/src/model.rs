@@ -564,6 +564,8 @@ pub enum Action {
     Timeline { id: String },
     /// Un toque al ritmo de la canción.
     Tap,
+    /// Fader: velocidad de los effects y chases.
+    Speed,
     #[default]
     #[serde(other)]
     Nothing,
@@ -571,7 +573,7 @@ pub enum Action {
 
 impl Action {
     pub fn is_fader(&self) -> bool {
-        matches!(self, Action::Master | Action::GroupFader { .. })
+        matches!(self, Action::Master | Action::GroupFader { .. } | Action::Speed)
     }
 }
 

@@ -112,7 +112,7 @@ function LiveStatusBar({
   onBlackout: () => void;
   onReleaseBlackout: () => void;
 }) {
-  const { master, setMaster, strobeActive, setStrobe } = useFixtureStore();
+  const { master, setMaster, speed, setSpeed, strobeActive, setStrobe } = useFixtureStore();
   return (
     <div className="flex shrink-0 items-center gap-4 rounded-panel border border-border bg-panel px-3 py-2">
       <span className="text-xs font-medium tracking-wide text-text-secondary">LIVE MODE</span>
@@ -125,6 +125,15 @@ function LiveStatusBar({
       <div className="flex-1" />
       <div className="w-72">
         <Fader label="Intensidad" value={master} max={100} onChange={setMaster} />
+      </div>
+      {/* Apura o frena los effects y chases; lo que sigue la música va con ella. */}
+      <div className="flex w-80 items-center gap-1">
+        <div className="min-w-0 flex-1">
+          <Fader label="Velocidad" value={speed} min={25} max={400} step={5} unit="%" onChange={setSpeed} />
+        </div>
+        <Button size="sm" variant="ghost" title="Velocidad normal" disabled={speed === 100} onClick={() => setSpeed(100)}>
+          1×
+        </Button>
       </div>
       <Button
         variant={strobeActive ? "danger" : "secondary"}

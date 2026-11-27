@@ -54,6 +54,7 @@
   #blackout.on { animation: pulse 1.2s infinite; }
   @keyframes pulse { 50% { opacity: .6; } }
   .bottom { margin-top: auto; display: flex; flex-direction: column; gap: 10px; }
+  label .mini { min-height: 30px; padding: 0 12px; font-size: 13px; }
   #login { margin: auto 0; display: flex; flex-direction: column; gap: 14px; text-align: center; }
   #login h1 { margin: 0; font-size: 26px; letter-spacing: .04em; }
   #login p { margin: 0; color: var(--muted); }
@@ -119,6 +120,8 @@
     <div class="bottom">
       <label for="master">Intensidad <b id="master-value"></b></label>
       <input id="master" type="range" min="0" max="100">
+      <label for="speed">Velocidad de los efectos <span><b id="speed-value"></b> <button id="speed-normal" class="mini" type="button">1×</button></span></label>
+      <input id="speed" type="range" min="25" max="400" step="5">
       <div class="row"><button id="tap">TAP</button><button id="tap-clear">Soltar ritmo</button></div>
       <div class="row"><button id="strobe">Estrobo</button><button id="blackout"></button></div>
     </div>
@@ -265,6 +268,10 @@ function render() {
   if (Date.now() - masterTouched > 800) $("master").value = state.master;
   $("master-value").textContent = $("master").value + " %";
   $("master").disabled = !online;
+  if (Date.now() - speedTouched > 800) $("speed").value = state.speed;
+  $("speed-value").textContent = $("speed").value + " %";
+  $("speed").disabled = !online;
+  $("speed-normal").disabled = !online || Number(state.speed) === 100;
   $("tap").className = state.tapBpm ? "on" : "";
   $("tap").textContent = state.tapBpm ? "TAP · " + Math.round(state.tapBpm) + " BPM" : "TAP al ritmo";
   $("tap").disabled = !online;
@@ -488,6 +495,22 @@ $("master").oninput = () => {
     masterTimer = null;
     send({ type: "master", value: Number($("master").value) });
   }, 100);
+};
+
+let speedTimer = null, speedTouched = 0;
+$("speed").oninput = () => {
+  speedTouched = Date.now();
+  $("speed-value").textContent = $("speed").value + " %";
+  if (speedTimer) return;
+  speedTimer = setTimeout(() => {
+    speedTimer = null;
+    send({ type: "speed", value: Number($("speed").value) });
+  }, 100);
+};
+$("speed-normal").onclick = (e) => {
+  e.preventDefault();
+  speedTouched = 0;
+  send({ type: "speed", value: 100 });
 };
 
 // ---- Arranque ----

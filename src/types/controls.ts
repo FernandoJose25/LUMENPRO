@@ -3,13 +3,13 @@ import type { ChannelType } from "@/types/fixture";
 /** Lo que hace un botón de Live, del celular o de un controlador MIDI. Lo
  *  ejecuta el motor (show-engine, `Show::act`). */
 export type Action =
-  | { do: "next" | "prev" | "stop" | "blackout" | "strobe" | "master" | "tap" }
+  | { do: "next" | "prev" | "stop" | "blackout" | "strobe" | "master" | "tap" | "speed" }
   | { do: "moment" | "scene" | "effect" | "chase" | "palette" | "timeline"; id: string }
   | { do: "groupFader"; groupId: string; channelType: ChannelType }
   /** Color fijo encima del momento. Sin grupo, todos; sin color, se suelta. */
   | { do: "color"; groupId: string | null; color: string | null };
 
-export const isFader = (action: Action) => action.do === "master" || action.do === "groupFader";
+export const isFader = (action: Action) => action.do === "master" || action.do === "speed" || action.do === "groupFader";
 
 /** Un botón de las pantallas a medida. */
 export interface Pad {

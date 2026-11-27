@@ -82,6 +82,7 @@ const IDLE: Omit<Playback, "activeSceneId" | "activeMomentId"> = {
   heldColors: {},
   timeline: null,
   tapBpm: null,
+  speed: 100,
 };
 const NOT_SAVED = new Set([...Object.keys(IDLE), "moving"]);
 
@@ -169,6 +170,8 @@ interface FixtureStoreValue extends FixtureStoreState {
   blackout: () => void;
   releaseBlackout: () => void;
   setMaster: (value: number) => void;
+  /** Velocidad de los effects y chases, en % (25–400). */
+  setSpeed: (value: number) => void;
   setStrobe: (on: boolean) => void;
   /** Enciende un fixture a pleno unos segundos para reconocerlo. */
   identify: (instanceId: string) => void;
@@ -877,6 +880,7 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
   const blackout = useCallback(() => engine.send({ type: "blackout", on: true }), [engine]);
   const releaseBlackout = useCallback(() => engine.send({ type: "blackout", on: false }), [engine]);
   const setMaster = useCallback((value: number) => engine.send({ type: "master", value }), [engine]);
+  const setSpeed = useCallback((value: number) => engine.send({ type: "speed", value }), [engine]);
   const setStrobe = useCallback((on: boolean) => engine.send({ type: "strobe", on }), [engine]);
   const identify = useCallback((id: string) => engine.send({ type: "identify", id }), [engine]);
 
@@ -1096,6 +1100,7 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
     blackout,
     releaseBlackout,
     setMaster,
+    setSpeed,
     setStrobe,
     identify,
     addMoment,

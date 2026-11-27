@@ -566,7 +566,7 @@ fn phone_snapshot_has_only_what_the_page_shows() {
     let keys: Vec<_> = s.as_object().unwrap().keys().cloned().collect();
     assert_eq!(
         keys,
-        ["activeId", "blackout", "colors", "dmx", "effects", "master", "moments", "pads", "startedAt", "strobe", "tapBpm", "timeline", "timelines"]
+        ["activeId", "blackout", "colors", "dmx", "effects", "master", "moments", "pads", "speed", "startedAt", "strobe", "tapBpm", "timeline", "timelines"]
     );
     assert_eq!(s["moments"], json!([{ "id": "a", "name": "A", "durationSec": 90.0 }]));
 }
@@ -1484,4 +1484,60 @@ fn a_button_taps_and_a_restarted_engine_keeps_the_tempo() {
     assert_eq!(r.playback()["tapBpm"], json!(120.0));
     r.run(250.0);
     assert_eq!(r.live("p1", "red"), 100);
+}
+
+// ----------------------------------------------------------------------
+// Velocidad general
+// ----------------------------------------------------------------------
+
+#[test]
+fn the_speed_hurries_or_slows_the_effects_without_jumps() {
+    let mut r = Rig::new();
+    music(&mut r, "clock"); // sierra de 0 a 200, una vuelta por segundo
+    r.run(250.0);
+    assert_eq!(r.live("p1", "red"), 46); // arrancó en el primer paso: 230 ms
+    r.send(json!({ "type": "speed", "value": 200 }));
+    r.run(250.0);
+    assert_eq!(r.live("p1", "red"), 146, "media vuelta más, sin saltar");
+    r.send(json!({ "type": "speed", "value": 50 }));
+    r.run(400.0);
+    assert_eq!(r.live("p1", "red"), 186);
+}
+
+#[test]
+fn the_speed_also_hurries_the_chases() {
+    let mut r = Rig::new();
+    r.send(json!({ "type": "speed", "value": 200 }));
+    r.send(json!({ "type": "playChase", "id": "c" }));
+    // El fade de 1 s dura medio segundo.
+    r.run(520.0);
+    assert_eq!(r.playback()["chase"]["phase"], json!("hold"));
+    assert_eq!(r.live("p1", "green"), 250);
+}
+
+#[test]
+fn what_follows_the_music_keeps_its_tempo_at_any_speed() {
+    let mut r = Rig::new();
+    music(&mut r, "beat");
+    r.send(json!({ "type": "speed", "value": 400 }));
+    r.send(json!({ "type": "audio", "audio": { "levels": { "bass": 0, "mid": 0, "treble": 0 },
+                                               "beat": { "beats": 8.25, "bpm": 60 } } }));
+    r.run(250.0);
+    assert_eq!(r.live("p1", "red"), 100);
+}
+
+#[test]
+fn the_speed_comes_from_the_phone_and_from_a_fader_with_normal_in_the_middle() {
+    let mut r = Rig::new();
+    r.phone(json!({ "type": "speed", "value": 150 }));
+    assert_eq!(r.playback()["speed"], json!(150.0));
+    let fader = |r: &mut Rig, value: f64| {
+        r.send(json!({ "type": "action", "action": { "do": "speed" }, "value": value }));
+        r.playback()["speed"].as_f64().unwrap()
+    };
+    assert_eq!(fader(&mut r, 0.5), 100.0);
+    assert_eq!(fader(&mut r, 1.0), 400.0);
+    assert_eq!(fader(&mut r, 0.0), 25.0);
+    r.phone(json!({ "type": "speed", "value": 9999 }));
+    assert_eq!(r.playback()["speed"], json!(400.0));
 }

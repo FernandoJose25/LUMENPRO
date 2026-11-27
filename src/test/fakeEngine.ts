@@ -97,6 +97,7 @@ export function fakeEngine(overrides: Record<string, (args: Args) => unknown> = 
   };
 
   const handlers: Record<string, (args: Args) => unknown> = {
+    list_backups: () => [],
     list_serial_ports: () => [
       { name: "COM1", chip: "other", description: "" },
       { name: "COM5", chip: "ftdi", description: "USB Serial Port (COM5)" },

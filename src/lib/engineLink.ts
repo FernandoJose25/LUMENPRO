@@ -164,7 +164,7 @@ export function enqueue(queue: EngineMessage[], message: EngineMessage): void {
     for (const [id, channels] of Object.entries(message.values)) values[id] = { ...values[id], ...channels };
     queue[queue.length - 1] = { type: "values", values };
     return;
-  } else if (last && last.type === message.type && (message.type === "doc" || message.type === "master")) {
+  } else if (last && last.type === message.type && (message.type === "doc" || message.type === "master" || message.type === "speed")) {
     queue.pop();
   }
   queue.push(message);

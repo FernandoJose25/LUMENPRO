@@ -58,3 +58,18 @@ describe("Tap", () => {
     await waitFor(() => expect(tapBpm(engine)).not.toBeNull());
   });
 });
+
+describe("Velocidad general", () => {
+  it("en Live apura o frena los efectos, y 1× la vuelve a la normal", async () => {
+    const user = userEvent.setup();
+    const engine = fakeEngine();
+    render(<App />);
+    await waitFor(() => expect(engine.applied.some((m) => m.type === "reset")).toBe(true));
+    await user.click(screen.getByRole("button", { name: "Live" }));
+    const slider = screen.getByRole("slider", { name: "Velocidad" });
+    fireEvent.change(slider.parentElement!.querySelector("input")!, { target: { value: "200" } });
+    await waitFor(() => expect(engine.state.show.changes(0)!.playback!.speed).toBe(200));
+    await user.click(screen.getByRole("button", { name: "1×" }));
+    await waitFor(() => expect(engine.state.show.changes(0)!.playback!.speed).toBe(100));
+  });
+});

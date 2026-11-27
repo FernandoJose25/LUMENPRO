@@ -20,6 +20,8 @@ export interface Playback {
   timeline: TimelineRun | null;
   /** El ritmo marcado a mano (Tap); mientras haya uno, manda sobre lo que se escucha. */
   tapBpm: number | null;
+  /** Velocidad de los effects y chases, en % (100 = la suya); lo que sigue la música no cambia. */
+  speed: number;
 }
 
 export interface TimelineRun {
@@ -59,7 +61,7 @@ export type EngineMessage =
   | { type: "activeScene"; id: string | null }
   | { type: "recallScene" | "startEffect" | "stopEffect" | "identify" | "startMoment" | "playChase"; id: string }
   | { type: "blackout" | "strobe"; on: boolean }
-  | { type: "master"; value: number }
+  | { type: "master" | "speed"; value: number }
   | { type: "stepMoment"; direction: -1 | 1 }
   | { type: "stopMoment" | "stopChase" }
   | { type: "audio"; audio: AudioMessage | null }

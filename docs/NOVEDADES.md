@@ -1,6 +1,10 @@
-## Novedades de la 0.4.1
+## Novedades de la 0.4.2
 
-**TAP: el ritmo a mano, sin micrófono.** Arriba a la izquierda (o con la tecla T, o desde el celular) toca al ritmo de la canción, un toque por golpe. Las luces que siguen la música (colores al ritmo, golpe de graves, el ocho de las cabezas) van con ese ritmo aunque no se escuche nada. La × lo suelta y vuelve a seguir lo que se escucha. También se puede poner en un botón del celular o del controlador MIDI.
+**Velocidad general de los efectos.** En Live y en el celular, un fader apura o frena todos los efectos y chases a la vez (de un cuarto a cuatro veces); **1×** la vuelve a la normal. También se puede poner en un control MIDI. Lo que sigue la música no cambia.
+
+**Respaldos automáticos.** Cada día, antes del primer guardado, LUMEN guarda cómo estaba el show. Se guardan dos semanas y se recuperan en **Settings → Respaldos automáticos**.
+
+**De la 0.4.1:** TAP para marcar el ritmo a mano.
 
 **De la 0.4.0:** línea de tiempo para el vals, a tiempo con la canción.
 

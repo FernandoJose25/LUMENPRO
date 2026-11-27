@@ -26,6 +26,18 @@ const SYNC_TOLERANCE_MS: f64 = 40.0;
 /// Un toque que dice haber sido hace más que esto llega tarde por otra cosa:
 /// cuenta como recién tocado.
 const TAP_LATE_MS: f64 = 1000.0;
+/// Velocidad de los effects y chases, en %: de un cuarto a cuatro veces.
+pub const SPEED_MIN: f64 = 25.0;
+pub const SPEED_MAX: f64 = 400.0;
+
+/// Fader de 0 a 1 → %, con 100 % en el medio.
+fn speed_from_fader(v: f64) -> f64 {
+    (SPEED_MIN * (SPEED_MAX / SPEED_MIN).powf(v)).round()
+}
+
+fn fader_from_speed(speed: f64) -> f64 {
+    ((speed / SPEED_MIN).ln() / (SPEED_MAX / SPEED_MIN).ln()).clamp(0.0, 1.0)
+}
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct AudioFeed {
@@ -83,6 +95,8 @@ pub enum Message {
     Tap { #[serde(default)] at: Option<f64> },
     /// Vuelve a seguir lo que se escucha.
     ClearTap,
+    /// Velocidad de los effects y chases, en %.
+    Speed { value: f64 },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -148,6 +162,9 @@ pub struct Playback {
     /// El ritmo marcado a mano; mientras haya uno, manda sobre lo que se
     /// escucha.
     pub tap_bpm: Option<f64>,
+    /// Velocidad de los effects y chases, en % (100 = la suya). Lo que sigue
+    /// la música va con la música.
+    pub speed: f64,
 }
 
 impl Default for Playback {
@@ -165,6 +182,7 @@ impl Default for Playback {
             held_colors: BTreeMap::new(),
             timeline: None,
             tap_bpm: None,
+            speed: 100.0,
         }
     }
 }
@@ -323,6 +341,10 @@ pub struct Show {
     /// Hasta dónde de la canción ya se dispararon las marcas.
     timeline_cursor: f64,
     tap: Tap,
+    /// El reloj de los effects y chases: corre a la velocidad elegida. Con
+    /// 100 % es la hora misma.
+    fx_clock: f64,
+    clock_at: f64,
 }
 
 /// Vueltas completas que lleva un effect.
@@ -389,6 +411,7 @@ impl Show {
     pub fn restore(&mut self, session: Session, now: f64) -> Result<(), String> {
         let doc = Doc::parse(&session.doc)?;
         self.reset(session.doc, doc, session.live);
+        self.advance(now);
         self.next_nonce = session.playback.moment_run.map_or(0, |r| r.nonce);
         let chase = session.playback.chase.clone();
         self.playback = Playback { identify_id: None, chase: None, ..session.playback };
@@ -397,8 +420,8 @@ impl Show {
         // El golpe se pierde; el tempo no.
         self.tap = self.playback.tap_bpm.map(|bpm| Tap::resume(bpm, now)).unwrap_or_default();
         if let Some(chase) = chase {
-            self.start_chase(&chase.id, self.active_moment_chase() == Some(chase.id.as_str()), now);
-            self.begin_step(chase.step_index, now);
+            self.start_chase(&chase.id, self.active_moment_chase() == Some(chase.id.as_str()));
+            self.begin_step(chase.step_index);
         }
         // El fade ya había arrancado los effects: con el momento dado por
         // llegado no se reinician.
@@ -416,6 +439,7 @@ impl Show {
     // ------------------------------------------------------------------
 
     pub fn apply(&mut self, message: Message, now: f64) -> Result<(), String> {
+        self.advance(now);
         match message {
             Message::Reset { doc, live, active_scene_id, active_moment_id } => {
                 let parsed = Doc::parse(&doc)?;
@@ -428,7 +452,7 @@ impl Show {
                 self.doc = Doc::parse(&doc)?;
                 self.doc_json = doc;
                 self.prune();
-                self.follow_moment_chase(now);
+                self.follow_moment_chase();
             }
             Message::Values { values } => {
                 for (instance, channels) in values {
@@ -464,7 +488,7 @@ impl Show {
             Message::StartMoment { id } => self.start_moment(&id, now),
             Message::StepMoment { direction } => self.step_moment(direction, now),
             Message::StopMoment => self.stop_moment(),
-            Message::PlayChase { id } => self.start_chase(&id, false, now),
+            Message::PlayChase { id } => self.start_chase(&id, false),
             Message::StopChase => self.stop_chase(),
             Message::Audio { audio } => self.audio = audio.map(|feed| (feed, now)),
             Message::Action { action, press, value } => self.act(&action, press, value, now),
@@ -477,6 +501,11 @@ impl Show {
             Message::ClearTap => {
                 self.tap = Tap::default();
                 self.edit(|p| p.tap_bpm = None);
+            }
+            Message::Speed { value } => {
+                if value.is_finite() {
+                    self.edit(|p| p.speed = value.round().clamp(SPEED_MIN, SPEED_MAX));
+                }
             }
             Message::PlayTimeline { id, from_ms } => self.play_timeline(&id, from_ms, now),
             Message::PauseTimeline => self.pause_timeline(now),
@@ -548,6 +577,11 @@ impl Show {
             "tapClear" => {
                 let _ = self.apply(Message::ClearTap, now);
             }
+            "speed" => {
+                if let Some(value) = command["value"].as_f64() {
+                    let _ = self.apply(Message::Speed { value }, now);
+                }
+            }
             "timeline" => match (command["id"].as_str(), command["play"].as_bool()) {
                 (Some(id), Some(true)) => self.play_timeline(id, 0.0, now),
                 (_, Some(false)) => self.stop_timeline(now),
@@ -564,6 +598,7 @@ impl Show {
         let message = match action {
             Action::Strobe => press.map(|on| Message::Strobe { on }),
             Action::Master => value.map(|v| Message::Master { value: v * 100.0 }),
+            Action::Speed => value.map(|v| Message::Speed { value: speed_from_fader(v) }),
             Action::GroupFader { group_id, channel_type } => {
                 let Some(v) = value else { return };
                 let level = (v * 255.0).round() as u8;
@@ -701,6 +736,7 @@ impl Show {
     pub fn fader_value(&self, action: &Action) -> Option<f64> {
         match action {
             Action::Master => Some(self.playback.master / 100.0),
+            Action::Speed => Some(fader_from_speed(self.playback.speed)),
             _ => None,
         }
     }
@@ -893,7 +929,7 @@ impl Show {
                     self.start_effect(id.clone());
                 }
                 if let Some(chase) = &moment.chase_id {
-                    self.start_chase(chase, true, now);
+                    self.start_chase(chase, true);
                 }
             }
         }
@@ -1008,7 +1044,12 @@ impl Show {
             Action::Blackout => Message::Blackout { on: true },
             Action::Strobe => Message::Strobe { on: true },
             // Otra línea de tiempo desde una marca se pisaría con esta.
-            Action::Timeline { .. } | Action::Tap | Action::Master | Action::GroupFader { .. } | Action::Nothing => return,
+            Action::Timeline { .. }
+            | Action::Tap
+            | Action::Master
+            | Action::Speed
+            | Action::GroupFader { .. }
+            | Action::Nothing => return,
             other => return self.act(other, Some(true), None, at),
         };
         let _ = self.apply(message, at);
@@ -1031,7 +1072,8 @@ impl Show {
     // ------------------------------------------------------------------
 
     /// Uno a la vez: arrancar otro reemplaza al que esté sonando.
-    fn start_chase(&mut self, id: &str, from_moment: bool, now: f64) {
+    fn start_chase(&mut self, id: &str, from_moment: bool) {
+        let now = self.fx_clock;
         let Some(chase) = self.doc.chases.iter().find(|c| c.id == id) else { return };
         if chase.steps.is_empty() {
             return;
@@ -1044,7 +1086,7 @@ impl Show {
             phase_at: now,
             fade: Fade::default(),
         });
-        self.begin_step(0, now);
+        self.begin_step(0);
     }
 
     fn stop_chase(&mut self) {
@@ -1053,7 +1095,7 @@ impl Show {
     }
 
     /// Cambiar el chase del momento que está sonando se nota al instante.
-    fn follow_moment_chase(&mut self, now: f64) {
+    fn follow_moment_chase(&mut self) {
         if !self.moment_fade.as_ref().is_some_and(|f| f.done) || self.playback.moment_run.is_none() {
             return;
         }
@@ -1064,13 +1106,14 @@ impl Show {
         }
         self.stop_chase();
         if let Some(id) = wanted {
-            self.start_chase(&id, true, now);
+            self.start_chase(&id, true);
         }
     }
 
     /// El fade arranca desde lo que esté en vivo en ese momento, no desde el
     /// paso anterior "en teoría": si alguien movió algo a mano, no salta.
-    fn begin_step(&mut self, index: usize, now: f64) {
+    fn begin_step(&mut self, index: usize) {
+        let now = self.fx_clock;
         let Some(mut run) = self.chase.take() else { return };
         let step = self.doc.chases.iter().find(|c| c.id == run.id).and_then(|c| c.steps.get(index));
         let Some(step) = step else { return self.stop_chase() };
@@ -1093,14 +1136,16 @@ impl Show {
         self.edit(|p| p.chase = Some(status));
     }
 
-    fn tick_chase(&mut self, now: f64) {
+    /// Con el reloj de los effects: la velocidad también lo apura o lo frena.
+    fn tick_chase(&mut self) {
+        let now = self.fx_clock;
         let Some(mut run) = self.chase.take() else { return };
         let Some(chase) = self.doc.chases.iter().find(|c| c.id == run.id) else { return self.stop_chase() };
         let (count, looped) = (chase.steps.len(), chase.looped);
         // Borraron el paso que sonaba: se sigue desde el principio.
         let Some(step) = chase.steps.get(run.step).cloned() else {
             self.chase = Some(run);
-            return self.begin_step(0, now);
+            return self.begin_step(0);
         };
         let elapsed = now - run.phase_at;
 
@@ -1124,9 +1169,9 @@ impl Show {
         self.chase = Some(run);
         if t >= 1.0 {
             if next < count {
-                self.begin_step(next, now);
+                self.begin_step(next);
             } else if looped {
-                self.begin_step(0, now);
+                self.begin_step(0);
             } else {
                 self.stop_chase();
             }
@@ -1162,16 +1207,16 @@ impl Show {
         if running.is_empty() {
             return;
         }
-        let (levels, beats) = (self.levels(now), self.beats(now));
+        let (levels, beats, fx) = (self.levels(now), self.beats(now), self.fx_clock);
         let mut writes = Vec::new();
         for id in running {
             let Some(effect) = self.doc.effects.iter().find(|e| e.id == *id) else { continue };
-            let started = *self.effect_started.entry(id.clone()).or_insert(now);
+            let started = *self.effect_started.entry(id.clone()).or_insert(fx);
             if effect.kind != EffectKind::Wave {
                 continue;
             }
             let Some(group) = &effect.group_id else { continue };
-            let cycles = cycles_of(effect, started, beats, now);
+            let cycles = cycles_of(effect, started, beats, fx);
             let level = level_of(effect, levels);
             // Una barra de varios focos cuenta como varias luces seguidas; dos
             // que van juntas, como una sola.
@@ -1225,7 +1270,7 @@ impl Show {
             *open > 0.0 && effects.iter().any(|e| e.id == *id && e.kind == EffectKind::Figure)
         });
         for id in self.figures.keys() {
-            self.effect_started.entry(id.clone()).or_insert(now);
+            self.effect_started.entry(id.clone()).or_insert(self.fx_clock);
         }
     }
 
@@ -1237,8 +1282,8 @@ impl Show {
         for (id, open) in &self.figures {
             let Some(effect) = self.doc.effects.iter().find(|e| e.id == *id) else { continue };
             let Some(group) = &effect.group_id else { continue };
-            let started = self.effect_started.get(id).copied().unwrap_or(now);
-            let cycles = cycles_of(effect, started, beats, now);
+            let started = self.effect_started.get(id).copied().unwrap_or(self.fx_clock);
+            let cycles = cycles_of(effect, started, beats, self.fx_clock);
             // Siguiendo la música, la figura crece con lo que suena.
             let size = effect.size_deg * smooth(*open) * level_of(effect, levels).unwrap_or(1.0);
             let (sin, cos) = effect.angle_deg.to_radians().sin_cos();
@@ -1305,10 +1350,21 @@ impl Show {
     // Salida
     // ------------------------------------------------------------------
 
+    /// Adelanta el reloj de los effects según la velocidad.
+    fn advance(&mut self, now: f64) {
+        if self.clock_at == 0.0 {
+            self.fx_clock = now;
+        } else if now > self.clock_at {
+            self.fx_clock += (now - self.clock_at) * self.playback.speed / 100.0;
+        }
+        self.clock_at = self.clock_at.max(now);
+    }
+
     pub fn tick(&mut self, now: f64) {
+        self.advance(now);
         self.tick_timeline(now);
         self.tick_moment(now);
-        self.tick_chase(now);
+        self.tick_chase();
         self.tick_effects(now);
         self.tick_figures(now);
         self.last_tick = now;
@@ -1380,6 +1436,7 @@ impl Show {
             "blackout": p.blackout_active,
             "strobe": p.strobe_active,
             "master": p.master,
+            "speed": p.speed,
             "dmx": dmx,
             "pads": self.pads_snapshot(&self.doc.phone_pads),
             "tapBpm": p.tap_bpm,

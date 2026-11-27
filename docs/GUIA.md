@@ -92,6 +92,7 @@ En el celular está el botón grande **Siguiente**, los momentos, las **Cancione
 
 - Toca **Siguiente** cuando cambia el momento. En la laptop también sirven **AvPág** y **RePág**, o un pasador de diapositivas.
 - **Intensidad** baja todas las luces a la vez sin perder nada.
+- **Velocidad** (en **Live** y en el celular) apura o frena todos los efectos y chases a la vez: más rápido en la hora loca, lento en el brindis. **1×** la vuelve a la normal. Lo que sigue la música (o el TAP) va con la música.
 - **Blackout** apaga todo sin mover las cabezas. Al volver, todo queda como estaba.
 - **Color fijo** (en **Live**, **Escenario** y el celular): elige un color para los PAR o las cabezas y se queda hasta que pasas a otro momento. Tapa los colores del momento y de sus efectos (la ola de colores se vuelve de un solo color) pero deja que sigan el dimmer, el estrobo y los movimientos. Si prendes a mano un efecto de color de ese grupo, el efecto le gana. Las cabezas también lo toman, con su rueda de colores (el más parecido al que elijas), y con **Estrobo** destellan en ese color. La rueda de las BEAM 280 está sin confirmar: con la luz conectada, revisa en **Fixtures → Editar perfil** que cada color caiga donde dice. Los momentos no cambian: **Del momento** lo suelta antes y vuelve lo que tenían.
 - **Hora loca con música:** en **Audio Reactive** toca **Escuchar** con la música sonando. Arriba aparecen los BPM y las luces siguen el ritmo. Hay que tocarlo cada vez que se abre el programa. Sin sonido, los PAR que laten con los graves se quedan apagados; cualquier sonido los prende, también la voz. Para que los discursos no los prendan, marca **Solo con música**: espera a reconocer el ritmo de una canción.
@@ -112,7 +113,7 @@ En el celular está el botón grande **Siguiente**, los momentos, las **Cancione
 
 ## 9. Antes de cada evento
 
-- [ ] **Settings → Exportar show** y guarda la copia en el celular o en un USB.
+- [ ] **Settings → Exportar show** y guarda la copia en el celular o en un USB. Además, cada día LUMEN guarda solo cómo estaba el show al empezar (dos semanas hacia atrás): si algo se dañó, en **Settings → Respaldos automáticos** toca **Recuperar**.
 - [ ] La laptop enchufada y con la **tapa abierta**.
 - [ ] La laptop y el celular en la WiFi propia.
 - [ ] Prueba cada momento en **Escenario** o con las luces, sin público.

@@ -48,9 +48,73 @@ pub fn load_show(app: AppHandle) -> Result<Option<String>, String> {
     read_show(&show_path(&app)?).map_err(|e| e.to_string())
 }
 
+/// Cuántos días de respaldo se guardan.
+const KEEP_BACKUPS: usize = 14;
+
+/// "2026-11-27": el día lo pone la ventana, que sabe la hora de Perú.
+fn is_day(day: &str) -> bool {
+    let b = day.as_bytes();
+    b.len() == 10 && b[4] == b'-' && b[7] == b'-' && b.iter().enumerate().all(|(i, c)| i == 4 || i == 7 || c.is_ascii_digit())
+}
+
+fn backups_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    data_path(app, "respaldos")
+}
+
+/// Antes del primer guardado de cada día, el show como estaba queda en
+/// `respaldos/show-<día>.json`; los de hace más de dos semanas se borran.
+fn backup_before_save(show: &Path, dir: &Path, day: &str) -> std::io::Result<()> {
+    let target = dir.join(format!("show-{day}.json"));
+    if !is_day(day) || target.exists() || !show.exists() {
+        return Ok(());
+    }
+    fs::create_dir_all(dir)?;
+    fs::copy(show, &target)?;
+    let mut days = backup_days(dir);
+    for old in days.split_off(KEEP_BACKUPS.min(days.len())) {
+        let _ = fs::remove_file(dir.join(format!("show-{old}.json")));
+    }
+    Ok(())
+}
+
+/// Los días con respaldo, del más nuevo al más viejo.
+fn backup_days(dir: &Path) -> Vec<String> {
+    let mut days: Vec<String> = fs::read_dir(dir)
+        .map(|entries| {
+            entries
+                .filter_map(|e| e.ok()?.file_name().into_string().ok())
+                .filter_map(|name| Some(name.strip_prefix("show-")?.strip_suffix(".json")?.to_owned()))
+                .filter(|day| is_day(day))
+                .collect()
+        })
+        .unwrap_or_default();
+    days.sort_by(|a, b| b.cmp(a));
+    days
+}
+
 #[tauri::command(async)]
-pub fn save_show(app: AppHandle, json: String) -> Result<(), String> {
-    write_atomic(&show_path(&app)?, &json).map_err(|e| e.to_string())
+pub fn save_show(app: AppHandle, json: String, day: Option<String>) -> Result<(), String> {
+    let path = show_path(&app)?;
+    if let Some(day) = day {
+        // Un respaldo que falla no puede impedir guardar.
+        if let Err(e) = backups_dir(&app).and_then(|dir| backup_before_save(&path, &dir, &day).map_err(|e| e.to_string())) {
+            eprintln!("No se pudo guardar el respaldo del día: {e}");
+        }
+    }
+    write_atomic(&path, &json).map_err(|e| e.to_string())
+}
+
+#[tauri::command(async)]
+pub fn list_backups(app: AppHandle) -> Result<Vec<String>, String> {
+    Ok(backup_days(&backups_dir(&app)?))
+}
+
+#[tauri::command(async)]
+pub fn read_backup(app: AppHandle, day: String) -> Result<String, String> {
+    if !is_day(&day) {
+        return Err("Ese día no vale".into());
+    }
+    fs::read_to_string(backups_dir(&app)?.join(format!("show-{day}.json"))).map_err(|e| e.to_string())
 }
 
 /// Preferencias de esta PC (src/lib/settings.ts).
@@ -133,6 +197,29 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         dir.join("show.json")
+    }
+
+    #[test]
+    fn the_first_save_of_each_day_keeps_how_the_show_was_and_only_two_weeks_stay() {
+        let show = temp_show("backup");
+        let dir = show.with_file_name("respaldos");
+        write_atomic(&show, r#"{"v":"ayer"}"#).unwrap();
+        backup_before_save(&show, &dir, "2026-11-27").unwrap();
+        write_atomic(&show, r#"{"v":"hoy 1"}"#).unwrap();
+        // El segundo guardado del día no pisa el respaldo.
+        backup_before_save(&show, &dir, "2026-11-27").unwrap();
+        assert_eq!(fs::read_to_string(dir.join("show-2026-11-27.json")).unwrap(), r#"{"v":"ayer"}"#);
+
+        for day in 1..=20 {
+            backup_before_save(&show, &dir, &format!("2026-12-{day:02}")).unwrap();
+        }
+        let days = backup_days(&dir);
+        assert_eq!(days.len(), KEEP_BACKUPS);
+        assert_eq!(days[0], "2026-12-20");
+        assert!(!days.contains(&"2026-11-27".to_owned()));
+        // Un día mal escrito no hace nada.
+        backup_before_save(&show, &dir, "../x").unwrap();
+        assert_eq!(backup_days(&dir).len(), KEEP_BACKUPS);
     }
 
     #[test]

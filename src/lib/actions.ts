@@ -31,6 +31,7 @@ export function actionOptions(rig: Rig): ActionOption[] {
     [{ do: "strobe" }, "Estrobo (mientras se aprieta)"],
     [{ do: "master" }, "Intensidad general (fader)"],
     [{ do: "tap" }, "Tap: marcar el ritmo (un toque por golpe)"],
+    [{ do: "speed" }, "Velocidad de los efectos (fader, normal al medio)"],
   ];
   const options: ActionOption[] = fixed.map(([action, label]) => ({ key: actionKey(action), label, group: "Show", action }));
   const add = (

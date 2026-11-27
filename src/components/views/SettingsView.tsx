@@ -1,10 +1,10 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
 import { askConfirm } from "@/lib/dialogs";
 import { VERSION } from "@/lib/updates";
 import { useFixtureStore } from "@/lib/fixtureStore";
-import { exportShowFile } from "@/lib/showFile";
+import { exportShowFile, listBackups, readBackup } from "@/lib/showFile";
 import { seedDefinitions, seedInstances } from "@/data/fixtureLibrary";
 
 /** Respaldo del show: exportar una copia e importarla (en esta u otra PC). */
@@ -85,8 +85,58 @@ export function SettingsView() {
             {message.text}
           </p>
         ) : null}
+        <Backups
+          onRestore={(day, json) => {
+            try {
+              importShow(json);
+              setMessage({ text: `Show recuperado: como estaba el ${formatDay(day)}.`, isError: false });
+            } catch (e) {
+              setMessage({ text: e instanceof Error ? e.message : String(e), isError: true });
+            }
+          }}
+        />
       </Panel>
       <Credits />
+    </div>
+  );
+}
+
+/** "jueves 27 de noviembre" */
+function formatDay(day: string): string {
+  const date = new Date(`${day}T12:00:00`);
+  const weekday = date.toLocaleDateString("es-PE", { weekday: "long" });
+  return `${weekday} ${date.toLocaleDateString("es-PE", { day: "numeric", month: "long" })}`;
+}
+
+/** Cada día, antes del primer guardado, el show como estaba queda guardado
+ *  (src-tauri/src/show.rs): dos semanas hacia atrás. */
+function Backups({ onRestore }: { onRestore: (day: string, json: string) => void }) {
+  const [days, setDays] = useState<string[]>([]);
+  useEffect(() => {
+    listBackups().then(setDays, () => setDays([]));
+  }, []);
+  if (days.length === 0) return null;
+  return (
+    <div className="mt-4 border-t border-border pt-3">
+      <div className="mb-2 text-xs font-medium tracking-wide text-text-secondary">RESPALDOS AUTOMÁTICOS</div>
+      <p className="mb-2 text-xs text-text-secondary">Cómo estaba el show al empezar cada día. Recuperar uno reemplaza el actual.</p>
+      <ul className="flex flex-col gap-1.5">
+        {days.map((day) => (
+          <li key={day} className="flex items-center justify-between gap-2 rounded-control border border-border bg-panel2 px-2.5 py-1.5 text-sm">
+            <span className="text-text-primary first-letter:uppercase">{formatDay(day)}</span>
+            <Button
+              size="sm"
+              onClick={() =>
+                askConfirm(`¿Volver al show como estaba el ${formatDay(day)}? Se reemplaza el actual.`, "Recuperar", () =>
+                  void readBackup(day).then((json) => onRestore(day, json)),
+                )
+              }
+            >
+              Recuperar
+            </Button>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

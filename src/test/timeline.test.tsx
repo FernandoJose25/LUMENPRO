@@ -135,7 +135,7 @@ describe("Botones del celular y MIDI", () => {
     };
     const idle: Playback = {
       activeSceneId: null, runningEffectIds: [], blackoutActive: false, master: 100, strobeActive: false, identifyId: null,
-      activeMomentId: null, momentRun: null, chase: null, heldColors: {}, timeline: null, tapBpm: null,
+      activeMomentId: null, momentRun: null, chase: null, heldColors: {}, timeline: null, tapBpm: null, speed: 100,
     };
     const option = actionOptions({ ...empty, ...idle }).find((o) => o.label === "Vals");
     expect(option).toMatchObject({ group: "Líneas de tiempo (arranca / detiene)", action: { do: "timeline", id: "t" } });

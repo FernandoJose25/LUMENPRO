@@ -108,6 +108,8 @@ fn window() {
             show::load_settings,
             show::save_settings,
             show::save_song,
+            show::list_backups,
+            show::read_backup,
             show::read_song,
             stage_window::open_stage_window,
             updates::check_update,
