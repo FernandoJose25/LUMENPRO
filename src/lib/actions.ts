@@ -37,7 +37,7 @@ export function actionOptions(rig: Rig): ActionOption[] {
   const add = (
     group: string,
     items: { id: string; name: string }[],
-    kind: "moment" | "scene" | "effect" | "chase" | "palette" | "timeline",
+    kind: "moment" | "scene" | "effect" | "chase" | "palette" | "timeline" | "special" | "arm",
   ) => {
     for (const item of items) {
       const action: Action = { do: kind, id: item.id };
@@ -50,6 +50,8 @@ export function actionOptions(rig: Rig): ActionOption[] {
   add("Chases (arranca / detiene)", rig.chases, "chase");
   add("Paletas", rig.palettes, "palette");
   add("Líneas de tiempo (arranca / detiene)", rig.timelines, "timeline");
+  add("Efectos especiales (disparar)", rig.specials, "special");
+  add("Efectos especiales (armar)", rig.specials.filter((s) => s.needsArm), "arm");
   for (const row of [{ id: null, name: "Todas" }, ...colorRows(rig)]) {
     const colors = [...SWATCHES.map((s) => ({ hex: s.hex as string | null, name: s.name })), { hex: null, name: "la del momento" }];
     for (const { hex, name } of colors) {
@@ -95,6 +97,10 @@ export function isActive(action: Action, rig: Rig): boolean {
       return rig.chase?.id === action.id;
     case "tap":
       return rig.tapBpm !== null;
+    case "special":
+      return rig.firing[action.id] !== undefined;
+    case "arm":
+      return rig.armed[action.id] !== undefined;
     case "timeline":
       return rig.timeline?.id === action.id && rig.timeline.pausedAt === null;
     case "blackout":

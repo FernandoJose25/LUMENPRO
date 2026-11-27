@@ -8,6 +8,7 @@ import type { Control, Pad } from "@/types/controls";
 import type { Scene } from "@/types/scene";
 import type { Timeline } from "@/types/timeline";
 import type { PlaylistSong } from "@/types/music";
+import type { Special } from "@/types/special";
 
 /** Lo que se programa, que es lo que Deshacer recupera. Los valores en vivo
  *  quedan fuera a propósito: deshacer a mitad del evento no debe mover luces. */
@@ -23,6 +24,8 @@ export interface ShowDoc {
   timelines: Timeline[];
   /** Las canciones de la hora loca (lib/musicPlayer.ts). */
   playlist: PlaylistSong[];
+  /** Humo, chispas frías, CO2, confeti. */
+  specials: Special[];
   livePads: Pad[];
   phonePads: Pad[];
   controls: Control[];
@@ -30,7 +33,7 @@ export interface ShowDoc {
 
 const KEYS = [
   "definitions", "instances", "scenes", "palettes", "groups", "chases", "effects", "moments", "timelines", "playlist",
-  "livePads", "phonePads", "controls",
+  "specials", "livePads", "phonePads", "controls",
 ] as const;
 
 const LIMIT = 100;

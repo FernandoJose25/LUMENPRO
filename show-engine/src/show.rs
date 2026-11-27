@@ -29,6 +29,10 @@ const TAP_LATE_MS: f64 = 1000.0;
 /// Velocidad de los effects y chases, en %: de un cuarto a cuatro veces.
 pub const SPEED_MIN: f64 = 25.0;
 pub const SPEED_MAX: f64 = 400.0;
+/// Armado, un efecto especial espera el disparo hasta cinco minutos.
+const ARM_MS: f64 = 5.0 * 60_000.0;
+/// Sin un máximo propio, un disparo dura esto.
+const SPECIAL_DEFAULT_MS: f64 = 5000.0;
 
 /// Fader de 0 a 1 → %, con 100 % en el medio.
 fn speed_from_fader(v: f64) -> f64 {
@@ -97,6 +101,10 @@ pub enum Message {
     ClearTap,
     /// Velocidad de los effects y chases, en %.
     Speed { value: f64 },
+    /// Dispara (o deja de disparar) un efecto especial.
+    Fire { id: String, on: bool },
+    /// Arma o desarma un efecto especial; sin `on`, lo cambia.
+    Arm { id: String, #[serde(default)] on: Option<bool> },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -165,6 +173,10 @@ pub struct Playback {
     /// Velocidad de los effects y chases, en % (100 = la suya). Lo que sigue
     /// la música va con la música.
     pub speed: f64,
+    /// Efectos especiales disparando: id -> hasta qué hora.
+    pub firing: BTreeMap<String, f64>,
+    /// Efectos especiales armados: id -> hasta qué hora.
+    pub armed: BTreeMap<String, f64>,
 }
 
 impl Default for Playback {
@@ -183,6 +195,8 @@ impl Default for Playback {
             timeline: None,
             tap_bpm: None,
             speed: 100.0,
+            firing: BTreeMap::new(),
+            armed: BTreeMap::new(),
         }
     }
 }
@@ -475,7 +489,13 @@ impl Show {
                 self.start_effect(id);
             }
             Message::StopEffect { id } => self.edit(|p| p.running_effect_ids.retain(|e| *e != id)),
-            Message::Blackout { on } => self.edit(|p| p.blackout_active = on),
+            Message::Blackout { on } => self.edit(|p| {
+                p.blackout_active = on;
+                // Blackout es también el botón de emergencia.
+                if on {
+                    p.firing.clear();
+                }
+            }),
             Message::Master { value } => {
                 let value = if value.is_finite() { value.round().clamp(0.0, 100.0) } else { return Ok(()) };
                 self.edit(|p| p.master = value);
@@ -501,6 +521,20 @@ impl Show {
             Message::ClearTap => {
                 self.tap = Tap::default();
                 self.edit(|p| p.tap_bpm = None);
+            }
+            Message::Fire { id, on } => self.fire_special(&id, on, now),
+            Message::Arm { id, on } => {
+                if self.doc.specials.iter().any(|s| s.id == id && s.needs_arm) {
+                    let on = on.unwrap_or(!self.playback.armed.contains_key(&id));
+                    self.edit(|p| {
+                        if on {
+                            p.armed.insert(id.clone(), now + ARM_MS);
+                        } else {
+                            p.armed.remove(&id);
+                            p.firing.remove(&id);
+                        }
+                    });
+                }
             }
             Message::Speed { value } => {
                 if value.is_finite() {
@@ -582,6 +616,17 @@ impl Show {
                     let _ = self.apply(Message::Speed { value }, now);
                 }
             }
+            "special" => {
+                let special = self.doc.specials.iter().find(|s| Some(s.id.as_str()) == command["id"].as_str());
+                if let Some(id) = special.map(|s| s.id.clone()) {
+                    self.act(&Action::Special { id }, command["press"].as_bool(), None, now);
+                }
+            }
+            "arm" => {
+                if let Some(id) = command["id"].as_str() {
+                    let _ = self.apply(Message::Arm { id: id.into(), on: command["on"].as_bool() }, now);
+                }
+            }
             "timeline" => match (command["id"].as_str(), command["play"].as_bool()) {
                 (Some(id), Some(true)) => self.play_timeline(id, 0.0, now),
                 (_, Some(false)) => self.stop_timeline(now),
@@ -597,6 +642,15 @@ impl Show {
         let value = value.filter(|v| v.is_finite()).map(|v| v.clamp(0.0, 1.0));
         let message = match action {
             Action::Strobe => press.map(|on| Message::Strobe { on }),
+            // Un toque prende y otro apaga, o dispara mientras se aprieta.
+            Action::Special { id } => {
+                let latch = self.doc.specials.iter().any(|s| s.id == *id && s.latch);
+                match (latch, press) {
+                    (true, Some(true)) => Some(Message::Fire { id: id.clone(), on: !self.playback.firing.contains_key(id) }),
+                    (true, _) => None,
+                    (false, press) => press.map(|on| Message::Fire { id: id.clone(), on }),
+                }
+            }
             Action::Master => value.map(|v| Message::Master { value: v * 100.0 }),
             Action::Speed => value.map(|v| Message::Speed { value: speed_from_fader(v) }),
             Action::GroupFader { group_id, channel_type } => {
@@ -652,6 +706,7 @@ impl Show {
             }
             Action::Chase { id } => Some(Message::PlayChase { id: id.clone() }),
             Action::Tap => Some(Message::Tap { at: None }),
+            Action::Arm { id } => Some(Message::Arm { id: id.clone(), on: None }),
             Action::Timeline { id } if self.timeline_playing(id) => Some(Message::StopTimeline),
             Action::Timeline { id } => Some(Message::PlayTimeline { id: id.clone(), from_ms: 0.0 }),
             Action::Blackout => Some(Message::Blackout { on: !self.playback.blackout_active }),
@@ -680,6 +735,8 @@ impl Show {
             Action::Stop => p.moment_run.is_none(),
             Action::Timeline { id } => self.timeline_playing(id),
             Action::Tap => p.tap_bpm.is_some(),
+            Action::Special { id } => p.firing.contains_key(id),
+            Action::Arm { id } => p.armed.contains_key(id),
             Action::Color { group_id: Some(group), color } => p.held_colors.get(group) == color.as_ref(),
             Action::Color { group_id: None, color: None } => p.held_colors.is_empty(),
             Action::Color { group_id: None, color: Some(hex) } => {
@@ -753,11 +810,53 @@ impl Show {
                 "label": p.label,
                 "size": p.size,
                 "fader": p.action.is_fader(),
-                "hold": p.action == Action::Strobe,
+                "hold": p.action == Action::Strobe || matches!(&p.action, Action::Special { id } if !self.is_latch(id)),
                 "active": self.is_active(&p.action),
                 "value": self.fader_value(&p.action),
             }))
             .collect::<Vec<_>>())
+    }
+
+    fn is_latch(&self, id: &str) -> bool {
+        self.doc.specials.iter().any(|s| s.id == id && s.latch)
+    }
+
+    /// Dispara si está armado (o no lo pide), hasta su máximo.
+    fn fire_special(&mut self, id: &str, on: bool, now: f64) {
+        let Some(special) = self.doc.specials.iter().find(|s| s.id == id) else { return };
+        if !on {
+            return self.edit(|p| {
+                p.firing.remove(id);
+            });
+        }
+        if special.needs_arm && !self.playback.armed.contains_key(id) {
+            return;
+        }
+        let max = if special.max_ms > 0.0 { special.max_ms } else { SPECIAL_DEFAULT_MS };
+        self.edit(|p| {
+            p.firing.insert(id.into(), now + max);
+        });
+    }
+
+    /// Los canales de todos los efectos especiales: su valor mientras
+    /// disparan, 0 si no.
+    fn special_values(&self) -> ChannelValues {
+        let mut values = ChannelValues::new();
+        for special in self.doc.specials.iter().filter(|s| !s.instance_id.is_empty()) {
+            let value = if self.playback.firing.contains_key(&special.id) { special.dmx() } else { 0 };
+            values.entry(special.instance_id.clone()).or_default().insert(special.channel_id.clone(), value);
+        }
+        values
+    }
+
+    fn tick_specials(&mut self, now: f64) {
+        let p = &self.playback;
+        if p.firing.values().chain(p.armed.values()).any(|until| *until <= now) {
+            self.edit(|p| {
+                p.firing.retain(|_, until| *until > now);
+                p.armed.retain(|_, until| *until > now);
+            });
+        }
     }
 
     fn start_effect(&mut self, id: String) {
@@ -805,12 +904,18 @@ impl Show {
             p.held_colors.iter().filter(|(_, hex)| colors.iter().any(|c| c.hex == **hex)).map(|(k, v)| (k.clone(), v.clone())).collect();
         let timelines = &self.doc.timelines;
         let timeline = p.timeline.clone().filter(|run| timelines.iter().any(|t| t.id == run.id));
+        let specials = &self.doc.specials;
+        let known = |id: &String| specials.iter().any(|s| s.id == *id);
+        let firing: BTreeMap<String, f64> = p.firing.iter().filter(|(id, _)| known(id)).map(|(k, v)| (k.clone(), *v)).collect();
+        let armed: BTreeMap<String, f64> = p.armed.iter().filter(|(id, _)| known(id)).map(|(k, v)| (k.clone(), *v)).collect();
         self.edit(|p| {
             p.running_effect_ids = running;
             p.active_scene_id = scene;
             p.active_moment_id = moment;
             p.held_colors = held;
             p.timeline = timeline;
+            p.firing = firing;
+            p.armed = armed;
         });
         if chase_gone {
             self.stop_chase();
@@ -1033,6 +1138,7 @@ impl Show {
                 Action::Color { group_id, .. } => {
                     self.act(&Action::Color { group_id: group_id.clone(), color: None }, Some(true), None, at)
                 }
+                Action::Special { id } => self.fire_special(id, false, at),
                 _ => {}
             }
             return;
@@ -1043,8 +1149,11 @@ impl Show {
             Action::Chase { id } => Message::PlayChase { id: id.clone() },
             Action::Blackout => Message::Blackout { on: true },
             Action::Strobe => Message::Strobe { on: true },
+            // Solo si está armado: la canción no arma nada sola.
+            Action::Special { id } => Message::Fire { id: id.clone(), on: true },
             // Otra línea de tiempo desde una marca se pisaría con esta.
             Action::Timeline { .. }
+            | Action::Arm { .. }
             | Action::Tap
             | Action::Master
             | Action::Speed
@@ -1363,6 +1472,7 @@ impl Show {
     pub fn tick(&mut self, now: f64) {
         self.advance(now);
         self.tick_timeline(now);
+        self.tick_specials(now);
         self.tick_moment(now);
         self.tick_chase();
         self.tick_effects(now);
@@ -1381,6 +1491,7 @@ impl Show {
             strobe: p.strobe_active,
             identify: p.identify_id.as_deref(),
             held: &self.held(),
+            specials: &self.special_values(),
         };
         frame::build(&self.doc, &self.live, &self.moving, &overlay, universe)
     }
@@ -1440,6 +1551,20 @@ impl Show {
             "dmx": dmx,
             "pads": self.pads_snapshot(&self.doc.phone_pads),
             "tapBpm": p.tap_bpm,
+            "specials": self
+                .doc
+                .specials
+                .iter()
+                .filter(|s| !s.instance_id.is_empty())
+                .map(|s| json!({
+                    "id": s.id,
+                    "name": s.name,
+                    "needsArm": s.needs_arm,
+                    "latch": s.latch,
+                    "armedUntil": p.armed.get(&s.id),
+                    "firing": p.firing.contains_key(&s.id),
+                }))
+                .collect::<Vec<_>>(),
             "effects": self
                 .doc
                 .effects

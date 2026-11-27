@@ -4,7 +4,7 @@ import type { ChannelType } from "@/types/fixture";
  *  ejecuta el motor (show-engine, `Show::act`). */
 export type Action =
   | { do: "next" | "prev" | "stop" | "blackout" | "strobe" | "master" | "tap" | "speed" }
-  | { do: "moment" | "scene" | "effect" | "chase" | "palette" | "timeline"; id: string }
+  | { do: "moment" | "scene" | "effect" | "chase" | "palette" | "timeline" | "special" | "arm"; id: string }
   | { do: "groupFader"; groupId: string; channelType: ChannelType }
   /** Color fijo encima del momento. Sin grupo, todos; sin color, se suelta. */
   | { do: "color"; groupId: string | null; color: string | null };

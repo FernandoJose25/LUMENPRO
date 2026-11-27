@@ -8,6 +8,7 @@ import type { Effect } from "@/types/effect";
 import type { Moment } from "@/types/moment";
 import type { Timeline } from "@/types/timeline";
 import type { PlaylistSong } from "@/types/music";
+import { SPECIAL_KINDS, type Special, type SpecialKind } from "@/types/special";
 import { engineNow, noteEngineNow } from "@/lib/engineClock";
 import type { Palette, PaletteKind } from "@/types/palette";
 import type { Action, Control, Pad } from "@/types/controls";
@@ -84,6 +85,8 @@ const IDLE: Omit<Playback, "activeSceneId" | "activeMomentId"> = {
   timeline: null,
   tapBpm: null,
   speed: 100,
+  firing: {},
+  armed: {},
 };
 const NOT_SAVED = new Set([...Object.keys(IDLE), "moving"]);
 
@@ -190,6 +193,11 @@ interface FixtureStoreValue extends FixtureStoreState {
   addQuinceTemplate: () => void;
   /** Vuelve los momentos, escenas y effects de la plantilla a como los arma. */
   resetQuinceTemplate: () => void;
+  /** Uno nuevo de ese tipo, sobre la primera máquina de efectos; sin ninguna,
+   *  queda sin asignar (no toca ninguna luz). */
+  addSpecial: (kind: SpecialKind) => Special;
+  updateSpecial: (specialId: string, patch: Partial<Omit<Special, "id">>) => void;
+  removeSpecial: (specialId: string) => void;
   addSongs: (songs: PlaylistSong[]) => void;
   updateSong: (songId: string, patch: Partial<Omit<PlaylistSong, "id">>) => void;
   removeSong: (songId: string) => void;
@@ -273,6 +281,7 @@ function restoreState(parsed: Partial<FixtureStoreState>): FixtureStoreState {
     moments: parsed.moments ?? [],
     timelines: parsed.timelines ?? [],
     playlist: parsed.playlist ?? [],
+    specials: parsed.specials ?? [],
     activeMomentId: parsed.activeMomentId ?? null,
     ...IDLE,
   };
@@ -921,6 +930,33 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
     }));
   }, [setState]);
 
+  const addSpecial = useCallback(
+    (kind: SpecialKind): Special => {
+      const s = stateRef.current;
+      const definitionOf = (definitionId: string) => s.definitions.find((d) => d.id === definitionId);
+      // Nunca una luz por las dudas: su canal quedaría en 0.
+      const machine = s.instances.find((i) => ["Smoke", "Hazer", "Effect"].includes(definitionOf(i.definitionId)?.kind ?? ""));
+      const channel = machine && definitionOf(machine.definitionId)?.channels[0];
+      const created: Special = {
+        id: makeId("special"),
+        name: SPECIAL_KINDS[kind].name,
+        kind,
+        instanceId: machine && channel ? machine.id : "",
+        channelId: channel?.id ?? "",
+        ...SPECIAL_KINDS[kind].defaults,
+      };
+      setState((st) => ({ ...st, specials: [...st.specials, created] }));
+      return created;
+    },
+    [setState],
+  );
+  const updateSpecial = useCallback((specialId: string, patch: Partial<Omit<Special, "id">>) => {
+    setState((s) => ({ ...s, specials: s.specials.map((x) => (x.id === specialId ? { ...x, ...patch } : x)) }));
+  }, [setState]);
+  const removeSpecial = useCallback((specialId: string) => {
+    setState((s) => ({ ...s, specials: s.specials.filter((x) => x.id !== specialId) }));
+  }, [setState]);
+
   const addSongs = useCallback((songs: PlaylistSong[]) => {
     setState((s) => ({ ...s, playlist: [...s.playlist, ...songs] }));
   }, [setState]);
@@ -1132,6 +1168,9 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
     addMoment,
     updateMoment,
     removeMoment,
+    addSpecial,
+    updateSpecial,
+    removeSpecial,
     addSongs,
     updateSong,
     removeSong,

@@ -12,6 +12,7 @@ import { PaletteChips } from "@/components/palettes/PalettesView";
 import { PadBoard } from "@/components/pads/PadBoard";
 import { LiveMoments } from "./LiveMoments";
 import { HeldColors } from "./HeldColors";
+import { Specials } from "./Specials";
 import { CHANNEL_TYPE_LABELS, type ChannelType } from "@/types/fixture";
 
 /**
@@ -47,6 +48,7 @@ export function LiveView() {
 
       <LiveMoments />
       <HeldColors />
+      <Specials />
       <LivePads />
 
       <PanelGroup direction="horizontal" className="min-h-0 flex-1 gap-2">

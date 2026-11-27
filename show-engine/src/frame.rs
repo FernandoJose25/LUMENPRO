@@ -16,6 +16,9 @@ pub struct Overlay<'a> {
     pub identify: Option<&'a str>,
     /// Los colores fijos de cada luz: le ganan al momento y a los effects.
     pub held: &'a ChannelValues,
+    /// Los canales de los efectos especiales: salen tal cual (0 si no se
+    /// disparan) y nada más los toca. El Blackout los apaga.
+    pub specials: &'a ChannelValues,
 }
 
 /// Valor para el botón Estrobo, o `None` si no se sabe cuál es. En una cabeza
@@ -105,6 +108,10 @@ pub fn build(doc: &Doc, live: &ChannelValues, moving: &ChannelValues, over: &Ove
         let held = over.held;
         // Los finos salen junto con el canal que completan.
         for (channel, role) in definition.channels.iter().zip(&definition.roles).filter(|(_, r)| !r.is_fine) {
+            if let Some(value) = over.specials.get(&instance.id).and_then(|c| c.get(&channel.id)) {
+                put(instance.address, channel, if over.blackout { 0 } else { *value });
+                continue;
+            }
             let value = live_value(instance, channel, live, moving, held);
             let inverted = is_inverted(instance, channel);
             // floor(x + 0.5) y no round(): es lo que hace Math.round en la interfaz.

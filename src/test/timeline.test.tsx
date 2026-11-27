@@ -131,12 +131,12 @@ describe("Botones del celular y MIDI", () => {
   it("pueden arrancar y detener una línea de tiempo", () => {
     const empty: ShowDoc = {
       definitions: [], instances: [], scenes: [], palettes: [], groups: [], chases: [], effects: [], moments: [],
-      timelines: [{ id: "t", name: "Vals", song: null, durationMs: 0, cues: [] }], playlist: [], livePads: [], phonePads: [],
+      timelines: [{ id: "t", name: "Vals", song: null, durationMs: 0, cues: [] }], playlist: [], specials: [], livePads: [], phonePads: [],
       controls: [],
     };
     const idle: Playback = {
       activeSceneId: null, runningEffectIds: [], blackoutActive: false, master: 100, strobeActive: false, identifyId: null,
-      activeMomentId: null, momentRun: null, chase: null, heldColors: {}, timeline: null, tapBpm: null, speed: 100,
+      activeMomentId: null, momentRun: null, chase: null, heldColors: {}, timeline: null, tapBpm: null, speed: 100, firing: {}, armed: {},
     };
     const option = actionOptions({ ...empty, ...idle }).find((o) => o.label === "Vals");
     expect(option).toMatchObject({ group: "Líneas de tiempo (arranca / detiene)", action: { do: "timeline", id: "t" } });

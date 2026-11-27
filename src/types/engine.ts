@@ -22,6 +22,10 @@ export interface Playback {
   tapBpm: number | null;
   /** Velocidad de los effects y chases, en % (100 = la suya); lo que sigue la música no cambia. */
   speed: number;
+  /** Efectos especiales disparando: id -> hasta qué hora del motor. */
+  firing: Record<string, number>;
+  /** Efectos especiales armados: id -> hasta qué hora del motor. */
+  armed: Record<string, number>;
 }
 
 export interface TimelineRun {
@@ -73,7 +77,9 @@ export type EngineMessage =
   | { type: "timelineSync"; id: string; positionMs: number }
   /** Un toque al ritmo; `at`, la hora del motor en que se tocó. */
   | { type: "tap"; at?: number }
-  | { type: "clearTap" };
+  | { type: "clearTap" }
+  | { type: "fire"; id: string; on: boolean }
+  | { type: "arm"; id: string; on?: boolean };
 
 export interface EngineChanges {
   rev: number;

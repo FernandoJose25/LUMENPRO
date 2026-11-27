@@ -566,7 +566,7 @@ fn phone_snapshot_has_only_what_the_page_shows() {
     let keys: Vec<_> = s.as_object().unwrap().keys().cloned().collect();
     assert_eq!(
         keys,
-        ["activeId", "blackout", "colors", "dmx", "effects", "master", "moments", "pads", "speed", "startedAt", "strobe", "tapBpm", "timeline", "timelines"]
+        ["activeId", "blackout", "colors", "dmx", "effects", "master", "moments", "pads", "specials", "speed", "startedAt", "strobe", "tapBpm", "timeline", "timelines"]
     );
     assert_eq!(s["moments"], json!([{ "id": "a", "name": "A", "durationSec": 90.0 }]));
 }
@@ -1540,4 +1540,124 @@ fn the_speed_comes_from_the_phone_and_from_a_fader_with_normal_in_the_middle() {
     assert_eq!(fader(&mut r, 0.0), 25.0);
     r.phone(json!({ "type": "speed", "value": 9999 }));
     assert_eq!(r.playback()["speed"], json!(400.0));
+}
+
+// ----------------------------------------------------------------------
+// Efectos especiales
+// ----------------------------------------------------------------------
+
+/// Una máquina de humo (canal 60) y una de chispas (canal 61), con su
+/// efecto especial cada una.
+fn with_specials(r: &mut Rig) {
+    r.doc["definitions"].as_array_mut().unwrap().push(json!({ "id": "machine", "kind": "Smoke", "channels": [channel("out", 1, "OTHER", 0)] }));
+    r.doc["instances"].as_array_mut().unwrap().extend([
+        json!({ "id": "fog", "definitionId": "machine", "universe": 1, "address": 60 }),
+        json!({ "id": "sparks", "definitionId": "machine", "universe": 1, "address": 61 }),
+        json!({ "id": "haze", "definitionId": "machine", "universe": 1, "address": 62 }),
+    ]);
+    r.doc["specials"] = json!([
+        { "id": "humo", "name": "Humo", "instanceId": "fog", "channelId": "out", "level": 255, "maxMs": 3000, "needsArm": false, "latch": false },
+        { "id": "chispas", "name": "Chispas", "instanceId": "sparks", "channelId": "out", "level": 200, "maxMs": 2000, "needsArm": true, "latch": false },
+        { "id": "haze", "name": "Haze", "instanceId": "haze", "channelId": "out", "level": 60, "maxMs": 600000, "needsArm": false, "latch": true },
+    ]);
+    r.reset();
+}
+
+fn press(r: &mut Rig, id: &str, on: bool) {
+    r.send(json!({ "type": "action", "action": { "do": "special", "id": id }, "press": on }));
+}
+
+fn out(r: &Rig, address: usize) -> u8 {
+    r.show.frame(1)[address - 1]
+}
+
+#[test]
+fn a_special_stays_at_zero_unless_fired_and_only_while_pressed_up_to_its_maximum() {
+    let mut r = Rig::new();
+    with_specials(&mut r);
+    // Una escena o un fader no lo prenden.
+    r.set("fog", "out", 200);
+    assert_eq!(out(&r, 60), 0);
+
+    press(&mut r, "humo", true);
+    r.run(1000.0);
+    assert_eq!(out(&r, 60), 255);
+    press(&mut r, "humo", false);
+    assert_eq!(out(&r, 60), 0);
+
+    // Aunque se siga apretando, no pasa de su máximo.
+    press(&mut r, "humo", true);
+    r.run(3100.0);
+    assert_eq!(out(&r, 60), 0);
+    assert_eq!(r.playback()["firing"], json!({}));
+}
+
+#[test]
+fn sparks_need_arming_and_blackout_cuts_them() {
+    let mut r = Rig::new();
+    with_specials(&mut r);
+    press(&mut r, "chispas", true);
+    assert_eq!(out(&r, 61), 0, "sin armar no dispara");
+    press(&mut r, "chispas", false);
+
+    r.send(json!({ "type": "action", "action": { "do": "arm", "id": "chispas" }, "press": true }));
+    assert!(r.playback()["armed"]["chispas"].is_number());
+    press(&mut r, "chispas", true);
+    assert_eq!(out(&r, 61), 200);
+
+    r.send(json!({ "type": "blackout", "on": true }));
+    assert_eq!(out(&r, 61), 0);
+    r.send(json!({ "type": "blackout", "on": false }));
+    assert_eq!(out(&r, 61), 0, "al volver no se reanuda");
+
+    // El armado vence solo.
+    r.run(5.0 * 60_000.0 + 100.0);
+    assert_eq!(r.playback()["armed"], json!({}));
+}
+
+#[test]
+fn haze_is_switched_on_with_one_tap_and_off_with_another() {
+    let mut r = Rig::new();
+    with_specials(&mut r);
+    press(&mut r, "haze", true);
+    press(&mut r, "haze", false);
+    r.run(5000.0);
+    assert_eq!(out(&r, 62), 60);
+    press(&mut r, "haze", true);
+    assert_eq!(out(&r, 62), 0);
+}
+
+#[test]
+fn in_the_timeline_a_special_fires_only_if_it_was_armed() {
+    let mut r = Rig::new();
+    with_specials(&mut r);
+    let specials = r.doc["specials"].clone();
+    with_vals(&mut r, json!([{ "atMs": 1000, "lengthMs": 500, "action": { "do": "special", "id": "chispas" } }]));
+    r.doc["specials"] = specials;
+    r.send(json!({ "type": "doc", "doc": r.doc }));
+
+    play(&mut r, 0.0);
+    r.run(1200.0);
+    assert_eq!(out(&r, 61), 0, "sin armar, la canción no lo dispara");
+
+    r.send(json!({ "type": "arm", "id": "chispas", "on": true }));
+    play(&mut r, 0.0);
+    r.run(1200.0);
+    assert_eq!(out(&r, 61), 200);
+    r.run(400.0);
+    assert_eq!(out(&r, 61), 0, "termina con la marca");
+}
+
+#[test]
+fn the_phone_arms_and_fires() {
+    let mut r = Rig::new();
+    with_specials(&mut r);
+    r.phone(json!({ "type": "arm", "id": "chispas" }));
+    r.phone(json!({ "type": "special", "id": "chispas", "press": true }));
+    assert_eq!(out(&r, 61), 200);
+    let s = r.show.phone_snapshot("running");
+    assert_eq!(s["specials"][1]["firing"], json!(true));
+    assert!(s["specials"][1]["armedUntil"].is_number());
+    r.phone(json!({ "type": "special", "id": "chispas", "press": false }));
+    assert_eq!(out(&r, 61), 0);
 }

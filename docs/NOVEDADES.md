@@ -1,6 +1,8 @@
-## Novedades de la 0.5.0
+## Novedades de la 0.6.0
 
-**Música: las luces caen en cada golpe, sin micrófono.** Nueva sección **Música**. Agrega las canciones de la hora loca: cada una se analiza al agregarla (su tempo y dónde cae el primer golpe). La laptop las pone por el cable a la consola, pasa sola a la siguiente, y mientras suena las luces que siguen la música van exactas con la canción, también el golpe de graves. Si el tempo quedó al doble o a la mitad, se corrige con ×2 o ½. Al arrancar el vals, la música se pausa sola.
+**Efectos especiales con seguridad: humo, haze, chispas frías, CO2 y confeti.** En Live → Efectos especiales eliges la máquina y su canal. Ese canal queda en 0 salvo mientras disparas: ninguna escena ni efecto lo prende por error y el Blackout lo corta. El humo dispara mientras mantienes apretado (hasta un máximo de segundos); las chispas, el CO2 y el confeti hay que armarlos antes; el haze se prende y apaga con un toque. También desde el celular, botones, MIDI y la línea de tiempo (humo bajo en el segundo exacto del vals).
+
+**De la 0.5.0:** Música, las luces caen en cada golpe sin micrófono.
 
 **De la 0.4.2:** velocidad general de los efectos y respaldos automáticos del show.
 

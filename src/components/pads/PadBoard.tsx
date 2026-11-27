@@ -136,7 +136,9 @@ function PadControl({ pad, disabled }: { pad: Pad; disabled: boolean }) {
       </div>
     );
   }
-  const hold = pad.action.do === "strobe";
+  // El estrobo y los especiales que no se enclavan, mientras se aprieta.
+  const special = pad.action.do === "special" ? store.specials.find((s) => "id" in pad.action && s.id === pad.action.id) : undefined;
+  const hold = pad.action.do === "strobe" || (special !== undefined && !special.latch);
   const active = isActive(pad.action, store);
   return (
     <Button

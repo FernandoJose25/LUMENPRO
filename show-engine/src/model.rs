@@ -566,6 +566,10 @@ pub enum Action {
     Tap,
     /// Fader: velocidad de los effects y chases.
     Speed,
+    /// Un efecto especial: dispara mientras se aprieta (o prende y apaga).
+    Special { id: String },
+    /// Arma o desarma un efecto especial que lo pide.
+    Arm { id: String },
     #[default]
     #[serde(other)]
     Nothing,
@@ -613,6 +617,33 @@ impl Timeline {
     /// Termina con la canción, o con la última marca si va más allá.
     pub fn end_ms(&self) -> f64 {
         self.cues.iter().map(|c| c.end_ms().unwrap_or(c.at_ms)).fold(self.duration_ms.max(0.0), f64::max)
+    }
+}
+
+/// Humo, chispas frías, CO2, confeti: un canal que sale en 0 salvo mientras
+/// se dispara. Ni las escenas ni los effects lo tocan.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Special {
+    pub id: String,
+    pub name: String,
+    pub instance_id: String,
+    pub channel_id: String,
+    /// Valor DMX al disparar.
+    #[serde(deserialize_with = "num")]
+    pub level: f64,
+    /// Lo más que dura un disparo, aunque se siga apretando.
+    #[serde(deserialize_with = "num")]
+    pub max_ms: f64,
+    /// Chispas, CO2, confeti: hay que armarlo antes de disparar.
+    pub needs_arm: bool,
+    /// Un toque lo prende y otro lo apaga (el haze, toda la noche).
+    pub latch: bool,
+}
+
+impl Special {
+    pub fn dmx(&self) -> u8 {
+        self.level.round().clamp(0.0, 255.0) as u8
     }
 }
 
@@ -667,6 +698,7 @@ pub struct Doc {
     pub effects: Vec<Effect>,
     pub moments: Vec<Moment>,
     pub timelines: Vec<Timeline>,
+    pub specials: Vec<Special>,
     pub live_pads: Vec<Pad>,
     pub phone_pads: Vec<Pad>,
     pub controls: Vec<Control>,

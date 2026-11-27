@@ -14,19 +14,21 @@ import type { Action } from "@/types/controls";
 import type { TimelineRun } from "@/types/engine";
 import type { Timeline, TimelineCue } from "@/types/timeline";
 
-type Lane = "moment" | "color" | "effect" | "flash";
+type Lane = "moment" | "color" | "effect" | "flash" | "special";
 
 const LANES: { id: Lane; name: string }[] = [
   { id: "moment", name: "Momentos" },
   { id: "color", name: "Color fijo" },
   { id: "effect", name: "Efectos" },
   { id: "flash", name: "Estrobo y apagón" },
+  { id: "special", name: "Especiales" },
 ];
 
 function laneOf(action: Action): Lane {
   if (action.do === "moment") return "moment";
   if (action.do === "color") return "color";
   if (action.do === "effect" || action.do === "chase") return "effect";
+  if (action.do === "special") return "special";
   return "flash";
 }
 
@@ -343,6 +345,14 @@ function TimelineEditor({ timeline }: { timeline: Timeline }) {
             <Button size="sm" onClick={() => addCue({ do: "blackout" }, null)}>
               + Apagón
             </Button>
+            <Button
+              size="sm"
+              disabled={store.specials.length === 0}
+              title={store.specials.length === 0 ? "Primero agrégalos en Live → Efectos especiales" : undefined}
+              onClick={() => addCue({ do: "special", id: store.specials[0].id }, 2000)}
+            >
+              + Especial
+            </Button>
             <span className="text-[11px] text-text-secondary">
               Se ponen donde está la línea blanca. Con la canción sonando, tócalos al ritmo y después afínalos arrastrándolos.
             </span>
@@ -456,6 +466,8 @@ function cueLabel(cue: TimelineCue, store: Store): string {
       const color = a.color === null ? "la del momento" : SWATCHES.find((s) => s.hex === a.color)?.name ?? a.color;
       return `${lights}: ${color}`;
     }
+    case "special":
+      return store.specials.find((s) => s.id === a.id)?.name ?? "(especial borrado)";
     case "strobe":
       return "Estrobo";
     case "blackout":
@@ -601,6 +613,21 @@ function CueInspector({ cue, onChange, onDelete, onHere, onListen }: CueInspecto
               </option>
             ))}
         </select>
+      ) : null}
+
+      {a.do === "special" ? (
+        <div className="flex flex-col gap-1">
+          <select aria-label="Efecto especial" value={a.id} onChange={(e) => onChange({ action: { do: "special", id: e.target.value } })} className={fieldClass}>
+            {store.specials.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+          {store.specials.find((s) => s.id === a.id)?.needsArm ? (
+            <p className="text-[11px] text-state-warn">Arma este efecto (en Live o el celular) antes de reproducir: la canción no lo arma sola.</p>
+          ) : null}
+        </div>
       ) : null}
 
       {a.do === "color" ? (

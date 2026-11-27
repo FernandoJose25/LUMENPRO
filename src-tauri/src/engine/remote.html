@@ -80,6 +80,12 @@
   #effects { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   #effects button { min-height: 48px; font-size: 14px; overflow-wrap: anywhere; }
   #effects button.on { border-color: var(--accent); color: var(--bg); background: var(--accent); }
+  #specials { display: grid; gap: 10px; }
+  #specials .special { display: grid; grid-template-columns: 1fr 1.6fr; gap: 8px; }
+  #specials .special.solo { grid-template-columns: 1fr; }
+  #specials button { min-height: 56px; font-size: 16px; user-select: none; -webkit-user-select: none; touch-action: manipulation; }
+  #specials button.armed { border-color: var(--danger); color: #fff; background: var(--danger); }
+  #specials button.on { border-color: var(--accent); color: var(--bg); background: var(--accent); }
   #timelines { display: grid; gap: 10px; }
   #timelines button { min-height: 56px; font-size: 17px; font-variant-numeric: tabular-nums; }
   #timelines button.on { border-color: var(--accent); color: var(--bg); background: var(--accent); }
@@ -108,6 +114,10 @@
     <section id="timelines-box" class="colors" hidden>
       <h2>Canciones · la música sale de la laptop</h2>
       <div id="timelines"></div>
+    </section>
+    <section id="specials-box" class="colors" hidden>
+      <h2>Efectos especiales · se dispara mientras aprietas</h2>
+      <div id="specials"></div>
     </section>
     <section id="colors" class="colors" hidden>
       <h2>Color fijo · hasta el próximo momento</h2>
@@ -288,7 +298,49 @@ function render() {
   renderColors();
   renderEffects();
   renderTimelines();
+  renderSpecials();
   renderClock();
+}
+
+// Humo, chispas, CO2, confeti. Las chispas y el CO2 se arman antes; el
+// disparo dura mientras se aprieta (el haze, un toque prende y otro apaga).
+function renderSpecials() {
+  if (!state) return;
+  const specials = state.specials || [];
+  $("specials-box").hidden = specials.length === 0;
+  const list = $("specials");
+  while (list.children.length > specials.length) list.lastChild.remove();
+  specials.forEach((s, i) => {
+    let row = list.children[i];
+    if (!row) {
+      row = list.appendChild(document.createElement("div"));
+      row.innerHTML = '<button class="arm" type="button"></button><button class="fire" type="button"></button>';
+    }
+    row.className = "special" + (s.needsArm ? "" : " solo");
+    const arm = row.querySelector(".arm"), fire = row.querySelector(".fire");
+    const armedLeft = s.armedUntil ? s.armedUntil - (Date.now() + clockOffset) : 0;
+    const ready = !s.needsArm || armedLeft > 0;
+    arm.hidden = !s.needsArm;
+    arm.className = "arm" + (armedLeft > 0 ? " armed" : "");
+    arm.textContent = armedLeft > 0 ? "ARMADO " + clock(armedLeft) : "Armar " + s.name;
+    arm.disabled = !online;
+    arm.onclick = () => send({ type: "arm", id: s.id });
+    fire.className = "fire" + (s.firing ? " on" : "");
+    fire.disabled = !online || !ready;
+    fire.textContent = s.latch ? s.name + (s.firing ? ": apagar" : ": prender") : s.firing ? s.name + "…" : "Mantener: " + s.name;
+    const press = (on) => send({ type: "special", id: s.id, press: on });
+    if (s.latch) {
+      fire.onpointerdown = fire.onpointerup = fire.onpointercancel = fire.onpointerleave = null;
+      fire.onclick = () => press(true);
+    } else {
+      fire.onclick = null;
+      fire.onpointerdown = (e) => {
+        e.preventDefault();
+        press(true);
+      };
+      fire.onpointerup = fire.onpointercancel = fire.onpointerleave = () => press(false);
+    }
+  });
 }
 
 // Las líneas de tiempo (el vals): la canción suena en la laptop. Detenerla
@@ -459,6 +511,7 @@ function renderClock() {
 setInterval(() => {
   renderClock();
   renderTimelines();
+  renderSpecials();
 }, 500);
 
 // `from` evita saltarse un momento con un doble toque o con dos celulares:
