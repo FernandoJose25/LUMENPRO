@@ -1,6 +1,6 @@
 [package]
 name = "lumenpro"
-version = "0.13.0"
+version = "0.14.0"
 description = "LUMEN PRO — consola de control DMX"
 edition = "2021"
 
@@ -28,13 +28,12 @@ tauri-plugin-updater = "2"
 mdns-sd = "0.22.0"
 # Nombres de los enlaces de YouTube y Spotify (src/links.rs). Ya viene con el actualizador.
 reqwest = { version = "0.13", default-features = false }
-# Manejar Brave como reproductor sin anuncios (src/brave.rs), solo en esta PC.
-tungstenite = { version = "0.30", default-features = false, features = ["handshake"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Diagnostics_ToolHelp", "Win32_System_Power", "Win32_System_Threading", "Win32_UI_WindowsAndMessaging"] }
 # Copiar lo que suena en la PC (src/pc_audio.rs).
-windows = { version = "0.62", features = ["Win32_Media_Audio", "Win32_System_Com"] }
+# y manejar lo que suena en el navegador (src/links.rs).
+windows = { version = "0.62", features = ["Foundation", "Foundation_Collections", "Media_Control", "Win32_Media_Audio", "Win32_System_Com"] }
 
 [[bin]]
 name = "lumenpro"

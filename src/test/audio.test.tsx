@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import App from "@/App";
-import { followBand, gateDb, setAudioFeed, SILENT_BAND, type AudioFeed } from "@/lib/audioInput";
+import { audible, followBand, gateDb, setAudioFeed, SILENT_BAND, type AudioFeed } from "@/lib/audioInput";
 import { createBeatTracker } from "@/lib/beatTracker";
 import { FixtureStoreProvider, useFixtureStore } from "@/lib/fixtureStore";
 import type { Effect } from "@/types/effect";
@@ -249,5 +249,14 @@ describe("Pantalla Audio Reactive", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Privacidad y seguridad → Micrófono");
     expect(screen.getByRole("button", { name: "▶ Escuchar" })).toBeInTheDocument();
     vi.unstubAllGlobals();
+  });
+});
+
+describe("Pista de Música", () => {
+  it("en silencio o en pausa no dibuja nada, aunque levels se ajuste al ruido", () => {
+    expect(audible(-120)).toBe(0);
+    expect(audible(-65)).toBe(0);
+    expect(audible(-60)).toBeCloseTo(0.5);
+    expect(audible(-20)).toBe(1);
   });
 });

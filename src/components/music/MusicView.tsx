@@ -7,8 +7,10 @@ import { cn } from "@/lib/utils";
 import { askConfirm } from "@/lib/dialogs";
 import { useFixtureStore } from "@/lib/fixtureStore";
 import type { MusicPlayer } from "@/lib/musicPlayer";
-import { pcAudioAvailable } from "@/lib/pcAudio";
-import { linkDetail, type LinkPlayer } from "@/lib/links";
+import { PC_AUDIO, pcAudioAvailable } from "@/lib/pcAudio";
+import type { AudioInput } from "@/lib/audioInput";
+import { linkDetail, type LinkPlayer, type MusicLink } from "@/lib/links";
+import type { MusicLights } from "@/lib/musicLights";
 import { SoundTrack } from "./SoundTrack";
 import { saveSong, songShape } from "@/lib/songs";
 import type { PlaylistSong } from "@/types/music";
@@ -17,12 +19,31 @@ const songId = () => `song-${Date.now().toString(36)}-${Math.random().toString(3
 
 /** La música de la hora loca, desde la laptop: cada canción viene con su
  *  ritmo analizado y las luces caen en cada golpe sin micrófono. */
-export function MusicView({ music, links }: { music: MusicPlayer; links: LinkPlayer }) {
+export function MusicView({
+  music,
+  links,
+  lights,
+  audio,
+}: {
+  music: MusicPlayer;
+  links: LinkPlayer;
+  lights: MusicLights;
+  audio: AudioInput;
+}) {
   const store = useFixtureStore();
   const { playlist, addSongs, updateSong, removeSong, moveSong } = store;
   const [pending, setPending] = useState<string[]>([]);
   const [failed, setFailed] = useState<string[]>([]);
   const current = playlist.find((s) => s.id === music.songId) ?? null;
+  const opened = links.links.find((l) => l.id === links.openedId);
+  // Qué está oyendo LUMEN: lo que dibuja la pista y siguen las luces.
+  const hearing = music.playing
+    ? "la canción que suena"
+    : !audio.listening
+      ? null
+      : audio.deviceId === PC_AUDIO
+        ? "lo que suena en esta PC"
+        : "la entrada de audio (micrófono o cable)";
 
   async function handleFiles(files: File[]) {
     setFailed([]);
@@ -134,6 +155,10 @@ export function MusicView({ music, links }: { music: MusicPlayer; links: LinkPla
       <div className="flex min-w-0 flex-1 flex-col gap-2">
         <div className="shrink-0">
           <Panel title="SUENA">
+            {opened && !music.playing ? (
+              <OpenedLink link={opened} links={links} />
+            ) : (
+            <>
             <div className="flex flex-wrap items-center gap-2">
               <Button aria-label="Anterior" onClick={music.prev} disabled={playlist.length === 0}>
                 ⏮
@@ -170,15 +195,17 @@ export function MusicView({ music, links }: { music: MusicPlayer; links: LinkPla
               </p>
             ) : null}
             <p className="mt-2 text-[11px] text-text-secondary">
-              Lanza «Hora loca con música» (o cualquier momento con efectos al ritmo). Si el tempo quedó al doble o a la mitad,
-              corrígelo con ×2 o ½ en la canción; si no cae en el golpe, marca el ritmo con TAP. Al arrancar el vals, la música
-              se pausa sola.
+              Si el tempo quedó al doble o a la mitad, corrígelo con ×2 o ½ en la canción; si no cae en el golpe, marca el
+              ritmo con TAP. Al arrancar el vals, la música se pausa sola.
             </p>
+            </>
+            )}
+            <LightsRow lights={lights} />
           </Panel>
         </div>
         <div className="shrink-0">
           <Panel title="PISTA">
-            <SoundTrack />
+            <SoundTrack hearing={hearing} />
           </Panel>
         </div>
         <div className="min-h-0 flex-1">
@@ -191,19 +218,89 @@ export function MusicView({ music, links }: { music: MusicPlayer; links: LinkPla
   );
 }
 
-/** Canciones y playlists de YouTube o Spotify por enlace: suenan en el
- *  reproductor de LUMEN y las luces las siguen sin guardar nada. */
+/** El enlace que se abrió en el navegador. LUMEN no maneja esa ventana: la
+ *  pausa y los saltos van por los controles multimedia de Windows (los que
+ *  salen junto al volumen), que también dicen qué canción suena. */
+function OpenedLink({ link, links }: { link: MusicLink; links: LinkPlayer }) {
+  const now = links.now;
+  const where = links.openedIn ?? "el navegador";
+  return (
+    <>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button aria-label="Anterior" onClick={() => links.media("previous")}>
+          ⏮
+        </Button>
+        <Button variant="primary" onClick={() => links.media("playpause")}>
+          {now && !now.playing ? "▶ Seguir" : "❚❚ Pausa"}
+        </Button>
+        <Button aria-label="Siguiente" onClick={() => links.media("next")}>
+          ⏭
+        </Button>
+        <span className="min-w-0 flex-1 truncate text-sm text-text-primary" title={now?.title ?? link.title}>
+          ♪ {now?.title || link.title}
+          {now?.artist ? <span className="text-text-secondary"> · {now.artist}</span> : null}
+        </span>
+        <span className="shrink-0 text-xs text-text-secondary">
+          {now ? (now.playing ? `suena en ${where}` : `en pausa en ${where}`) : `abierta en ${where}`}
+        </span>
+        <Button size="sm" variant="ghost" onClick={links.forget}>
+          Usar mis canciones
+        </Button>
+      </div>
+      {links.error ? (
+        <p role="alert" className="mt-2 text-xs text-state-danger">
+          {links.error}
+        </p>
+      ) : null}
+      <p className="mt-2 text-[11px] text-text-secondary">
+        Suena en una ventana de {where}: ahí puedes verla o cerrarla. Al arrancar el vals se pausa sola.
+      </p>
+    </>
+  );
+}
+
+/** Si las luces siguen o no la música, y cómo hacer que la sigan. */
+function LightsRow({ lights }: { lights: MusicLights }) {
+  const name = lights.musicMoment?.name;
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-border pt-3 text-xs">
+      <span role="status" className={lights.following ? "font-medium text-accent" : "font-medium text-text-primary"}>
+        {lights.following ? "💡 Las luces siguen la música" : "💡 Las luces no siguen la música"}
+      </span>
+      {!lights.following && name ? (
+        <Button size="sm" variant="primary" onClick={lights.follow}>
+          Que la sigan («{name}»)
+        </Button>
+      ) : null}
+      {!name ? (
+        <span className="text-text-secondary">Ningún momento tiene efectos al ritmo: arma uno en Momentos.</span>
+      ) : (
+        <label className="ml-auto flex items-center gap-1.5 text-text-secondary">
+          <input
+            type="checkbox"
+            className="accent-accent"
+            checked={lights.auto}
+            onChange={(e) => lights.setAuto(e.target.checked)}
+          />
+          Al poner música, prender «{name}» si nada la sigue
+        </label>
+      )}
+    </div>
+  );
+}
+
+/** Canciones y playlists de YouTube o Spotify por enlace: se abren en el
+ *  Brave del usuario y las luces las siguen sin guardar nada. */
 function LinksPanel({ links }: { links: LinkPlayer }) {
   const [text, setText] = useState("");
-  const now = links.playing;
-  const current = now ? links.links.find((l) => l.id === now.id) : undefined;
 
   return (
     <Panel title="ENLACES DE YOUTUBE Y SPOTIFY">
       <p className="mb-3 text-xs text-text-secondary">
-        Pega el enlace de una canción, álbum o playlist (en la app: Compartir → Copiar enlace). Suena desde YouTube (las de
-        Spotify se buscan ahí por nombre) y las luces la siguen. Con Brave instalado suena en Brave, sin anuncios; sin
-        Brave, en el reproductor de LUMEN, que puede tener anuncios. No se descarga nada: necesita internet.
+        Pega el enlace de una canción, álbum o playlist (en la app: Compartir → Copiar enlace). Con ▶ se abre en una
+        ventana nueva de tu Brave (o de tu navegador) y sigue sola con la lista; las de Spotify se buscan en YouTube al
+        agregarlas. Las luces la siguen escuchando lo que suena en esta PC (todo: otro video o un juego también), así que en el
+        evento deja sonando solo la música. No se descarga nada: necesita internet.
       </p>
       <form
         className="flex gap-2"
@@ -223,34 +320,15 @@ function LinksPanel({ links }: { links: LinkPlayer }) {
           {links.busy ? "Leyendo…" : "Agregar"}
         </Button>
       </form>
+      {links.busy ? (
+        <p role="status" className="mt-2 text-xs text-text-secondary">
+          Leyendo el enlace… una playlist de Spotify tarda unos segundos: se busca cada canción en YouTube.
+        </p>
+      ) : null}
       {links.error ? (
         <p role="alert" className="mt-2 text-xs text-state-danger">
           {links.error}
         </p>
-      ) : null}
-
-      {now && current ? (
-        <div className="mt-3 rounded-control border border-accent bg-accent/15 p-2">
-          <p className="truncate text-sm text-text-primary" title={now.title ?? current.title}>
-            ♪ {now.title ?? (current.source === "spotify" ? current.tracks[now.track] : current.title)}
-          </p>
-          {current.tracks.length > 1 ? (
-            <p className="truncate text-[11px] text-text-secondary">
-              Canción {now.track + 1} de {current.tracks.length} · {current.title}
-            </p>
-          ) : null}
-          <div className="mt-2 flex gap-2">
-            <Button size="sm" onClick={links.toggle}>
-              {now.paused ? "▶ Seguir" : "❚❚ Pausa"}
-            </Button>
-            <Button size="sm" onClick={links.next}>
-              ⏭ Siguiente
-            </Button>
-            <Button size="sm" variant="danger" onClick={links.stop}>
-              ■ Parar
-            </Button>
-          </div>
-        </div>
       ) : null}
 
       <ol className="mt-3 flex flex-col gap-1.5" aria-label="Lista de enlaces">
@@ -259,16 +337,17 @@ function LinksPanel({ links }: { links: LinkPlayer }) {
             key={link.id}
             className={cn(
               "flex items-center gap-2 rounded-control border px-2 py-1.5 text-sm",
-              link.id === now?.id ? "border-accent bg-accent/15" : "border-border bg-panel2",
+              link.id === links.openedId ? "border-accent bg-accent/15" : "border-border bg-panel2",
             )}
           >
             <button
               type="button"
               aria-label={`Poner ${link.title}`}
+              disabled={links.busy}
               onClick={() => links.play(link.id)}
-              className="h-7 w-7 shrink-0 rounded-control text-text-primary hover:bg-panel"
+              className="h-7 w-7 shrink-0 rounded-control text-text-primary hover:bg-panel disabled:opacity-40"
             >
-              {link.id === now?.id && !now.paused ? "♪" : "▶"}
+              {link.id === links.openedId ? "♪" : "▶"}
             </button>
             <span
               aria-hidden

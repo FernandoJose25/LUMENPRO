@@ -1,3 +1,13 @@
+## Novedades de la 0.14.0
+
+**Los enlaces se abren en tu Brave.** Con ▶ se abre una ventana nueva de tu Brave de siempre (con tus bloqueos de anuncios y tu cuenta) o, si no tienes Brave, de tu navegador. Ya no hay un Brave aparte manejado por LUMEN. Las canciones de Spotify se buscan en YouTube al agregarlas, y una playlist suena como una lista que pasa sola.
+
+**SUENA muestra lo que de verdad suena** en el navegador: la canción, el artista y si está en pausa. **Pausa**, **⏭** y **⏮** le hablan a tu Brave por los controles multimedia de Windows, y al arrancar el vals se pausa sola.
+
+**Las luces siguen la música solas.** Al poner música en Música (una canción o un enlace), si ninguna luz seguía la música, LUMEN prende «Hora loca con música». Se ve en SUENA y se puede desmarcar, por ejemplo para la música de la recepción.
+
+**La pista ya no exagera:** en silencio o en pausa se queda quieta. Oye todo lo que suena en la laptop (otro video, un juego, avisos), no solo la música: en el evento deja sonando solo la música.
+
 ## Novedades de la 0.13.0
 
 **Los enlaces suenan en Brave, sin anuncios.** Si Brave está instalado, LUMEN abre su propio Brave (aparte del tuyo, no toca tus pestañas ni tu cuenta) y pone ahí los enlaces de YouTube y Spotify: sin anuncios en medio de la música. Desde LUMEN sigues con **Pausa**, **Siguiente** y **Parar**, y pasa solo a la siguiente canción. Sin Brave, suena en el reproductor de LUMEN como antes.

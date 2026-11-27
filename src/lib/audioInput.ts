@@ -17,6 +17,9 @@ const BPM_REFRESH_MS = 500;
 export interface AudioFeed {
   /** 0–1 por banda, ya ajustado al volumen del local. */
   levels: Record<Band, number>;
+  /** Para dibujar lo que suena (Música → Pista): como `levels`, pero en
+   *  silencio o en pausa es 0 de verdad (levels se ajusta hasta a un ruido). */
+  loudness?: Record<Band, number>;
   /** Golpes contados, con decimales; null si no se reconoce un ritmo. */
   beats: () => number | null;
   bpm: () => number | null;
@@ -43,6 +46,9 @@ export const getAudioFeed = () => songFeed ?? feed;
 export const setAudioFeed = (next: AudioFeed | null) => {
   feed = next;
 };
+
+/** Cuánto de una banda se oye de verdad: 0 con -65 dB o menos (silencio), 1 desde -55 dB. */
+export const audible = (db: number) => Math.min(1, Math.max(0, (db + 65) / 10));
 
 /** Sensibilidad 0–100 → a partir de cuántos dB se considera sonido. */
 export const gateDb = (sensitivity: number) => -30 - sensitivity * 0.5;
@@ -107,6 +113,7 @@ export function listen(stream: MediaStream, sensitivity: () => number, musicOnly
   const bands: Record<Band, BandState> = { bass: SILENT_BAND, mid: SILENT_BAND, treble: SILENT_BAND };
   const audioFeed: AudioFeed = {
     levels: { bass: 0, mid: 0, treble: 0 },
+    loudness: { bass: 0, mid: 0, treble: 0 },
     beats: () => tracker.beats(performance.now()),
     bpm: () => tracker.bpm(),
     musicOnly,
@@ -123,6 +130,7 @@ export function listen(stream: MediaStream, sensitivity: () => number, musicOnly
       current[band] = bandDb(spectrum, hzPerBin, BANDS[band]);
       bands[band] = followBand(bands[band], current[band], gate, now - last);
       audioFeed.levels[band] = bands[band].level;
+      audioFeed.loudness![band] = bands[band].level * audible(current[band]);
     }
     if (before) tracker.push(now, onset(before, current, gate));
     before = current;

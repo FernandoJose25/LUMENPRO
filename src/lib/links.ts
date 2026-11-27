@@ -1,21 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Channel, invoke, isTauri } from "@tauri-apps/api/core";
+import { invoke } from "@tauri-apps/api/core";
 import { useFixtureStore } from "@/lib/fixtureStore";
 import { readSetting, writeSetting } from "@/lib/settings";
 
 export type LinkSource = "youtube" | "spotify";
 export type LinkKind = "video" | "playlist" | "track" | "album";
 
-/** Un enlace de la lista de Música. Suena desde YouTube en el reproductor de
- *  LUMEN (src-tauri/src/links.rs); nada se descarga. */
+/** Un enlace de la lista de Música. Suena en una ventana nueva del Brave del
+ *  usuario (o en su navegador): src-tauri/src/links.rs. Nada se descarga. */
 export interface MusicLink {
   id: string;
   url: string;
   source: LinkSource;
   kind: LinkKind;
   title: string;
-  /** Spotify: "artista canción" de cada una; se buscan en YouTube. */
+  /** Spotify: "artista canción" de cada una. */
   tracks: string[];
+  /** Spotify: el video de YouTube de cada canción (null si no se encontró). */
+  videos?: (string | null)[];
 }
 
 type Parsed = Pick<MusicLink, "url" | "source" | "kind">;
@@ -26,24 +28,10 @@ function youtube(video: string | null, list: string | null): Parsed | null {
   if (list && !YT_ID.test(list)) list = null;
   if (video && YT_ID.test(video)) {
     return list
-      ? {
-          source: "youtube",
-          kind: "playlist",
-          url: `https://www.youtube.com/watch?v=${video}&list=${list}`,
-        }
-      : {
-          source: "youtube",
-          kind: "video",
-          url: `https://www.youtube.com/watch?v=${video}`,
-        };
+      ? { source: "youtube", kind: "playlist", url: `https://www.youtube.com/watch?v=${video}&list=${list}` }
+      : { source: "youtube", kind: "video", url: `https://www.youtube.com/watch?v=${video}` };
   }
-  return list
-    ? {
-        source: "youtube",
-        kind: "playlist",
-        url: `https://www.youtube.com/playlist?list=${list}`,
-      }
-    : null;
+  return list ? { source: "youtube", kind: "playlist", url: `https://www.youtube.com/playlist?list=${list}` } : null;
 }
 
 /** Entiende los enlaces de "Compartir → Copiar enlace" de YouTube y Spotify. */
@@ -65,32 +53,25 @@ export function parseLink(text: string): Parsed | null {
   }
   if (host === "open.spotify.com") {
     const m = url.pathname.match(/^\/(?:intl-[\w-]+\/)?(track|album|playlist)\/([A-Za-z0-9]+)/);
-    return m
-      ? {
-          source: "spotify",
-          kind: m[1] as LinkKind,
-          url: `https://open.spotify.com/${m[1]}/${m[2]}`,
-        }
-      : null;
+    return m ? { source: "spotify", kind: m[1] as LinkKind, url: `https://open.spotify.com/${m[1]}/${m[2]}` } : null;
   }
   return null;
 }
 
-/** La página de YouTube que suena para ese enlace (y esa canción, si es de Spotify). */
-export function playerUrl(link: MusicLink, track: number): string {
-  if (link.source === "spotify") {
-    const search = `${link.tracks[track] ?? link.title} audio`;
-    return `https://www.youtube.com/results?search_query=${encodeURIComponent(search)}&lumen=1`;
-  }
-  return link.url.includes("/playlist?") ? `${link.url}&lumen=1` : link.url;
+/** YouTube arma una lista con hasta 50 videos y los pasa uno tras otro. */
+const MAX_VIDEOS = 50;
+
+/** Lo que se abre en el navegador: el enlace de YouTube tal cual; de Spotify,
+ *  sus canciones en YouTube (una sola, o la lista que arma YouTube). */
+export function browserUrl(link: MusicLink): string | null {
+  if (link.source === "youtube") return link.url;
+  const ids = (link.videos ?? []).filter((v): v is string => !!v && YT_ID.test(v)).slice(0, MAX_VIDEOS);
+  if (ids.length === 0) return null;
+  if (ids.length === 1) return `https://www.youtube.com/watch?v=${ids[0]}`;
+  return `https://www.youtube.com/watch_videos?video_ids=${ids.join(",")}`;
 }
 
-const KINDS: Record<LinkKind, string> = {
-  video: "video",
-  playlist: "playlist",
-  track: "canción",
-  album: "álbum",
-};
+const KINDS: Record<LinkKind, string> = { video: "video", playlist: "playlist", track: "canción", album: "álbum" };
 
 /** "Spotify · playlist · 50 canciones". */
 export function linkDetail(link: MusicLink): string {
@@ -101,52 +82,46 @@ export function linkDetail(link: MusicLink): string {
 
 const linkId = () => `link-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 
-type PlayerEvent = { title: string } | { ended: true } | { closed: true };
-
-export interface LinkPlaying {
-  id: string;
-  /** La canción dentro de un enlace de Spotify. */
-  track: number;
-  /** El título del video que suena, cuando YouTube lo dice. */
-  title: string | null;
-  paused: boolean;
+export interface NowPlaying {
+  title: string;
+  artist: string;
+  playing: boolean;
 }
 
 export interface LinkPlayer {
   links: MusicLink[];
-  playing: LinkPlaying | null;
+  /** El último enlace que se abrió (sigue sonando en el navegador hasta que lo pares ahí). */
+  openedId: string | null;
+  /** "Brave" o "tu navegador": dónde se abrió. */
+  openedIn: string | null;
   busy: boolean;
   error: string | null;
   add: (text: string) => Promise<boolean>;
   remove: (id: string) => void;
   move: (id: string, direction: -1 | 1) => void;
-  play: (id: string, track?: number) => void;
-  toggle: () => void;
-  next: () => void;
-  stop: () => void;
+  play: (id: string) => void;
+  /** Lo que suena en el navegador según Windows (cada 2 s mientras hay un enlace abierto). */
+  now: NowPlaying | null;
+  /** Pausa, sigue o cambia de canción en el navegador (controles multimedia de Windows). */
+  media: (action: "playpause" | "next" | "previous") => void;
+  forget: () => void;
 }
 
 /**
- * Los enlaces de YouTube y Spotify de Música. Se monta una sola vez (AppShell):
- * sigue sonando al cambiar de sección, pasa solo a la siguiente canción y se
- * pausa si arranca el vals. `onStart` se llama al poner un enlace.
+ * Los enlaces de YouTube y Spotify de Música. ▶ abre el enlace en una ventana
+ * nueva del Brave del usuario; desde ahí YouTube sigue solo con la lista.
+ * `onStart` se llama al abrir un enlace (las luces pasan a escuchar la PC).
  */
 export function useLinkPlayer(onStart: () => void): LinkPlayer {
-  const { timeline } = useFixtureStore();
   const [links, setLinks] = useState<MusicLink[]>(() => readSetting<MusicLink[]>("music.links") ?? []);
-  const [playing, setPlaying] = useState<LinkPlaying | null>(null);
+  const [openedId, setOpenedId] = useState<string | null>(null);
+  const [openedIn, setOpenedIn] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const linksRef = useRef(links);
-  const playingRef = useRef(playing);
   const onStartRef = useRef(onStart);
   onStartRef.current = onStart;
-
-  const show = useCallback((next: LinkPlaying | null) => {
-    playingRef.current = next;
-    setPlaying(next);
-  }, []);
 
   const save = useCallback((update: (list: MusicLink[]) => MusicLink[]) => {
     linksRef.current = update(linksRef.current);
@@ -154,70 +129,75 @@ export function useLinkPlayer(onStart: () => void): LinkPlayer {
     writeSetting("music.links", linksRef.current);
   }, []);
 
-  const stop = useCallback(() => {
-    if (!playingRef.current) return;
-    show(null);
-    void invoke("player_control", { action: "stop" }).catch(() => {});
-  }, [show]);
-
   const play = useCallback(
-    (id: string, track = 0) => {
-      const link = linksRef.current.find((l) => l.id === id);
+    async (id: string) => {
+      let link = linksRef.current.find((l) => l.id === id);
       if (!link) return;
       setError(null);
+      // Un enlace de Spotify guardado antes de buscar sus videos: se buscan ahora.
+      if (link.source === "spotify" && !link.videos) {
+        setBusy(true);
+        try {
+          const info = await invoke<{ videos: (string | null)[] }>("link_info", { url: link.url });
+          const videos = info.videos;
+          save((list) => list.map((l) => (l.id === id ? { ...l, videos } : l)));
+          link = { ...link, videos };
+        } catch (e) {
+          setError(String(e));
+          return;
+        } finally {
+          setBusy(false);
+        }
+      }
+      const url = browserUrl(link);
+      if (!url) {
+        setError(`No encontré «${link.title}» en YouTube. Quítalo y vuelve a agregarlo.`);
+        return;
+      }
       onStartRef.current();
-      show({ id, track, title: null, paused: false });
-      invoke("player_play", { url: playerUrl(link, track) }).catch((e) => {
-        show(null);
+      try {
+        const where = await invoke<string>("open_in_browser", { url });
+        setOpenedId(id);
+        setOpenedIn(where);
+      } catch (e) {
         setError(String(e));
-      });
+      }
     },
-    [show],
+    [save],
   );
 
-  /** La siguiente canción: dentro del enlace de Spotify, o el próximo enlace. */
-  const advance = useCallback(() => {
-    const now = playingRef.current;
-    if (!now) return;
-    const list = linksRef.current;
-    const index = list.findIndex((l) => l.id === now.id);
-    const link = list[index];
-    if (link?.source === "spotify" && now.track + 1 < link.tracks.length) return play(link.id, now.track + 1);
-    const after = list[index + 1];
-    if (after) play(after.id);
-    else stop();
-  }, [play, stop]);
-  const advanceRef = useRef(advance);
-  advanceRef.current = advance;
-
+  const [now, setNow] = useState<NowPlaying | null>(null);
+  const readNow = useCallback(() => {
+    invoke<NowPlaying | null>("media_now")
+      .then(setNow)
+      .catch(() => setNow(null));
+  }, []);
   useEffect(() => {
-    if (!isTauri()) return;
-    const onEvent = new Channel<PlayerEvent>();
-    onEvent.onmessage = (event) => {
-      const now = playingRef.current;
-      if ("title" in event) {
-        if (now) show({ ...now, title: event.title });
-      } else if ("ended" in event) advanceRef.current();
-      else show(null);
-    };
-    void invoke("player_attach", { onEvent });
-  }, [show]);
+    if (!openedId) {
+      setNow(null);
+      return;
+    }
+    readNow();
+    const timer = setInterval(readNow, 2000);
+    return () => clearInterval(timer);
+  }, [openedId, readNow]);
 
-  const setPaused = useCallback(
-    (paused: boolean) => {
-      const now = playingRef.current;
-      if (!now || now.paused === paused) return;
-      show({ ...now, paused });
-      void invoke("player_control", { action: paused ? "pause" : "play" });
+  const media = useCallback(
+    (action: "playpause" | "next" | "previous") => {
+      setError(null);
+      invoke("media_control", { action })
+        .then(() => setTimeout(readNow, 400))
+        .catch((e) => setError(String(e)));
     },
-    [show],
+    [readNow],
   );
 
-  // El vals manda: si arranca una línea de tiempo, el enlace se pausa.
+  // El vals manda: si arranca una línea de tiempo, la música del navegador se pausa.
+  const { timeline } = useFixtureStore();
   const timelinePlaying = timeline !== null && timeline.pausedAt === null;
   useEffect(() => {
-    if (timelinePlaying) setPaused(true);
-  }, [timelinePlaying, setPaused]);
+    if (timelinePlaying && openedId) invoke("media_control", { action: "pause" }).catch(() => {});
+  }, [timelinePlaying, openedId]);
 
   const add = useCallback(
     async (text: string) => {
@@ -229,9 +209,12 @@ export function useLinkPlayer(onStart: () => void): LinkPlayer {
       setBusy(true);
       setError(null);
       try {
-        const info = await invoke<{ title: string | null; tracks: string[] }>("link_info", { url: parsed.url });
+        const info = await invoke<{ title: string | null; tracks: string[]; videos: (string | null)[] }>("link_info", {
+          url: parsed.url,
+        });
         const title = info.title ?? (parsed.kind === "playlist" ? "Playlist de YouTube" : "Video de YouTube");
-        save((list) => [...list, { id: linkId(), ...parsed, title, tracks: info.tracks }]);
+        const videos = parsed.source === "spotify" ? info.videos : undefined;
+        save((list) => [...list, { id: linkId(), ...parsed, title, tracks: info.tracks, videos }]);
         return true;
       } catch (e) {
         setError(String(e));
@@ -245,10 +228,10 @@ export function useLinkPlayer(onStart: () => void): LinkPlayer {
 
   const remove = useCallback(
     (id: string) => {
-      if (playingRef.current?.id === id) stop();
+      if (id === openedId) setOpenedId(null);
       save((list) => list.filter((l) => l.id !== id));
     },
-    [save, stop],
+    [save, openedId],
   );
 
   const move = useCallback(
@@ -264,26 +247,7 @@ export function useLinkPlayer(onStart: () => void): LinkPlayer {
     [save],
   );
 
-  const toggle = useCallback(() => setPaused(!playingRef.current?.paused), [setPaused]);
+  const forget = useCallback(() => setOpenedId(null), []);
 
-  const next = useCallback(() => {
-    const now = playingRef.current;
-    const link = now && linksRef.current.find((l) => l.id === now.id);
-    if (link?.source === "youtube" && link.kind === "playlist") void invoke("player_control", { action: "next" });
-    else advance();
-  }, [advance]);
-
-  return {
-    links,
-    playing,
-    busy,
-    error,
-    add,
-    remove,
-    move,
-    play,
-    toggle,
-    next,
-    stop,
-  };
+  return { links, openedId, openedIn, now, busy, error, add, remove, move, play: (id) => void play(id), media, forget };
 }

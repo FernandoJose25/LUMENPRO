@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { linkDetail, parseLink, playerUrl, type MusicLink } from "@/lib/links";
+import { browserUrl, linkDetail, parseLink, type MusicLink } from "@/lib/links";
 
 describe("Enlaces de YouTube y Spotify", () => {
   it.each([
@@ -61,25 +61,29 @@ describe("Enlaces de YouTube y Spotify", () => {
     ...patch,
   });
 
-  it("una canción de Spotify se busca en YouTube por artista y nombre", () => {
-    const spotify = link({
+  it("Spotify se abre con sus videos de YouTube: uno solo, o la lista que arma YouTube", () => {
+    const one = link({
+      source: "spotify",
+      kind: "track",
+      tracks: ["Carly Rae Jepsen Cut To The Feeling"],
+      videos: ["Qlsu7RhOnsQ"],
+    });
+    expect(browserUrl(one)).toBe("https://www.youtube.com/watch?v=Qlsu7RhOnsQ");
+    const many = link({
       source: "spotify",
       kind: "playlist",
-      tracks: ["KAROL G Tusa", "Bad Bunny Tití Me Preguntó"],
+      tracks: ["a", "b", "c"],
+      videos: ["Qlsu7RhOnsQ", null, "kJQP7kiw5Fk"],
     });
-    expect(playerUrl(spotify, 1)).toBe(
-      "https://www.youtube.com/results?search_query=Bad%20Bunny%20Tit%C3%AD%20Me%20Pregunt%C3%B3%20audio&lumen=1",
-    );
-    expect(linkDetail(spotify)).toBe("Spotify · playlist · 2 canciones");
+    expect(browserUrl(many)).toBe("https://www.youtube.com/watch_videos?video_ids=Qlsu7RhOnsQ,kJQP7kiw5Fk");
+    expect(linkDetail(many)).toBe("Spotify · playlist · 3 canciones");
+    expect(browserUrl(link({ source: "spotify", kind: "track", tracks: ["x"], videos: [null] }))).toBeNull();
   });
 
-  it("YouTube suena tal cual; una playlist sola arranca con «Reproducir todo»", () => {
-    expect(playerUrl(link({}), 0)).toBe("https://www.youtube.com/watch?v=kJQP7kiw5Fk");
-    const playlist = link({
-      kind: "playlist",
-      url: "https://www.youtube.com/playlist?list=PLx123456",
-    });
-    expect(playerUrl(playlist, 0)).toBe("https://www.youtube.com/playlist?list=PLx123456&lumen=1");
+  it("YouTube se abre tal cual", () => {
+    expect(browserUrl(link({}))).toBe("https://www.youtube.com/watch?v=kJQP7kiw5Fk");
+    const playlist = link({ kind: "playlist", url: "https://www.youtube.com/playlist?list=PLx123456" });
+    expect(browserUrl(playlist)).toBe("https://www.youtube.com/playlist?list=PLx123456");
     expect(linkDetail(playlist)).toBe("YouTube · playlist");
   });
 });

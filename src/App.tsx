@@ -30,6 +30,7 @@ import { useStagePublisher } from "@/lib/stageMirror";
 import { useTimelineAudio } from "@/lib/timelineAudio";
 import { useMusicPlayer } from "@/lib/musicPlayer";
 import { useLinkPlayer } from "@/lib/links";
+import { useMusicLights } from "@/lib/musicLights";
 import { PC_AUDIO } from "@/lib/pcAudio";
 import { useEffectCatalog } from "@/lib/effectCatalog";
 
@@ -54,15 +55,22 @@ function AppShell() {
   const music = useMusicPlayer();
   // Un enlace (YouTube/Spotify) suena en la PC: pausa la canción guardada y
   // las luces pasan a escuchar lo que suena en esta PC.
+  const lights = useMusicLights();
   const links = useLinkPlayer(() => {
     if (music.playing) music.toggle();
     if (audio.deviceId !== PC_AUDIO) audio.setDeviceId(PC_AUDIO);
     if (!audio.listening) void audio.start();
+    lights.onMusicStart();
   });
-  const stopLinks = links.stop;
+  // Una canción guardada que empieza a sonar: ya no suena el enlace, y las
+  // luces siguen la música si nada la seguía.
+  const { forget: forgetLink } = links;
+  const { onMusicStart } = lights;
   useEffect(() => {
-    if (music.playing) stopLinks();
-  }, [music.playing, stopLinks]);
+    if (!music.playing) return;
+    forgetLink();
+    onMusicStart();
+  }, [music.playing, forgetLink, onMusicStart]);
   useEffectCatalog();
 
   return (
@@ -83,7 +91,7 @@ function AppShell() {
         {section === "Live" ? <LiveView /> : null}
         {section === "Momentos" ? <MomentsView /> : null}
         {section === "Línea de tiempo" ? <TimelineView /> : null}
-        {section === "Música" ? <MusicView music={music} links={links} /> : null}
+        {section === "Música" ? <MusicView music={music} links={links} lights={lights} audio={audio} /> : null}
         {section === "Escenario" ? <StageView /> : null}
         {section === "Fixtures" ? <FixturesView /> : null}
         {section === "Groups" ? <GroupsView /> : null}
