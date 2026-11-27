@@ -1,8 +1,8 @@
-## Novedades de la 0.4.2
+## Novedades de la 0.5.0
 
-**Velocidad general de los efectos.** En Live y en el celular, un fader apura o frena todos los efectos y chases a la vez (de un cuarto a cuatro veces); **1×** la vuelve a la normal. También se puede poner en un control MIDI. Lo que sigue la música no cambia.
+**Música: las luces caen en cada golpe, sin micrófono.** Nueva sección **Música**. Agrega las canciones de la hora loca: cada una se analiza al agregarla (su tempo y dónde cae el primer golpe). La laptop las pone por el cable a la consola, pasa sola a la siguiente, y mientras suena las luces que siguen la música van exactas con la canción, también el golpe de graves. Si el tempo quedó al doble o a la mitad, se corrige con ×2 o ½. Al arrancar el vals, la música se pausa sola.
 
-**Respaldos automáticos.** Cada día, antes del primer guardado, LUMEN guarda cómo estaba el show. Se guardan dos semanas y se recuperan en **Settings → Respaldos automáticos**.
+**De la 0.4.2:** velocidad general de los efectos y respaldos automáticos del show.
 
 **De la 0.4.1:** TAP para marcar el ritmo a mano.
 

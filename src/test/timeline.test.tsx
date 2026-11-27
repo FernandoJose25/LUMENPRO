@@ -131,7 +131,8 @@ describe("Botones del celular y MIDI", () => {
   it("pueden arrancar y detener una línea de tiempo", () => {
     const empty: ShowDoc = {
       definitions: [], instances: [], scenes: [], palettes: [], groups: [], chases: [], effects: [], moments: [],
-      timelines: [{ id: "t", name: "Vals", song: null, durationMs: 0, cues: [] }], livePads: [], phonePads: [], controls: [],
+      timelines: [{ id: "t", name: "Vals", song: null, durationMs: 0, cues: [] }], playlist: [], livePads: [], phonePads: [],
+      controls: [],
     };
     const idle: Playback = {
       activeSceneId: null, runningEffectIds: [], blackoutActive: false, master: 100, strobeActive: false, identifyId: null,

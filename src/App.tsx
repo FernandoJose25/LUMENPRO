@@ -18,6 +18,7 @@ import { MomentsView } from "@/components/moments/MomentsView";
 import { RemoteView } from "@/components/remote/RemoteView";
 import { StageView } from "@/components/stage/StageView";
 import { TimelineView } from "@/components/timeline/TimelineView";
+import { MusicView } from "@/components/music/MusicView";
 import { SettingsView } from "@/components/views/SettingsView";
 import { GuideView } from "@/components/views/GuideView";
 import { CommandPalette } from "@/components/command-palette/CommandPalette";
@@ -27,6 +28,7 @@ import { useDmxOutput } from "@/lib/dmxOutput";
 import { useRemoteControl } from "@/lib/remoteControl";
 import { useStagePublisher } from "@/lib/stageMirror";
 import { useTimelineAudio } from "@/lib/timelineAudio";
+import { useMusicPlayer } from "@/lib/musicPlayer";
 
 export default function App() {
   return (
@@ -46,12 +48,13 @@ function AppShell() {
   const remote = useRemoteControl();
   useStagePublisher();
   useTimelineAudio();
+  const music = useMusicPlayer();
 
   return (
     <div className="flex h-screen flex-col bg-bg">
       <Topbar
         dmx={dmx.status}
-        bpm={audio.bpm}
+        bpm={music.bpm !== null ? Math.round(music.bpm) : audio.bpm}
         onSave={saveShow}
         blackoutActive={blackoutActive}
         onBlackout={blackout}
@@ -65,6 +68,7 @@ function AppShell() {
         {section === "Live" ? <LiveView /> : null}
         {section === "Momentos" ? <MomentsView /> : null}
         {section === "Línea de tiempo" ? <TimelineView /> : null}
+        {section === "Música" ? <MusicView music={music} /> : null}
         {section === "Escenario" ? <StageView /> : null}
         {section === "Fixtures" ? <FixturesView /> : null}
         {section === "Groups" ? <GroupsView /> : null}

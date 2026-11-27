@@ -8,6 +8,7 @@ export const SECTIONS = [
   "Live",
   "Momentos",
   "Línea de tiempo",
+  "Música",
   "Escenario",
   "Fixtures",
   "Groups",

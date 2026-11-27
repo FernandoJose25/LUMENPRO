@@ -7,6 +7,7 @@ import type { Chase, ChaseStep } from "@/types/chase";
 import type { Effect } from "@/types/effect";
 import type { Moment } from "@/types/moment";
 import type { Timeline } from "@/types/timeline";
+import type { PlaylistSong } from "@/types/music";
 import { engineNow, noteEngineNow } from "@/lib/engineClock";
 import type { Palette, PaletteKind } from "@/types/palette";
 import type { Action, Control, Pad } from "@/types/controls";
@@ -189,6 +190,10 @@ interface FixtureStoreValue extends FixtureStoreState {
   addQuinceTemplate: () => void;
   /** Vuelve los momentos, escenas y effects de la plantilla a como los arma. */
   resetQuinceTemplate: () => void;
+  addSongs: (songs: PlaylistSong[]) => void;
+  updateSong: (songId: string, patch: Partial<Omit<PlaylistSong, "id">>) => void;
+  removeSong: (songId: string) => void;
+  moveSong: (songId: string, direction: -1 | 1) => void;
   addTimeline: (name: string) => Timeline;
   updateTimeline: (timelineId: string, patch: Partial<Omit<Timeline, "id">>) => void;
   removeTimeline: (timelineId: string) => void;
@@ -267,6 +272,7 @@ function restoreState(parsed: Partial<FixtureStoreState>): FixtureStoreState {
     })),
     moments: parsed.moments ?? [],
     timelines: parsed.timelines ?? [],
+    playlist: parsed.playlist ?? [],
     activeMomentId: parsed.activeMomentId ?? null,
     ...IDLE,
   };
@@ -915,6 +921,26 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
     }));
   }, [setState]);
 
+  const addSongs = useCallback((songs: PlaylistSong[]) => {
+    setState((s) => ({ ...s, playlist: [...s.playlist, ...songs] }));
+  }, [setState]);
+  const updateSong = useCallback((songId: string, patch: Partial<Omit<PlaylistSong, "id">>) => {
+    setState((s) => ({ ...s, playlist: s.playlist.map((p) => (p.id === songId ? { ...p, ...patch } : p)) }));
+  }, [setState]);
+  const removeSong = useCallback((songId: string) => {
+    setState((s) => ({ ...s, playlist: s.playlist.filter((p) => p.id !== songId) }));
+  }, [setState]);
+  const moveSong = useCallback((songId: string, direction: -1 | 1) => {
+    setState((s) => {
+      const index = s.playlist.findIndex((p) => p.id === songId);
+      const target = index + direction;
+      if (index < 0 || target < 0 || target >= s.playlist.length) return s;
+      const playlist = [...s.playlist];
+      [playlist[index], playlist[target]] = [playlist[target], playlist[index]];
+      return { ...s, playlist };
+    });
+  }, [setState]);
+
   const addTimeline = useCallback(
     (name: string): Timeline => {
       const created: Timeline = { id: makeId("timeline"), name: name.trim() || "Vals", song: null, durationMs: 0, cues: [] };
@@ -1106,6 +1132,10 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
     addMoment,
     updateMoment,
     removeMoment,
+    addSongs,
+    updateSong,
+    removeSong,
+    moveSong,
     addTimeline,
     updateTimeline,
     removeTimeline,

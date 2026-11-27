@@ -1,5 +1,6 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import type { Song } from "@/types/timeline";
+import { analyzeBeats, type BeatGrid } from "@/lib/beatGrid";
 
 /**
  * Las canciones de las líneas de tiempo. En la app de escritorio se copian a
@@ -51,6 +52,8 @@ export interface SongShape {
   durationMs: number;
   /** Lo fuerte que suena cada tramo, 0–1, de principio a fin. */
   peaks: number[];
+  /** Su ritmo; null si no se encontró uno. */
+  grid: BeatGrid | null;
 }
 
 const PEAKS = 2000;
@@ -72,7 +75,9 @@ export function songShape(song: Song): Promise<SongShape> {
         }
         peaks.push(Math.min(1, peak));
       }
-      return { durationMs: Math.round(buffer.duration * 1000), peaks };
+      // El ritmo con un solo canal: en las canciones los graves van al medio.
+      const grid = analyzeBeats(buffer.getChannelData(0), buffer.sampleRate);
+      return { durationMs: Math.round(buffer.duration * 1000), peaks, grid };
     })();
     shape.catch(() => shapes.delete(song.file));
     shapes.set(song.file, shape);

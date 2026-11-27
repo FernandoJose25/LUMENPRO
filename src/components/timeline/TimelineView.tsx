@@ -702,7 +702,7 @@ function SecondsField({ label, valueMs, onCommit }: { label: string; valueMs: nu
 
 /** Por dónde sale la canción: la salida de Windows o, por ejemplo, la
  *  tarjeta USB que va a la consola del DJ. */
-function OutputPicker() {
+export function OutputPicker() {
   const [outputs, setOutputs] = useState<MediaDeviceInfo[]>([]);
   const [value, setValue] = useState(songOutput);
   useEffect(() => {

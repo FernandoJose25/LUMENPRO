@@ -31,8 +31,14 @@ export function heardLevels(feed: AudioFeed): Record<Band, number> {
 }
 
 let feed: AudioFeed | null = null;
-/** null si no se está escuchando. */
-export const getAudioFeed = () => feed;
+/** La canción que suena en la laptop (lib/musicPlayer.ts): manda sobre lo
+ *  que oye el micrófono. */
+let songFeed: AudioFeed | null = null;
+export const setSongFeed = (next: AudioFeed | null) => {
+  songFeed = next;
+};
+/** null si no se está escuchando ni suena una canción. */
+export const getAudioFeed = () => songFeed ?? feed;
 export const setAudioFeed = (next: AudioFeed | null) => {
   feed = next;
 };
@@ -80,13 +86,13 @@ function onset(before: Record<Band, number>, now: Record<Band, number>, gate: nu
   return rise("bass") + rise("mid") * 0.5;
 }
 
-interface Session {
+export interface Session {
   feed: AudioFeed;
   tracker: BeatTracker;
   stop: () => void;
 }
 
-function listen(stream: MediaStream, sensitivity: () => number, musicOnly: () => boolean): Session {
+export function listen(stream: MediaStream, sensitivity: () => number, musicOnly: () => boolean): Session {
   const context = new AudioContext();
   void context.resume();
   const analyser = context.createAnalyser();
