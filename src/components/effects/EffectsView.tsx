@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { missingPresets } from "@/lib/effectPresets";
 import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
@@ -106,7 +107,13 @@ function FigurePreview({ effect, heads }: { effect: Effect; heads: number }) {
  * start/stop.
  */
 export function EffectsView() {
-  const { effects, groups, runningEffectIds, addEffect, renameEffect, removeEffect } = useFixtureStore();
+  const store = useFixtureStore();
+  const { effects, groups, runningEffectIds, addEffect, addEffects, renameEffect, removeEffect } = store;
+  const missing = useMemo(
+    () => missingPresets(store),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [effects, groups, store.instances, store.definitions],
+  );
   const [selectedEffectId, setSelectedEffectId] = useState<string | null>(effects[0]?.id ?? null);
   // Aquí se edita: todos abiertos, se cierran con su botón.
   const [closed, setClosed] = useState<Set<string>>(new Set());
@@ -221,6 +228,16 @@ export function EffectsView() {
               );
             }}
           </EffectGroups>
+          {missing.length > 0 ? (
+            <Button
+              size="md"
+              className="mt-2 w-full"
+              title="Agrega a cada grupo los efectos listos que todavía no tiene"
+              onClick={() => addEffects(missing)}
+            >
+              + Cargar los que faltan ({missing.length})
+            </Button>
+          ) : null}
           <Button size="md" variant="primary" className="mt-2 w-full" onClick={() => setInPresets(true)}>
             + Efectos listos
           </Button>

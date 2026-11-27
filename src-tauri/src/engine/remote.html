@@ -84,6 +84,7 @@
   #effects { display: flex; flex-direction: column; gap: 10px; }
   #effects .fx-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   #effects .fx-grid[hidden] { display: none; }
+  #effects .fx-grid h3 { grid-column: 1 / -1; margin: 6px 0 0; font-size: 11px; font-weight: 600; letter-spacing: .06em; color: var(--muted); text-transform: uppercase; }
   #effects button { min-height: 48px; font-size: 14px; overflow-wrap: anywhere; }
   #effects .fx-head { text-align: left; padding: 0 14px; font-weight: 600; background: var(--panel2); }
   #effects .fx-head.on { border-color: var(--accent); color: var(--accent); }
@@ -482,16 +483,32 @@ function renderEffects() {
     box.head.className = "fx-head" + (on ? " on" : "");
     box.head.setAttribute("aria-expanded", String(open));
     box.grid.hidden = !open;
+    // Con varias clases (movimiento, colores, brillo), un título por clase.
+    const kinds = [...new Set(group.effects.map((fx) => fx.kind || ""))];
+    const items = kinds.length < 2 ? group.effects
+      : kinds.flatMap((kind) => [{ label: kind }, ...group.effects.filter((fx) => (fx.kind || "") === kind)]);
     const grid = box.grid;
-    while (grid.children.length > group.effects.length) grid.lastChild.remove();
-    group.effects.forEach((fx, j) => {
-      const button = grid.children[j] || grid.appendChild(document.createElement("button"));
+    while (grid.children.length > items.length) grid.lastChild.remove();
+    items.forEach((item, j) => {
+      const tag = item.label !== undefined ? "H3" : "BUTTON";
+      let el = grid.children[j];
+      if (!el || el.tagName !== tag) {
+        const fresh = document.createElement(tag);
+        if (el) grid.replaceChild(fresh, el);
+        else grid.appendChild(fresh);
+        el = fresh;
+      }
+      if (tag === "H3") {
+        el.textContent = item.label || "Otros";
+        return;
+      }
+      const fx = item;
       // Sin repetir el grupo: "PAR: ola roja" queda "ola roja".
       const prefix = group.name.toLowerCase() + ": ";
-      button.textContent = fx.name.toLowerCase().startsWith(prefix) ? fx.name.slice(prefix.length) : fx.name;
-      button.className = fx.running ? "on" : "";
-      button.disabled = !online;
-      button.onclick = () => send({ type: "effect", id: fx.id });
+      el.textContent = fx.name.toLowerCase().startsWith(prefix) ? fx.name.slice(prefix.length) : fx.name;
+      el.className = fx.running ? "on" : "";
+      el.disabled = !online;
+      el.onclick = () => send({ type: "effect", id: fx.id });
     });
   });
 }

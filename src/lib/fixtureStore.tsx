@@ -26,6 +26,7 @@ import { colorValues } from "@/lib/look";
 import { withTwins } from "@/lib/dmxFrame";
 import { ORUS_WHEEL, ORUS_WHEEL_NOTE, seedDefinitions, seedInstances } from "@/data/fixtureLibrary";
 import { buildQuinceTemplate } from "@/data/quinceTemplate";
+import { missingPresets } from "@/lib/effectPresets";
 import { resetTemplate } from "@/lib/factory";
 import { closeWindow, createEngineLink, type EngineHost, type EngineLink } from "@/lib/engineLink";
 import { askChoice } from "@/lib/dialogs";
@@ -1076,13 +1077,19 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
   );
 
   const addQuinceTemplate = useCallback(() => {
-    const t = buildQuinceTemplate(stateRef.current, makeId);
+    const before = stateRef.current;
+    const t = buildQuinceTemplate(before, makeId);
+    // Con todos los efectos listos de sus grupos, en el mismo paso: un
+    // Deshacer quita todo junto.
+    const now = Date.now();
+    const presets = missingPresets({ ...before, instances: t.instances, groups: t.groups, effects: [...before.effects, ...t.effects] })
+      .map((d) => ({ ...d, id: makeId("effect"), createdAt: now, updatedAt: now }));
     setState((s) => ({
       ...s,
       instances: t.instances,
       groups: t.groups,
       scenes: [...s.scenes, ...t.scenes],
-      effects: [...s.effects, ...t.effects],
+      effects: [...s.effects, ...t.effects, ...presets],
       moments: [...s.moments, ...t.moments],
     }));
   }, [setState]);

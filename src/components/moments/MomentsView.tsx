@@ -8,6 +8,7 @@ import { SWATCHES } from "@/lib/look";
 import { colorRows, sceneColor } from "@/lib/palettes";
 import type { ChannelType } from "@/types/fixture";
 import type { Moment } from "@/types/moment";
+import { EffectGroups } from "@/components/effects/EffectGroups";
 
 const fieldClass =
   "h-9 rounded-control border border-border bg-panel2 px-2 text-sm text-text-primary outline-none focus-visible:outline-2 focus-visible:outline-accent";
@@ -192,8 +193,12 @@ function MomentColors({ moment }: { moment: Moment }) {
 }
 
 function MomentEditor({ moment }: { moment: Moment }) {
-  const { scenes, chases, effects, updateMoment, startMoment } = useFixtureStore();
+  const { scenes, chases, effects, groups, updateMoment, startMoment } = useFixtureStore();
   const update = (patch: Partial<Omit<Moment, "id">>) => updateMoment(moment.id, patch);
+  // Abiertos los grupos que ya tienen algo en este momento.
+  const [openEffects, setOpenEffects] = useState<string[]>(() => [
+    ...new Set(effects.filter((fx) => moment.effectIds.includes(fx.id)).map((fx) => fx.groupId ?? "")),
+  ]);
 
   return (
     <Panel title={`MOMENTO — ${moment.name}`}>
@@ -227,24 +232,34 @@ function MomentEditor({ moment }: { moment: Moment }) {
         <fieldset className="flex flex-col gap-1">
           <legend className="mb-1">Effects</legend>
           {effects.length === 0 ? <span className="text-[11px]">Todavía no hay effects.</span> : null}
-          {effects.map((fx) => (
-            <label key={fx.id} className="flex items-center gap-2 text-sm text-text-primary">
-              <input
-                type="checkbox"
-                className="accent-accent"
-                checked={moment.effectIds.includes(fx.id)}
-                onChange={(e) =>
-                  update({
-                    effectIds: e.target.checked
-                      ? [...moment.effectIds, fx.id]
-                      : moment.effectIds.filter((id) => id !== fx.id),
-                  })
-                }
-              />
-              {fx.name}
-              {!fx.groupId ? <span className="text-[11px] text-state-warn">sin grupo, no hace nada</span> : null}
-            </label>
-          ))}
+          <EffectGroups
+            effects={effects}
+            groups={groups}
+            running={moment.effectIds}
+            onLabel={["en este momento", "en este momento"]}
+            isOpen={(id) => openEffects.includes(id)}
+            onToggle={(id) => setOpenEffects(openEffects.includes(id) ? openEffects.filter((o) => o !== id) : [...openEffects, id])}
+            itemsClassName="flex flex-col gap-1 pl-5"
+          >
+            {(fx) => (
+              <label key={fx.id} className="flex items-center gap-2 text-sm text-text-primary">
+                <input
+                  type="checkbox"
+                  className="accent-accent"
+                  checked={moment.effectIds.includes(fx.id)}
+                  onChange={(e) =>
+                    update({
+                      effectIds: e.target.checked
+                        ? [...moment.effectIds, fx.id]
+                        : moment.effectIds.filter((id) => id !== fx.id),
+                    })
+                  }
+                />
+                {fx.name}
+                {!fx.groupId ? <span className="text-[11px] text-state-warn">sin grupo, no hace nada</span> : null}
+              </label>
+            )}
+          </EffectGroups>
         </fieldset>
 
         <label className="flex flex-col gap-1">

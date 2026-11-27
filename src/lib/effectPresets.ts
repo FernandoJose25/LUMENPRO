@@ -207,6 +207,20 @@ export function presetsFor(rig: Rig, groupId: string): EffectPreset[] {
   return EFFECT_PRESETS.filter((p) => p.needs.some((type) => groupHas(rig, groupId, type)) && (!p.pixels || pixels));
 }
 
+/** Sube cuando el catálogo crece: el show carga solo los que se sumaron. */
+export const CATALOG_VERSION = 1;
+
+/** Los effects de los efectos listos que le faltan al show, en cada grupo
+ *  con luces (uno ya está si hay un effect con su nombre). */
+export function missingPresets(show: Rig & { groups: Group[]; effects: { name: string }[] }): EffectDraft[] {
+  const names = new Set(show.effects.map((fx) => fx.name.toLowerCase()));
+  return show.groups
+    .filter((g) => show.instances.some((i) => i.group === g.id))
+    .flatMap((g) => presetsFor(show, g.id).map((p) => presetEffects(p, g)))
+    .filter((drafts) => !drafts.some((d) => names.has(d.name.toLowerCase())))
+    .flat();
+}
+
 /** Los effects de ese preset para ese grupo, listos para agregar. */
 export function presetEffects(preset: EffectPreset, group: Group): EffectDraft[] {
   return preset.parts.map((part) => ({

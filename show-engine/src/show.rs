@@ -1740,7 +1740,14 @@ impl Show {
                 .map(|e| {
                     // El celular los junta por grupo.
                     let group = self.doc.groups.iter().find(|g| e.group_id.as_ref() == Some(&g.id)).map(|g| &g.name);
-                    json!({ "id": e.id, "name": e.name, "group": group, "running": p.running_effect_ids.contains(&e.id) })
+                    // Y dentro del grupo, por lo que hacen.
+                    let kind = match e.kind {
+                        EffectKind::Figure => "Movimiento",
+                        EffectKind::Pixels => "Colores",
+                        EffectKind::Wave if e.channel_type.is_color() => "Colores",
+                        EffectKind::Wave => "Brillo y estrobo",
+                    };
+                    json!({ "id": e.id, "name": e.name, "group": group, "kind": kind, "running": p.running_effect_ids.contains(&e.id) })
                 })
                 .collect::<Vec<_>>(),
             "timelines": self

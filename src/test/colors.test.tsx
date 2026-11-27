@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import App from "@/App";
 import type { EngineMessage } from "@/types/engine";
 import { fakeEngine } from "./fakeEngine";
+import { willAnswer } from "./dialogs";
 import { STORAGE_KEY } from "@/lib/showFile";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(), isTauri: vi.fn(), Channel: class {} }));
@@ -94,6 +95,26 @@ describe("Color de un momento", () => {
 });
 
 describe("Efectos listos", () => {
+  it("se cargan solos en cada grupo una sola vez, por tipo de luz, y los borrados no vuelven", async () => {
+    const { user, engine } = await withTemplate();
+    await waitFor(() => expect(lastDoc(engine).effects.length).toBeGreaterThan(50));
+    const names = () => lastDoc(engine).effects.map((fx) => fx.name);
+    expect(names()).toEqual(expect.arrayContaining(["PAR: policía", "PAR: fuego", "Cabezas: tijeras", "Cabezas: ballyhoo"]));
+    // Las cabezas de ejemplo no tienen RGB: sin efectos de color de PAR.
+    expect(names()).not.toContain("Cabezas: policía");
+    // Ninguno repetido con los de la plantilla.
+    expect(new Set(names()).size).toBe(names().length);
+
+    await user.click(screen.getByRole("button", { name: "Effects" }));
+    expect(screen.queryByRole("button", { name: /Cargar los que faltan/ })).toBeNull();
+    const total = names().length;
+    willAnswer(true);
+    await user.click(within(screen.getByRole("button", { name: /^PAR: policía/ }).parentElement!).getByTitle("Borrar effect"));
+    expect(names()).toHaveLength(total - 1);
+    await user.click(screen.getByRole("button", { name: /Cargar los que faltan \(1\)/ }));
+    expect(names()).toContain("PAR: policía");
+  });
+
   it("se ven antes y se agregan para un grupo", async () => {
     const { user, engine } = await withTemplate();
     await user.click(screen.getByRole("button", { name: "Effects" }));
@@ -163,6 +184,19 @@ describe("Live", () => {
 });
 
 describe("Shows de la 0.2", () => {
+  it("un show de antes recibe los efectos listos de sus grupos al abrirlo, una sola vez", async () => {
+    const { engine } = await withTemplate();
+    const doc = lastDoc(engine);
+    const old = { ...doc, effects: doc.effects.slice(0, 10) };
+    cleanup();
+    localStorage.clear();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(old));
+    const again = fakeEngine();
+    render(<App />);
+    await waitFor(() => expect(lastDoc(again).effects.length).toBe(doc.effects.length));
+    expect(localStorage.getItem("lumenpro.effects.catalog")).toBe("1");
+  });
+
   it("el golpe de graves de la plantilla vieja queda apagado sin música", async () => {
     const fx = { id: "g", name: "PAR: golpe de graves", source: "bass", min: 40, max: 255 };
     const mine = { ...fx, id: "m", name: "PAR: mío", min: 40 };

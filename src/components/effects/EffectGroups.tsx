@@ -1,7 +1,36 @@
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
 import type { Effect } from "@/types/effect";
+import type { ChannelType } from "@/types/fixture";
 import type { Group } from "@/types/group";
+
+/** Los de un grupo abierto; si hay de varias clases, con un título por clase. */
+function Kinds({
+  effects,
+  itemsClassName,
+  render,
+}: {
+  effects: Effect[];
+  itemsClassName: string;
+  render: (effect: Effect) => ReactNode;
+}) {
+  const parts = KINDS.map((k) => ({ ...k, effects: effects.filter((fx) => effectKind(fx) === k.id) })).filter(
+    (k) => k.effects.length > 0,
+  );
+  if (parts.length < 2) return <div className={itemsClassName}>{effects.map(render)}</div>;
+  return (
+    <>
+      {parts.map((k) => (
+        <div key={k.id} className="flex flex-col gap-1">
+          <span className="pl-1 text-[10px] font-medium uppercase tracking-wide text-text-secondary">
+            {k.name} · {k.effects.length}
+          </span>
+          <div className={itemsClassName}>{k.effects.map(render)}</div>
+        </div>
+      ))}
+    </>
+  );
+}
 
 interface Section {
   /** "" para los que no tienen grupo. */
@@ -9,6 +38,24 @@ interface Section {
   name: string;
   color: string;
   effects: Effect[];
+}
+
+const COLOR_CHANNELS: ChannelType[] = [
+  "RED", "GREEN", "BLUE", "WHITE", "AMBER", "UV", "LIME", "INDIGO", "CYAN", "MAGENTA", "YELLOW", "HUE", "SATURATION",
+  "CTO", "COLOR", "COLOR_WHEEL",
+];
+
+/** Dentro de un grupo, por lo que hacen. */
+const KINDS = [
+  { id: "move", name: "Movimiento" },
+  { id: "color", name: "Colores" },
+  { id: "dimmer", name: "Brillo y estrobo" },
+] as const;
+
+export function effectKind(fx: Effect): (typeof KINDS)[number]["id"] {
+  if (fx.kind === "figure") return "move";
+  if (fx.kind === "pixels" || COLOR_CHANNELS.includes(fx.channelType)) return "color";
+  return "dimmer";
 }
 
 /** Los effects juntados por el grupo de luces que mueven, en el orden de los grupos. */
@@ -32,10 +79,13 @@ export function EffectGroups({
   onStopAll,
   children,
   itemsClassName = "flex flex-col gap-1.5",
+  onLabel = ["prendido", "prendidos"],
 }: {
   effects: Effect[];
   groups: Group[];
+  /** Los que se cuentan en el botón del grupo (los prendidos). */
   running: string[];
+  onLabel?: [string, string];
   isOpen: (sectionId: string) => boolean;
   onToggle: (sectionId: string) => void;
   /** Con esto, cada grupo con algo prendido tiene "Apagar". */
@@ -63,7 +113,11 @@ export function EffectGroups({
                 <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: s.color }} aria-hidden />
                 <span className="flex-1 truncate">{s.name}</span>
                 <span className="font-mono text-[10px] font-normal text-text-secondary">
-                  {on.length > 0 ? <span className="text-accent">{on.length} prendido{on.length === 1 ? "" : "s"} · </span> : null}
+                  {on.length > 0 ? (
+                    <span className="text-accent">
+                      {on.length} {on.length === 1 ? onLabel[0] : onLabel[1]} ·{" "}
+                    </span>
+                  ) : null}
                   {s.effects.length}
                 </span>
               </button>
@@ -73,7 +127,7 @@ export function EffectGroups({
                 </Button>
               ) : null}
             </div>
-            {open ? <div className={itemsClassName}>{s.effects.map(children)}</div> : null}
+            {open ? <Kinds effects={s.effects} itemsClassName={itemsClassName} render={children} /> : null}
           </section>
         );
       })}

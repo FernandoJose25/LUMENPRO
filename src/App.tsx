@@ -29,6 +29,7 @@ import { useRemoteControl } from "@/lib/remoteControl";
 import { useStagePublisher } from "@/lib/stageMirror";
 import { useTimelineAudio } from "@/lib/timelineAudio";
 import { useMusicPlayer } from "@/lib/musicPlayer";
+import { useEffectCatalog } from "@/lib/effectCatalog";
 
 export default function App() {
   return (
@@ -49,6 +50,7 @@ function AppShell() {
   useStagePublisher();
   useTimelineAudio();
   const music = useMusicPlayer();
+  useEffectCatalog();
 
   return (
     <div className="flex h-screen flex-col bg-bg">

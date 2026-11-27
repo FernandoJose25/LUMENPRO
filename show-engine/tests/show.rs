@@ -1218,7 +1218,7 @@ fn the_phone_turns_effects_on_and_off() {
     let effects = r.show.phone_snapshot("running")["effects"].clone();
     // Uno sin grupo no hace nada: no se ofrece. Van con su grupo, para
     // juntarlos en el celular.
-    assert_eq!(effects, json!([{ "id": "fx", "name": "PAR: ola roja", "group": "PAR", "running": true }]));
+    assert_eq!(effects, json!([{ "id": "fx", "name": "PAR: ola roja", "group": "PAR", "kind": "Colores", "running": true }]));
     r.phone(json!({ "type": "effect", "id": "fx" }));
     assert_eq!(r.running(), json!([]));
 }
