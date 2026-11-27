@@ -68,6 +68,10 @@
   #pads .big { grid-column: span 2; min-height: 84px; font-size: 20px; }
   #pads .fader { grid-column: span 2; padding: 6px 2px; }
   #pads button.active { border-color: var(--accent); color: var(--bg); background: var(--accent); }
+  #pad-pages, #mode { display: flex; gap: 6px; overflow-x: auto; }
+  #pad-pages button, #mode button { flex: 1 0 auto; min-height: 40px; font-size: 14px; padding: 0 12px; }
+  #pad-pages button.on, #mode button.on { border-color: var(--accent); color: var(--accent); }
+  #app.mine .full-only { display: none !important; }
   #login-error { min-height: 1.35em; color: var(--danger) !important; }
   h2 { margin: 4px 0 0; font-size: 13px; font-weight: 600; letter-spacing: .06em; color: var(--muted); text-transform: uppercase; }
   .colors { display: flex; flex-direction: column; gap: 8px; }
@@ -106,33 +110,35 @@
   <main id="app" hidden style="display:contents">
     <header><strong>LUMEN PRO</strong><span><i id="dmx-dot" class="dot"></i><span id="dmx"></span></span></header>
     <div id="offline" role="alert" hidden>Sin conexión con la laptop. Reintentando…</div>
-    <div id="now"><b id="now-name"></b><small id="now-time"></small></div>
+    <div id="mode" hidden><button id="mode-full" type="button">Completo</button><button id="mode-mine" type="button">Mi consola</button></div>
+    <div id="now" class="full-only"><b id="now-name"></b><small id="now-time"></small></div>
+    <div id="pad-pages" hidden></div>
     <div id="pads" hidden></div>
-    <button id="next"></button>
-    <div class="row"><button id="prev">◀ Anterior</button><button id="stop">■ Detener</button></div>
-    <div id="moments"></div>
-    <section id="timelines-box" class="colors" hidden>
+    <button id="next" class="full-only"></button>
+    <div class="row full-only"><button id="prev">◀ Anterior</button><button id="stop">■ Detener</button></div>
+    <div id="moments" class="full-only"></div>
+    <section id="timelines-box" class="colors full-only" hidden>
       <h2>Canciones · la música sale de la laptop</h2>
       <div id="timelines"></div>
     </section>
-    <section id="specials-box" class="colors" hidden>
+    <section id="specials-box" class="colors full-only" hidden>
       <h2>Efectos especiales · se dispara mientras aprietas</h2>
       <div id="specials"></div>
     </section>
-    <section id="colors" class="colors" hidden>
+    <section id="colors" class="colors full-only" hidden>
       <h2>Color fijo · hasta el próximo momento</h2>
       <div id="color-rows" class="colors"></div>
     </section>
-    <section id="effects-box" class="colors" hidden>
+    <section id="effects-box" class="colors full-only" hidden>
       <h2>Efectos · tocar para prender o apagar</h2>
       <div id="effects"></div>
     </section>
     <div class="bottom">
-      <label for="master">Intensidad <b id="master-value"></b></label>
-      <input id="master" type="range" min="0" max="100">
-      <label for="speed">Velocidad de los efectos <span><b id="speed-value"></b> <button id="speed-normal" class="mini" type="button">1×</button></span></label>
-      <input id="speed" type="range" min="25" max="400" step="5">
-      <div class="row"><button id="tap">TAP</button><button id="tap-clear">Soltar ritmo</button></div>
+      <label for="master" class="full-only">Intensidad <b id="master-value"></b></label>
+      <input id="master" class="full-only" type="range" min="0" max="100">
+      <label for="speed" class="full-only">Velocidad de los efectos <span><b id="speed-value"></b> <button id="speed-normal" class="mini" type="button">1×</button></span></label>
+      <input id="speed" class="full-only" type="range" min="25" max="400" step="5">
+      <div class="row full-only"><button id="tap">TAP</button><button id="tap-clear">Soltar ritmo</button></div>
       <div class="row"><button id="strobe">Estrobo</button><button id="blackout"></button></div>
     </div>
   </main>
@@ -462,6 +468,7 @@ function makePad(pad) {
   }
   const button = document.createElement("button");
   button.textContent = pad.label;
+  if (pad.color) button.style.boxShadow = "inset 6px 0 0 " + pad.color;
   if (pad.hold) {
     // Mientras se aprieta.
     button.onpointerdown = () => send({ type: "pad", id: pad.id, press: true });
@@ -471,11 +478,39 @@ function makePad(pad) {
   }
   return button;
 }
+// "Mi consola": solo los botones propios y el Blackout. Cada celular elige.
+let mine = localStorage.getItem("lumen.mine") === "1";
+let page = localStorage.getItem("lumen.page") || "";
+$("mode-full").onclick = () => { mine = false; localStorage.setItem("lumen.mine", "0"); render(); };
+$("mode-mine").onclick = () => { mine = true; localStorage.setItem("lumen.mine", "1"); render(); };
+
 function renderPads() {
-  const pads = state.pads || [];
+  const all = state.pads || [];
+  $("mode").hidden = all.length === 0;
+  $("app").classList.toggle("mine", mine && all.length > 0);
+  $("mode-full").className = mine ? "" : "on";
+  $("mode-mine").className = mine ? "on" : "";
+  // Páginas, en el orden en que aparecen; "" es la primera.
+  const pages = [...new Set(all.map((p) => p.page || ""))];
+  if (!pages.includes(page)) page = pages[0] || "";
+  const tabs = $("pad-pages");
+  tabs.hidden = pages.length < 2;
+  const tabShape = JSON.stringify(pages);
+  if (tabs.dataset.shape !== tabShape) {
+    tabs.dataset.shape = tabShape;
+    tabs.textContent = "";
+    pages.forEach((name) => {
+      const b = tabs.appendChild(document.createElement("button"));
+      b.type = "button";
+      b.textContent = name || "Principal";
+      b.onclick = () => { page = name; localStorage.setItem("lumen.page", name); render(); };
+    });
+  }
+  [...tabs.children].forEach((b, i) => (b.className = pages[i] === page ? "on" : ""));
+  const pads = all.filter((p) => (p.page || "") === page);
   const box = $("pads");
   box.hidden = pads.length === 0;
-  const shape = JSON.stringify(pads.map((p) => [p.id, p.label, p.size, p.fader, p.hold]));
+  const shape = JSON.stringify(pads.map((p) => [p.id, p.label, p.size, p.fader, p.hold, p.color]));
   if (box.dataset.shape !== shape) {
     box.dataset.shape = shape;
     box.textContent = "";

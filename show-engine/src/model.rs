@@ -751,6 +751,10 @@ pub struct Pad {
     /// 1 normal, 2 grande.
     #[serde(deserialize_with = "int")]
     pub size: i32,
+    /// Página donde va ("" = la primera).
+    pub page: String,
+    /// Color del botón ("#rrggbb"), si se eligió uno.
+    pub color: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]

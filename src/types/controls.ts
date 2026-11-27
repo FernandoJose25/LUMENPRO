@@ -18,6 +18,10 @@ export interface Pad {
   action: Action;
   /** 1 normal, 2 grande. */
   size: 1 | 2;
+  /** Página donde va ("" o sin página = la primera). */
+  page?: string;
+  /** Color del botón, para encontrarlo de un vistazo. */
+  color?: string | null;
 }
 
 /** Un botón o fader de un controlador MIDI. */

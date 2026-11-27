@@ -1,6 +1,8 @@
-## Novedades de la 0.8.0
+## Novedades de la 0.9.0
 
-**Barras y tiras de LEDs punto por punto.** Nuevo tipo de efecto **Píxeles**: cada punto de una barra o tira con su color. Arcoíris que corre, un punto que corre con estela, destellos al azar, vúmetro que se llena con los graves (verde abajo, rojo arriba) y barra que se llena y se vacía; al ritmo o con su velocidad. En Fixtures, **+ Tira de LEDs (WLED)** arma una tira con la cantidad de LEDs que digas, para controlarla por sACN o Art-Net.
+**Tu consola en el celular.** Los botones del celular (y los de Live) van en páginas, con pestañas, y cada uno con su color. En el celular, **Mi consola** deja solo tus botones, el Estrobo y el Blackout, para manejar el evento con tu propia pantalla; **Completo** vuelve a todo.
+
+**De la 0.8.0:** barras y tiras de LEDs punto por punto (efectos de píxeles y tiras WLED).
 
 **De la 0.7.0:** VirtualDJ manda el ritmo y los botones (OS2L).
 

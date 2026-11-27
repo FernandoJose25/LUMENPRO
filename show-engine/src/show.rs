@@ -892,6 +892,8 @@ impl Show {
                 "id": p.id,
                 "label": p.label,
                 "size": p.size,
+                "page": p.page,
+                "color": p.color,
                 "fader": p.action.is_fader(),
                 "hold": p.action == Action::Strobe || matches!(&p.action, Action::Special { id } if !self.is_latch(id)),
                 "active": self.is_active(&p.action),

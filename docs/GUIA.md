@@ -87,7 +87,7 @@ Si una cabeza se mueve al revés que en el simulador, en **Escenario** elige esa
 2. En **Celular**, toca **Encender**. Si Windows pregunta por el firewall, permite el acceso.
 3. Escanea el código QR con el celular.
 
-En el celular está el botón grande **Siguiente**, los momentos, las **Canciones** (las líneas de tiempo: un toque las arranca y detenerlas pide dos, para no cortar el vals sin querer; la música sale de la laptop), el **Color fijo** de cada grupo, los **Efectos** (se prenden y apagan tocándolos), la intensidad, el **TAP** para marcar el ritmo, el estrobo y el **Blackout** (hay que tocarlo dos veces, para no apagar todo sin querer). En **Celular → Botones del celular** puedes agregar los botones que quieras arriba de todo.
+En el celular está el botón grande **Siguiente**, los momentos, las **Canciones** (las líneas de tiempo: un toque las arranca y detenerlas pide dos, para no cortar el vals sin querer; la música sale de la laptop), el **Color fijo** de cada grupo, los **Efectos** (se prenden y apagan tocándolos), la intensidad, el **TAP** para marcar el ritmo, el estrobo y el **Blackout** (hay que tocarlo dos veces, para no apagar todo sin querer). En **Celular → Botones del celular** puedes agregar los botones que quieras arriba de todo, en **páginas** (**+ Página**: por ejemplo «Vals», «Hora loca», «Especiales») y con **color** para encontrarlos de un vistazo. En el celular, **Mi consola** deja solo tus botones, el Estrobo y el Blackout; **Completo** vuelve a todo. Cada celular recuerda lo que eligió.
 
 ## 7. Durante el evento
 

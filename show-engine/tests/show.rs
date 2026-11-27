@@ -1028,7 +1028,7 @@ fn the_phone_shows_its_buttons_lit_and_presses_them() {
     let mut r = Rig::new();
     r.moment("a", json!({}));
     r.doc["phonePads"] = json!([
-        { "id": "x", "label": "Hora loca", "action": { "do": "moment", "id": "a" }, "size": 2 },
+        { "id": "x", "label": "Hora loca", "action": { "do": "moment", "id": "a" }, "size": 2, "page": "Fiesta", "color": "#ff00ff" },
         { "id": "y", "label": "Estrobo", "action": { "do": "strobe" }, "size": 1 },
         { "id": "z", "label": "Intensidad", "action": { "do": "master" }, "size": 1 },
     ]);
@@ -1038,6 +1038,9 @@ fn the_phone_shows_its_buttons_lit_and_presses_them() {
     r.phone(json!({ "type": "pad", "id": "z", "value": 0.3 }));
     let pads = r.show.phone_snapshot("running")["pads"].clone();
     assert_eq!(pads[0]["active"], true);
+    // La página y el color van al celular; sin página, la primera.
+    assert_eq!((&pads[0]["page"], &pads[0]["color"]), (&json!("Fiesta"), &json!("#ff00ff")));
+    assert_eq!((&pads[1]["page"], &pads[1]["color"]), (&json!(""), &Value::Null));
     assert_eq!((&pads[1]["active"], &pads[1]["hold"]), (&json!(true), &json!(true)));
     assert_eq!((&pads[2]["fader"], &pads[2]["value"]), (&json!(true), &json!(0.3)));
     r.phone(json!({ "type": "pad", "id": "nada", "press": true }));

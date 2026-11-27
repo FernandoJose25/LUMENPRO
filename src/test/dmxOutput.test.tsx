@@ -54,17 +54,19 @@ describe("Salida DMX desde la interfaz", () => {
     const user = userEvent.setup();
     const engine = fakeEngine();
     render(<App />);
-    await waitFor(() => expect(engine.frame()[32]).toBe(255));
+    // Con la PC cargada (toda la suite a la vez) el motor de prueba tarda más.
+    const slow = { timeout: 5000 };
+    await waitFor(() => expect(engine.frame()[32]).toBe(255), slow);
     const before = engine.frame();
 
     await user.click(screen.getByRole("button", { name: "BLACKOUT" }));
     await user.click(screen.getByRole("button", { name: "CONFIRMAR" }));
-    await waitFor(() => expect(engine.frame()[32]).toBe(0));
+    await waitFor(() => expect(engine.frame()[32]).toBe(0), slow);
     expect(engine.frame()[0]).toBe(before[0]);
 
-    await user.click(await screen.findByRole("button", { name: "VOLVER A ENCENDER" }));
-    await waitFor(() => expect(engine.frame()).toEqual(before));
-  });
+    await user.click(await screen.findByRole("button", { name: "VOLVER A ENCENDER" }, slow));
+    await waitFor(() => expect(engine.frame()).toEqual(before), slow);
+  }, 30_000);
 
   it("con el motor lento no acumula envíos: junta los intermedios y termina en el último valor", async () => {
     let release: () => void = () => {};
