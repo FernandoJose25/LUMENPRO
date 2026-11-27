@@ -110,9 +110,9 @@ export interface LinkPlayer {
 /**
  * Los enlaces de YouTube y Spotify de Música. ▶ abre el enlace en una ventana
  * nueva del Brave del usuario; desde ahí YouTube sigue solo con la lista.
- * `onStart` se llama al abrir un enlace (las luces pasan a escuchar la PC).
+ * `onStart` se llama al abrir un enlace, con dónde se abrió (las luces pasan a escuchar ese programa).
  */
-export function useLinkPlayer(onStart: () => void): LinkPlayer {
+export function useLinkPlayer(onStart: (openedIn: string) => void): LinkPlayer {
   const [links, setLinks] = useState<MusicLink[]>(() => readSetting<MusicLink[]>("music.links") ?? []);
   const [openedId, setOpenedId] = useState<string | null>(null);
   const [openedIn, setOpenedIn] = useState<string | null>(null);
@@ -154,11 +154,11 @@ export function useLinkPlayer(onStart: () => void): LinkPlayer {
         setError(`No encontré «${link.title}» en YouTube. Quítalo y vuelve a agregarlo.`);
         return;
       }
-      onStartRef.current();
       try {
         const where = await invoke<string>("open_in_browser", { url });
         setOpenedId(id);
         setOpenedIn(where);
+        onStartRef.current(where);
       } catch (e) {
         setError(String(e));
       }

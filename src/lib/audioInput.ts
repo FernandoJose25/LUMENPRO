@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createBeatTracker, type BeatTracker } from "@/lib/beatTracker";
-import { PC_AUDIO, openPcAudio } from "@/lib/pcAudio";
+import { appLabel, appOf, isPcSource, openPcAudio } from "@/lib/pcAudio";
 import { readSetting, writeSetting } from "@/lib/settings";
 
 export type Band = "bass" | "mid" | "treble";
@@ -178,7 +178,8 @@ export interface AudioInput {
   error: string | null;
   bpm: number | null;
   devices: { id: string; label: string }[];
-  /** "" = la entrada predeterminada de Windows; PC_AUDIO = lo que suena en esta PC. */
+  /** "" = la entrada predeterminada de Windows; PC_AUDIO = lo que suena en esta PC;
+   *  appSource(exe) = lo que suena en un solo programa. */
   deviceId: string;
   sensitivity: number;
   musicOnly: boolean;
@@ -251,10 +252,15 @@ export function useAudioInput(autoStart = false): AudioInput {
         setError(message);
       };
       const pc =
-        deviceId === PC_AUDIO
-          ? await openPcAudio(() =>
-              lost("Se cortó el sonido de la PC (¿cambiaste de parlantes o audífonos?). Toca ▶ Escuchar otra vez."),
-            )
+        isPcSource(deviceId)
+          ? await openPcAudio(() => {
+              const app = appOf(deviceId);
+              lost(
+                app
+                  ? `Se cerró ${appLabel(app)} o se cortó su sonido. Ábrelo y toca ▶ Escuchar otra vez.`
+                  : "Se cortó el sonido de la PC (¿cambiaste de parlantes o audífonos?). Toca ▶ Escuchar otra vez.",
+              );
+            }, appOf(deviceId))
           : null;
       const stream =
         pc?.stream ??

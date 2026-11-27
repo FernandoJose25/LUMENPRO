@@ -151,7 +151,7 @@ fn spotify_entity(page: &str) -> Option<Value> {
 }
 
 /// Dónde está Brave, si está instalado.
-fn brave() -> Option<PathBuf> {
+pub(crate) fn brave() -> Option<PathBuf> {
     const EXE: &str = r"BraveSoftware\Brave-Browser\Application\brave.exe";
     ["ProgramFiles", "ProgramFiles(x86)", "LOCALAPPDATA"]
         .iter()

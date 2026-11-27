@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { askConfirm } from "@/lib/dialogs";
 import { useFixtureStore } from "@/lib/fixtureStore";
 import type { MusicPlayer } from "@/lib/musicPlayer";
-import { PC_AUDIO, pcAudioAvailable } from "@/lib/pcAudio";
+import { PC_AUDIO, appLabel, appOf, pcAudioAvailable } from "@/lib/pcAudio";
 import type { AudioInput } from "@/lib/audioInput";
 import { linkDetail, type LinkPlayer, type MusicLink } from "@/lib/links";
 import type { MusicLights } from "@/lib/musicLights";
@@ -42,8 +42,10 @@ export function MusicView({
     : !audio.listening
       ? null
       : audio.deviceId === PC_AUDIO
-        ? "lo que suena en esta PC"
-        : "la entrada de audio (micrófono o cable)";
+        ? "todo lo que suena en esta PC"
+        : appOf(audio.deviceId)
+          ? `solo lo que suena en ${appLabel(appOf(audio.deviceId)!)}`
+          : "la entrada de audio (micrófono o cable)";
 
   async function handleFiles(files: File[]) {
     setFailed([]);
@@ -299,8 +301,8 @@ function LinksPanel({ links }: { links: LinkPlayer }) {
       <p className="mb-3 text-xs text-text-secondary">
         Pega el enlace de una canción, álbum o playlist (en la app: Compartir → Copiar enlace). Con ▶ se abre en una
         ventana nueva de tu Brave (o de tu navegador) y sigue sola con la lista; las de Spotify se buscan en YouTube al
-        agregarlas. Las luces la siguen escuchando lo que suena en esta PC (todo: otro video o un juego también), así que en el
-        evento deja sonando solo la música. No se descarga nada: necesita internet.
+        agregarlas. Las luces la siguen escuchando solo a Brave (sus pestañas): un juego u otro programa no cuentan. No se
+        descarga nada: necesita internet.
       </p>
       <form
         className="flex gap-2"

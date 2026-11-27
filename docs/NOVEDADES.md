@@ -1,3 +1,9 @@
+## Novedades de la 0.15.0
+
+**Las luces oyen solo Brave.** Al abrir un enlace en tu Brave, LUMEN escucha solo lo que suena en Brave: un juego, Discord u otro programa ya no mueven las luces ni la pista. En Audio Reactive → Entrada de audio puedes elegir **Solo Brave**, **Solo Spotify** o cualquier programa que tenga sonido en ese momento, o **Todo lo que suena en esta PC** como antes.
+
+Brave cuenta entero: si otra pestaña de Brave tiene un video sonando, también se oye (Windows no separa las pestañas). Si cierras Brave, LUMEN avisa que se cortó el sonido.
+
 ## Novedades de la 0.14.0
 
 **Los enlaces se abren en tu Brave.** Con ▶ se abre una ventana nueva de tu Brave de siempre (con tus bloqueos de anuncios y tu cuenta) o, si no tienes Brave, de tu navegador. Ya no hay un Brave aparte manejado por LUMEN. Las canciones de Spotify se buscan en YouTube al agregarlas, y una playlist suena como una lista que pasa sola.

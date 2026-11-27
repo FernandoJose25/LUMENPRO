@@ -31,7 +31,7 @@ import { useTimelineAudio } from "@/lib/timelineAudio";
 import { useMusicPlayer } from "@/lib/musicPlayer";
 import { useLinkPlayer } from "@/lib/links";
 import { useMusicLights } from "@/lib/musicLights";
-import { PC_AUDIO } from "@/lib/pcAudio";
+import { BRAVE_ONLY, PC_AUDIO, isPcSource } from "@/lib/pcAudio";
 import { useEffectCatalog } from "@/lib/effectCatalog";
 
 export default function App() {
@@ -56,9 +56,11 @@ function AppShell() {
   // Un enlace (YouTube/Spotify) suena en la PC: pausa la canción guardada y
   // las luces pasan a escuchar lo que suena en esta PC.
   const lights = useMusicLights();
-  const links = useLinkPlayer(() => {
+  const links = useLinkPlayer((openedIn) => {
     if (music.playing) music.toggle();
-    if (audio.deviceId !== PC_AUDIO) audio.setDeviceId(PC_AUDIO);
+    // Abierto en Brave: se oye solo Brave (un juego u otro programa no mueven las luces).
+    const source = openedIn === "Brave" ? BRAVE_ONLY : isPcSource(audio.deviceId) ? audio.deviceId : PC_AUDIO;
+    if (audio.deviceId !== source) audio.setDeviceId(source);
     if (!audio.listening) void audio.start();
     lights.onMusicStart();
   });

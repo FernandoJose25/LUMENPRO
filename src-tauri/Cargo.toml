@@ -1,6 +1,6 @@
 [package]
 name = "lumenpro"
-version = "0.14.0"
+version = "0.15.0"
 description = "LUMEN PRO — consola de control DMX"
 edition = "2021"
 
@@ -33,7 +33,9 @@ reqwest = { version = "0.13", default-features = false }
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Diagnostics_ToolHelp", "Win32_System_Power", "Win32_System_Threading", "Win32_UI_WindowsAndMessaging"] }
 # Copiar lo que suena en la PC (src/pc_audio.rs).
 # y manejar lo que suena en el navegador (src/links.rs).
-windows = { version = "0.62", features = ["Foundation", "Foundation_Collections", "Media_Control", "Win32_Media_Audio", "Win32_System_Com"] }
+windows = { version = "0.62", features = ["Foundation", "Foundation_Collections", "Media_Control", "Win32_Media_Audio", "Win32_Security", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_System_Threading", "Win32_System_Variant"] }
+# La macro #[implement] de pc_audio.rs la nombra directo.
+windows-core = "0.62"
 
 [[bin]]
 name = "lumenpro"

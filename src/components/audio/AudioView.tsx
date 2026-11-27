@@ -1,10 +1,10 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
 import { Fader } from "@/components/ui/Fader";
 import { BAND_NAMES, getAudioFeed, type AudioInput, type Band } from "@/lib/audioInput";
 import { useFixtureStore } from "@/lib/fixtureStore";
-import { PC_AUDIO, pcAudioAvailable } from "@/lib/pcAudio";
+import { PC_AUDIO, appLabel, appOf, appSource, listPcApps, pcAudioAvailable } from "@/lib/pcAudio";
 import { EFFECT_SOURCE_LABELS } from "@/types/effect";
 import { VirtualDj } from "./VirtualDj";
 
@@ -14,6 +14,14 @@ const BAND_LABELS: Record<Band, string> = { bass: "Graves", mid: "Medios", trebl
 export function AudioView({ audio }: { audio: AudioInput }) {
   const { effects } = useFixtureStore();
   const followers = effects.filter((fx) => fx.source !== "clock");
+  // Los programas que tienen sonido ahora, para "Solo …": se piden al abrir la lista.
+  const [apps, setApps] = useState<string[]>([]);
+  const refreshApps = useCallback(() => {
+    if (pcAudioAvailable()) void listPcApps().then(setApps);
+  }, []);
+  useEffect(refreshApps, [refreshApps]);
+  const chosenApp = appOf(audio.deviceId);
+  const appChoices = chosenApp && !apps.includes(chosenApp) ? [chosenApp, ...apps] : apps;
 
   return (
     <div className="flex min-w-0 flex-1 gap-2 overflow-y-auto p-2">
@@ -53,10 +61,16 @@ export function AudioView({ audio }: { audio: AudioInput }) {
               <select
                 value={audio.deviceId}
                 onChange={(e) => audio.setDeviceId(e.target.value)}
+                onFocus={refreshApps}
                 className="h-9 rounded-control border border-border bg-panel2 px-2 text-text-primary outline-none"
               >
                 <option value="">Predeterminada de Windows</option>
-                {pcAudioAvailable() ? <option value={PC_AUDIO}>Lo que suena en esta PC (Spotify, YouTube…)</option> : null}
+                {pcAudioAvailable() ? <option value={PC_AUDIO}>Todo lo que suena en esta PC</option> : null}
+                {appChoices.map((exe) => (
+                  <option key={exe} value={appSource(exe)}>
+                    Solo {appLabel(exe)} (lo demás de la PC no cuenta)
+                  </option>
+                ))}
                 {audio.devices.map((d) => (
                   <option key={d.id} value={d.id}>
                     {d.label}
@@ -86,8 +100,8 @@ export function AudioView({ audio }: { audio: AudioInput }) {
 
           <p className="mt-4 border-t border-border pt-3 text-[11px] text-text-secondary">
             Lo mejor es un cable de la salida REC o AUX de la consola de sonido a la entrada de la laptop. Si la música
-            sale de esta misma laptop (Spotify, YouTube, VirtualDJ), elige «Lo que suena en esta PC»: no hace falta cable
-            ni micrófono. Con el micrófono también sirve. Si las barras se mueven en silencio, baja la sensibilidad; si no se mueven con
+            sale de esta misma laptop, elige «Solo Brave» (o el programa que la toca: Spotify, VirtualDJ…): no hace falta
+            cable ni micrófono, y un juego u otro video no mueven las luces. Brave cuenta entero: todas sus pestañas. Con el micrófono también sirve. Si las barras se mueven en silencio, baja la sensibilidad; si no se mueven con
             música, súbela.
           </p>
         </Panel>

@@ -110,6 +110,7 @@ fn window() {
             links::media_now,
             pc_audio::pc_audio_start,
             pc_audio::pc_audio_stop,
+            pc_audio::pc_audio_apps,
             show::load_show,
             show::save_show,
             show::export_show,
