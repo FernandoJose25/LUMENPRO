@@ -142,7 +142,9 @@ function MomentColors({ moment }: { moment: Moment }) {
   const scene = scenes.find((s) => s.id === moment.sceneId);
   // Efectos de color del momento: mientras corren, tapan el color quieto.
   const colorEffects = effects.filter(
-    (fx) => moment.effectIds.includes(fx.id) && fx.kind === "wave" && COLOR_TYPES.includes(fx.channelType),
+    (fx) =>
+      moment.effectIds.includes(fx.id) &&
+      (fx.kind === "pixels" || (fx.kind === "wave" && COLOR_TYPES.includes(fx.channelType))),
   );
 
   return (

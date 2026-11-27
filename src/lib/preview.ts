@@ -1,7 +1,8 @@
 import type { FrameInput } from "@/lib/dmxFrame";
 import { audioMessage } from "@/lib/engineLink";
 import type { ChannelValues } from "@/lib/fade";
-import { heldValues } from "@/lib/palettes";
+import { heldValues, tintedGroups } from "@/lib/palettes";
+import type { Effect } from "@/types/effect";
 import { fetchWasm, WasmShow } from "@/lib/wasmEngine";
 import type { EngineDoc, EngineMessage, Playback } from "@/types/engine";
 import type { Group } from "@/types/group";
@@ -28,12 +29,14 @@ export class PreviewShow {
   private readonly show = new WasmShow();
   private rev = 0;
   private groups: Group[];
+  private effects: Effect[];
   private hadAudio = false;
   private readonly timer: ReturnType<typeof setInterval>;
 
   private constructor(start: PreviewStart, private readonly onPlayback: () => void) {
     const { doc, liveValues, playback } = start;
     this.groups = doc.groups;
+    this.effects = doc.effects;
     this.playback = playback;
     this.rig = {
       instances: doc.instances,
@@ -73,6 +76,7 @@ export class PreviewShow {
   /** El show se editó mientras se miraba. */
   setDoc(doc: EngineDoc): void {
     this.groups = doc.groups;
+    this.effects = doc.effects;
     this.rig.instances = doc.instances;
     this.rig.definitions = doc.definitions;
     this.show.send({ type: "doc", doc }, Date.now());
@@ -111,7 +115,11 @@ export class PreviewShow {
       rig.master = p.master;
       rig.strobeActive = p.strobeActive;
       rig.identifyId = p.identifyId;
-      rig.held = heldValues({ instances: rig.instances, definitions: rig.definitions, groups: this.groups }, p.heldColors);
+      rig.held = heldValues(
+        { instances: rig.instances, definitions: rig.definitions, groups: this.groups },
+        p.heldColors,
+        tintedGroups(this.effects, p.runningEffectIds),
+      );
       this.onPlayback();
     }
   }

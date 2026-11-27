@@ -2,6 +2,7 @@ import type { ChannelValues } from "@/lib/fade";
 import { colorValues, SWATCHES, takesColor } from "@/lib/look";
 import type { ChannelType, FixtureChannel, FixtureDefinition, FixtureInstance } from "@/types/fixture";
 import type { Group } from "@/types/group";
+import type { Effect } from "@/types/effect";
 import type { Palette, PaletteKind } from "@/types/palette";
 
 const KIND_TYPES: Record<PaletteKind, ChannelType[]> = {
@@ -155,13 +156,22 @@ export function colorRows(rig: GroupedRig): { id: string; name: string }[] {
   return keys.has("") ? [...rows, { id: "", name: "Sin grupo" }] : rows;
 }
 
+/** Los grupos con un effect de píxeles corriendo, igual que
+ *  `Show::tinted_groups`: el color fijo los pinta a través del effect. */
+export function tintedGroups(effects: Effect[], running: string[]): string[] {
+  return effects.filter((fx) => fx.kind === "pixels" && fx.groupId && running.includes(fx.id)).map((fx) => fx.groupId!);
+}
+
 /** Lo que pone el color fijo en cada luz, igual que `Show::held`. */
-export function heldValues(rig: GroupedRig, heldColors: Record<string, string>): ChannelValues {
+export function heldValues(rig: GroupedRig, heldColors: Record<string, string>, tinted: string[] = []): ChannelValues {
   const values: ChannelValues = {};
   if (Object.keys(heldColors).length === 0) return values;
   for (const instance of rig.instances) {
-    const hex = heldColors[colorKey(rig, instance)];
+    const key = colorKey(rig, instance);
+    const hex = heldColors[key];
     const definition = definitionOf(rig, instance);
+    // Sus píxeles los pinta el effect, con este color.
+    if (tinted.includes(key) && definition?.channels.some((c) => c.type === "RED")) continue;
     if (hex && definition && takesColor(definition) && SWATCHES.some((s) => s.hex === hex)) {
       values[instance.id] = colorValues(definition, hex);
     }

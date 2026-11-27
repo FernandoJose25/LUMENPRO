@@ -56,13 +56,13 @@ describe("Restablecer", () => {
   it("un effect de la plantilla vuelve a su velocidad", async () => {
     const { user, engine } = await withTemplate();
     await user.click(screen.getByRole("button", { name: "Effects" }));
-    await user.click(screen.getByRole("button", { name: /^PAR: ola roja/ }));
+    await user.click(screen.getByRole("button", { name: /^PAR: arcoíris(?! al ritmo)/ }));
     const speed = screen.getByLabelText(/Velocidad/);
     fireEvent.change(speed, { target: { value: "99" } });
-    expect(lastDoc(engine).effects.find((fx) => fx.name === "PAR: ola roja")!.speedCpm).toBe(99);
+    expect(lastDoc(engine).effects.find((fx) => fx.name === "PAR: arcoíris")!.speedCpm).toBe(99);
     await user.click(screen.getByRole("button", { name: "Restablecer" }));
     await confirm(user, "Restablecer");
-    expect(lastDoc(engine).effects.find((fx) => fx.name === "PAR: ola roja")!.speedCpm).toBe(30);
+    expect(lastDoc(engine).effects.find((fx) => fx.name === "PAR: arcoíris")!.speedCpm).toBe(12);
   });
 
   it("todo el show vuelve a como recién instalado", async () => {

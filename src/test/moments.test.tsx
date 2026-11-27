@@ -201,18 +201,19 @@ describe("Effects y chases dentro de un momento", () => {
     expect(live(PAR, "GREEN")).toBe(10);
   });
 
-  it("Detener corta effects, chase y avance, y deja las luces como están", () => {
+  it("Detener corta effects, chase y avance, y lo que movía el effect vuelve a como estaba", () => {
     mount();
     const fx = addParEffect("RED");
     const a = addMoment("A", { effectIds: [fx], fadeMs: 0, durationSec: 2 });
     addMoment("B");
+    set(PAR, "RED", 77);
     act(() => store.startMoment(a));
     advance(500);
-    const red = live(PAR, "RED");
+    expect(live(PAR, "RED")).not.toBe(77);
     act(() => store.stopMoment());
     advance(10_000);
     expect(store.runningEffectIds).toEqual([]);
-    expect(live(PAR, "RED")).toBe(red);
+    expect(live(PAR, "RED")).toBe(77);
     expect(store.activeMomentId).toBe(a);
   });
 });

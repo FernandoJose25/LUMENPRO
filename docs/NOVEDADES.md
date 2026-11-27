@@ -1,3 +1,11 @@
+## Novedades de la 0.10.2
+
+**El Color fijo pinta los efectos.** Un efecto de color (ida y vuelta, barrido, policía, fuego, arcoíris…) sigue moviéndose igual con el color que elijas en **Color fijo**, en vez de quedar tapado. Prenderlo otra vez ya no suelta el color.
+
+**Al apagar un efecto no quedan colores pegados.** Lo que movía vuelve a como estaba antes (la escena o tus faders). Antes se quedaba en el último valor: por eso se seguía viendo verde después de la ola verde.
+
+**Se acabaron los efectos a medias.** La "ola roja", "ola verde" y "ola azul" (y los "al ritmo" y los "arcoíris rojo/verde/azul") eran pedazos de un mismo arcoíris: ahora son uno solo, **arcoíris** o **arcoíris al ritmo**, también en tus momentos, botones y MIDI. Si un momento tenía un solo pedazo suelto (como la ola azul de tu Entrada), se quita de ese momento.
+
 ## Novedades de la 0.10.1
 
 **Los efectos nuevos ya vienen cargados.** Al abrir LUMEN, tus grupos (PAR, Cabezas…) reciben todos los efectos listos que les sirven, sin agregarlos uno por uno. Dentro de cada grupo van separados en Movimiento, Colores y Brillo, también en el celular y en Momentos. **Cargar los que faltan**, en Effects, trae los que borres o los de un grupo nuevo.

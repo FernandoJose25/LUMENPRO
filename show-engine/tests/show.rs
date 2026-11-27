@@ -241,14 +241,16 @@ fn the_chase_starts_after_the_fade_and_the_next_moment_stops_it() {
 #[test]
 fn stop_cuts_effects_chase_and_auto_advance_and_leaves_the_lights() {
     let mut r = Rig::new();
-    r.moment("a", json!({ "effectIds": ["fx"], "chaseId": "c", "durationSec": 2 }));
+    r.moment("a", json!({ "sceneId": "red", "effectIds": ["fx"], "chaseId": "c", "durationSec": 2 }));
     r.moment("b", json!({}));
     r.start("a");
     r.run(500.0);
-    let (red, green) = (r.live("p1", "red"), r.live("p1", "green"));
+    let green = r.live("p1", "green");
+    assert_ne!(r.live("p1", "red"), 200, "el effect mueve el rojo");
     r.send(json!({ "type": "stopMoment" }));
     r.run(10_000.0);
-    assert_eq!((r.live("p1", "red"), r.live("p1", "green")), (red, green));
+    // Lo del chase queda donde está; lo que movía el effect vuelve a la escena.
+    assert_eq!((r.live("p1", "red"), r.live("p1", "green")), (200, green));
     assert_eq!((r.active(), r.running()), (json!("a"), json!([])));
     assert!(!r.show.is_playing());
 }
@@ -371,14 +373,18 @@ fn effects_spread_their_phase_and_restart_from_zero() {
     r.doc["effects"][0]["max"] = json!(200);
     r.doc["effects"][0]["phaseOffsetDeg"] = json!(90);
     r.reset();
+    r.set("p1", "red", 77);
     r.send(json!({ "type": "startEffect", "id": "fx" }));
     r.run(20.0);
     assert_eq!((r.live("p1", "red"), r.live("p2", "red")), (0, 50));
     r.run(500.0);
     assert_eq!((r.live("p1", "red"), r.live("p2", "red")), (100, 150));
     r.send(json!({ "type": "stopEffect", "id": "fx" }));
+    r.run(20.0);
+    // Apagado, cada luz vuelve a lo que tenía: no queda un color pegado.
+    assert_eq!((r.live("p1", "red"), r.live("p2", "red")), (77, 0));
     r.run(1000.0);
-    assert_eq!(r.live("p1", "red"), 100);
+    assert_eq!(r.live("p1", "red"), 77);
     r.send(json!({ "type": "startEffect", "id": "fx" }));
     r.run(20.0);
     assert_eq!(r.live("p1", "red"), 0);
@@ -1901,16 +1907,50 @@ fn at_random_each_par_is_on_or_off_on_its_own() {
     assert!(both.len() >= 3, "a veces juntas y a veces no: {both:?}");
 }
 
-#[test]
-fn a_pixel_effect_started_by_hand_wins_over_its_groups_held_colour() {
-    let mut r = Rig::new();
-    led_bar(&mut r, "rainbow", json!({}));
+/// Lo que sale por el cable del punto `n` de la barra (dirección 100).
+fn wire(r: &Rig, n: usize) -> [u8; 3] {
+    let f = r.show.frame(1);
+    [f[99 + n * 3], f[100 + n * 3], f[101 + n * 3]]
+}
+
+fn hold_blue(r: &mut Rig) {
     r.doc["groups"] = json!([{ "id": "bars", "name": "Barras" }]);
-    r.doc["colors"] = json!([{ "hex": "#0000ff", "name": "Azul", "values": { "bar1": { "r0": 0, "g0": 0, "b0": 255 } } }]);
+    let blue: serde_json::Map<String, Value> = (0..4).flat_map(|n| [(format!("r{n}"), json!(0)), (format!("g{n}"), json!(0)), (format!("b{n}"), json!(255))]).collect();
+    r.doc["colors"] = json!([{ "hex": "#0000ff", "name": "Azul", "values": { "bar1": blue } }]);
     r.send(json!({ "type": "doc", "doc": r.doc }));
     r.send(json!({ "type": "action", "action": { "do": "color", "groupId": "bars", "color": "#0000ff" }, "press": true }));
-    assert_eq!(r.playback()["heldColors"], json!({ "bars": "#0000ff" }));
+    r.run(20.0);
+}
+
+#[test]
+fn the_held_colour_paints_a_pixel_effect_and_its_movement_goes_on() {
+    let mut r = Rig::new();
+    led_bar(&mut r, "chase", json!({ "color": "#00ff00" }));
+    hold_blue(&mut r);
+    // El punto que corre sigue corriendo, ahora azul, y lo demás apagado.
+    assert_eq!([wire(&r, 0), wire(&r, 1)], [[0, 0, 255], [0, 0, 0]]);
+    // Prenderlo otra vez no suelta el color fijo.
     r.send(json!({ "type": "stopEffect", "id": "px" }));
     r.send(json!({ "type": "startEffect", "id": "px" }));
-    assert_eq!(r.playback()["heldColors"], json!({}));
+    r.run(20.0);
+    assert_eq!(r.playback()["heldColors"], json!({ "bars": "#0000ff" }));
+    assert_eq!(wire(&r, 0), [0, 0, 255]);
+    // Apagado el effect, el color fijo pinta la barra entera.
+    r.send(json!({ "type": "stopEffect", "id": "px" }));
+    r.run(20.0);
+    assert_eq!(wire(&r, 1), [0, 0, 255]);
+}
+
+#[test]
+fn a_rainbow_with_a_held_colour_keeps_its_brightness_in_that_colour() {
+    let mut r = Rig::new();
+    led_bar(&mut r, "fire", json!({ "speedCpm": 30 }));
+    hold_blue(&mut r);
+    for _ in 0..10 {
+        r.run(70.0);
+        for n in 0..4 {
+            let [red, green, blue] = wire(&r, n);
+            assert!(red == 0 && green == 0 && blue > 0, "fuego en azul: {:?}", wire(&r, n));
+        }
+    }
 }

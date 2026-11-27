@@ -381,6 +381,12 @@ pub struct Show {
     fx_clock: f64,
     clock_at: f64,
     dj: Option<DjBeat>,
+    /// Lo que tenía cada canal antes de que un effect lo moviera: al
+    /// apagarse vuelve ahí, sin dejar colores pegados. Lo que pone otro (una
+    /// escena, un fader, un momento) pasa a ser lo de antes.
+    fx_base: BTreeMap<(String, String), u8>,
+    /// Los canales que movió un effect en este tick.
+    fx_touched: std::collections::BTreeSet<(String, String)>,
 }
 
 /// Un punto de una barra: su lugar en el grupo, su luz y sus canales (0 rojo,
@@ -504,14 +510,15 @@ impl Show {
             Message::ActiveScene { id } => self.edit(|p| p.active_scene_id = id),
             Message::RecallScene { id } => self.recall_scene(&id),
             Message::StartEffect { id } => {
-                // Lo último que se toca manda: un effect de color prendido a
-                // mano se ve aunque su grupo tuviera un color fijo.
+                // Lo último que se toca manda: una onda sobre un canal de color
+                // prendida a mano se ve aunque su grupo tuviera un color fijo.
+                // Los de píxeles, en cambio, toman el color fijo (tick_pixels).
                 let colors = self
                     .doc
                     .effects
                     .iter()
                     .find(|e| e.id == id)
-                    .filter(|e| (e.kind == EffectKind::Wave && e.channel_type.is_color()) || e.kind == EffectKind::Pixels);
+                    .filter(|e| e.kind == EffectKind::Wave && e.channel_type.is_color());
                 if let Some(group) = colors.and_then(|e| e.group_id.clone()) {
                     self.edit(|p| {
                         p.held_colors.remove(&group);
@@ -860,15 +867,32 @@ impl Show {
             return ChannelValues::new();
         }
         let known: Vec<&str> = self.doc.groups.iter().map(|g| g.id.as_str()).collect();
+        let tinted = self.tinted_groups();
         self.doc
             .rig()
-            .filter_map(|(i, _)| {
+            .filter_map(|(i, d)| {
                 // Un grupo borrado es como no tener grupo.
                 let key = i.group.as_deref().filter(|g| known.contains(g)).unwrap_or("");
                 let hex = held.get(key)?;
+                // Sus píxeles los pinta el efecto, con este color.
+                if tinted.contains(&key) && d.channels.iter().any(|c| c.kind == ChannelType::Red) {
+                    return None;
+                }
                 let color = self.doc.colors.iter().find(|c| c.hex == *hex)?;
                 Some((i.id.clone(), color.values.get(&i.id)?.clone()))
             })
+            .collect()
+    }
+
+    /// Los grupos con un effect de píxeles corriendo: el color fijo los pinta
+    /// a través del effect, no encima.
+    fn tinted_groups(&self) -> Vec<&str> {
+        let running = &self.playback.running_effect_ids;
+        self.doc
+            .effects
+            .iter()
+            .filter(|e| e.kind == EffectKind::Pixels && running.contains(&e.id))
+            .filter_map(|e| e.group_id.as_deref())
             .collect()
     }
 
@@ -961,6 +985,40 @@ impl Show {
     }
 
     fn set_live(&mut self, instance: &str, channel: &str, value: u8) {
+        if !self.fx_base.is_empty() {
+            self.fx_base.remove(&(instance.to_string(), channel.to_string()));
+        }
+        self.write_live(instance, channel, value);
+    }
+
+    /// Lo que pone un effect: se acuerda de lo que había para devolverlo.
+    fn set_fx(&mut self, instance: &str, channel: &str, value: u8) {
+        let key = (instance.to_string(), channel.to_string());
+        if !self.fx_base.contains_key(&key) {
+            let before = self.live.get(instance).and_then(|c| c.get(channel)).copied().or_else(|| {
+                let (_, definition) = self.doc.rig().find(|(i, _)| i.id == instance)?;
+                Some(definition.channels.iter().find(|c| c.id == channel)?.default_dmx())
+            });
+            if let Some(before) = before {
+                self.fx_base.insert(key.clone(), before);
+            }
+        }
+        self.fx_touched.insert(key);
+        self.write_live(instance, channel, value);
+    }
+
+    /// Los canales que ningún effect movió en este tick vuelven a lo de antes.
+    fn release_fx(&mut self) {
+        let touched = std::mem::take(&mut self.fx_touched);
+        let done: Vec<_> = self.fx_base.keys().filter(|k| !touched.contains(*k)).cloned().collect();
+        for key in done {
+            if let Some(value) = self.fx_base.remove(&key) {
+                self.write_live(&key.0, &key.1, value);
+            }
+        }
+    }
+
+    fn write_live(&mut self, instance: &str, channel: &str, value: u8) {
         if self.live.get(instance).and_then(|c| c.get(channel)) == Some(&value) {
             return;
         }
@@ -1452,7 +1510,7 @@ impl Show {
             }
         }
         for (instance, channel, value) in writes {
-            self.set_live(&instance, &channel, value);
+            self.set_fx(&instance, &channel, value);
         }
     }
 
@@ -1470,6 +1528,10 @@ impl Show {
             let level = level_of(effect, levels);
             let color = crate::model::rgb_of(effect.color.as_deref());
             let color2 = effect.color2.as_deref().map_or([0.0; 3], |hex| crate::model::rgb_of(Some(hex)));
+            // Con un Color fijo en el grupo, el efecto sigue igual pero en ese
+            // color: los de un color lo toman en vez del suyo; los que traen
+            // sus colores (arcoíris, fuego…) quedan con su brillo y ese tono.
+            let tint = self.playback.held_colors.get(group).map(|hex| crate::model::rgb_of(Some(hex)));
 
             // Cada punto: sus canales rojo, verde, azul (y blanco, si tiene
             // uno por punto); sin color, su dimmer.
@@ -1502,7 +1564,14 @@ impl Show {
                 pixels.extend(heads.into_iter().enumerate().map(|(n, head)| (base + n, instance, head)));
             }
             for (index, instance, channels) in pixels {
-                let rgb = effect.pattern.color(index, count, cycles, level, color, color2);
+                let rgb = match tint {
+                    Some(tint) if effect.pattern.uses_color() => effect.pattern.color(index, count, cycles, level, tint, color2),
+                    Some(tint) => {
+                        let bright = effect.pattern.color(index, count, cycles, level, color, color2).into_iter().fold(0.0, f64::max);
+                        tint.map(|c| c * bright)
+                    }
+                    None => effect.pattern.color(index, count, cycles, level, color, color2),
+                };
                 for (k, channel) in channels {
                     // k 3: un punto sin color, por su brillo; k 4: su blanco,
                     // lo que los tres tienen en común.
@@ -1517,7 +1586,7 @@ impl Show {
             }
         }
         for (instance, channel, value) in writes {
-            self.set_live(&instance, &channel, value);
+            self.set_fx(&instance, &channel, value);
         }
     }
 
@@ -1643,6 +1712,7 @@ impl Show {
         self.tick_chase();
         self.tick_effects(now);
         self.tick_pixels(now);
+        self.release_fx();
         self.tick_figures(now);
         self.last_tick = now;
         if self.playback.identify_id.is_some() && now >= self.identify_until {

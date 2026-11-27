@@ -20,13 +20,14 @@ import {
   matchPalettes,
   paletteValues,
   quickColors,
+  tintedGroups,
   type QuickColor,
 } from "@/lib/palettes";
 import { colorValues } from "@/lib/look";
 import { withTwins } from "@/lib/dmxFrame";
 import { ORUS_WHEEL, ORUS_WHEEL_NOTE, seedDefinitions, seedInstances } from "@/data/fixtureLibrary";
 import { buildQuinceTemplate } from "@/data/quinceTemplate";
-import { missingPresets } from "@/lib/effectPresets";
+import { catalogUpdate, missingPresets } from "@/lib/effectPresets";
 import { resetTemplate } from "@/lib/factory";
 import { closeWindow, createEngineLink, type EngineHost, type EngineLink } from "@/lib/engineLink";
 import { askChoice } from "@/lib/dialogs";
@@ -195,6 +196,8 @@ interface FixtureStoreValue extends FixtureStoreState {
   addQuinceTemplate: () => void;
   /** Vuelve los momentos, escenas y effects de la plantilla a como los arma. */
   resetQuinceTemplate: () => void;
+  /** Pone los effects al día con los efectos listos (effectPresets.catalogUpdate). */
+  updateEffectCatalog: () => void;
   /** Uno nuevo de ese tipo, sobre la primera máquina de efectos; sin ninguna,
    *  queda sin asignar (no toca ninguna luz). */
   addSpecial: (kind: SpecialKind) => Special;
@@ -657,10 +660,10 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
     (groupId: string | null, color: string | null) => act({ do: "color", groupId, color }, true),
     [act],
   );
-  const { instances, definitions, groups, heldColors } = state;
+  const { instances, definitions, groups, heldColors, effects, runningEffectIds } = state;
   const held = useMemo(
-    () => heldValues({ instances, definitions, groups }, heldColors),
-    [instances, definitions, groups, heldColors],
+    () => heldValues({ instances, definitions, groups }, heldColors, tintedGroups(effects, runningEffectIds)),
+    [instances, definitions, groups, heldColors, effects, runningEffectIds],
   );
 
   const recallScene = useCallback((sceneId: string) => engine.send({ type: "recallScene", id: sceneId }), [engine]);
@@ -1039,6 +1042,12 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
     [setState],
   );
 
+  const updateEffectCatalog = useCallback(() => {
+    // Fuera del updater: makeId no debe correr dos veces.
+    const patch = catalogUpdate(stateRef.current, makeId);
+    if (patch) setState((s) => ({ ...s, ...patch }));
+  }, [setState]);
+
   const paintMoment = useCallback(
     (momentId: string, groupKey: string, hex: string) =>
       setState((s) => {
@@ -1194,6 +1203,7 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
     moveMoment,
     addQuinceTemplate,
     resetQuinceTemplate,
+    updateEffectCatalog,
     saveToMoment,
     paintMoment,
     startMoment,

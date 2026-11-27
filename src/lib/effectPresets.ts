@@ -1,4 +1,6 @@
 import type { Effect, PixelPattern } from "@/types/effect";
+import type { Action } from "@/types/controls";
+import type { ShowDoc } from "@/lib/history";
 import type { ChannelType, FixtureDefinition, FixtureInstance } from "@/types/fixture";
 import type { Group } from "@/types/group";
 
@@ -64,31 +66,11 @@ function list(category: EffectCategory, needs: ChannelType[], entries: Entry[], 
   return entries.map(([name, text, patch]): EffectPreset => ({ name, text, category, needs, parts: one(patch), ...extra }));
 }
 
+// Todos de píxeles: con Color fijo siguen igual, en ese color.
 const COLOR: EffectPreset[] = [
-  {
-    name: "Arcoíris",
-    text: "Los colores van y vienen solos, cada luz a su tiempo.",
-    category: "color",
-    needs: ["RED"],
-    parts: [
-      { name: "rojo", patch: { channelType: "RED", speedCpm: 30, phaseOffsetDeg: 90 } },
-      { name: "verde", patch: { channelType: "GREEN", speedCpm: 37, phaseOffsetDeg: 90 } },
-      { name: "azul", patch: { channelType: "BLUE", speedCpm: 44, phaseOffsetDeg: 90 } },
-    ],
-  },
-  {
-    name: "Arcoíris al ritmo",
-    text: "Igual, pero siguiendo los golpes de la música.",
-    category: "color",
-    needs: ["RED"],
-    parts: [
-      { name: "rojo", patch: { channelType: "RED", phaseOffsetDeg: 90, ...beat(4) } },
-      { name: "verde", patch: { channelType: "GREEN", phaseOffsetDeg: 90, ...beat(6) } },
-      { name: "azul", patch: { channelType: "BLUE", phaseOffsetDeg: 90, ...beat(8) } },
-    ],
-  },
   ...list("color", ["RED"], [
-    ["Colores que corren", "Cada luz con un color del arcoíris, y los colores pasan de una a la otra.", pixels("rainbow", { speedCpm: 20 })],
+    ["Arcoíris", "Cada luz con un color del arcoíris, y los colores pasan de una a la otra.", pixels("rainbow", { speedCpm: 12 })],
+    ["Arcoíris al ritmo", "El arcoíris, avanzando con los golpes de la música.", pixels("rainbow", beat(8))],
     ["Todos cambian de color", "Todas juntas pasan suave por todos los colores.", pixels("colorCycle", { speedCpm: 12 })],
     ["Salto de color", "Todas juntas saltan a otro color cada dos segundos.", pixels("jump")],
     ["Salto de color al ritmo", "Cada dos golpes de la música, todas a otro color. Para la hora loca.", pixels("jump", beat(2))],
@@ -101,7 +83,7 @@ const COLOR: EffectPreset[] = [
     ["Persecución de color", "Un color que salta de luz en luz.", pixels("chase", { color: "#00ffff", speedCpm: 40 })],
     ["Ida y vuelta", "Un color que va y vuelve por la fila de luces, al ritmo.", pixels("bounce", { color: "#ff00ff", ...beat(4) })],
     ["Barrido de color", "El naranja barre las luces y el morado lo tapa.", pixels("wipe", { color: "#ff8800", color2: "#8000ff", speedCpm: 15 })],
-    ["Rojo con los graves", "El rojo late con los bajos de la música; sin música, apagado.", { channelType: "RED", waveform: "pulse", source: "bass" }],
+    ["Color con los graves", "Laten con los bajos de la música; sin música, apagadas.", pixels("flash", { color: "#ff0000", source: "bass" })],
   ]),
 ];
 
@@ -207,8 +189,90 @@ export function presetsFor(rig: Rig, groupId: string): EffectPreset[] {
   return EFFECT_PRESETS.filter((p) => p.needs.some((type) => groupHas(rig, groupId, type)) && (!p.pixels || pixels));
 }
 
-/** Sube cuando el catálogo crece: el show carga solo los que se sumaron. */
-export const CATALOG_VERSION = 1;
+/** Sube cuando el catálogo cambia: el show se pone al día una vez. */
+export const CATALOG_VERSION = 2;
+
+/**
+ * Effects de antes que eran un pedazo de otro: una onda sobre un solo canal
+ * de color (el arcoíris eran tres). Solos no se entienden (la "ola azul"
+ * dejaba el verde que había) y el Color fijo los tapaba. Van al de la derecha.
+ */
+const PIECES: Record<string, string> = {
+  "ola roja": "arcoíris",
+  "ola verde": "arcoíris",
+  "ola azul": "arcoíris",
+  "rojo al ritmo": "arcoíris al ritmo",
+  "verde al ritmo": "arcoíris al ritmo",
+  "azul al ritmo": "arcoíris al ritmo",
+  "arcoíris rojo": "arcoíris",
+  "arcoíris verde": "arcoíris",
+  "arcoíris azul": "arcoíris",
+  "arcoíris al ritmo rojo": "arcoíris al ritmo",
+  "arcoíris al ritmo verde": "arcoíris al ritmo",
+  "arcoíris al ritmo azul": "arcoíris al ritmo",
+  "colores que corren": "arcoíris",
+  "rojo con los graves": "color con los graves",
+};
+
+type Doc = Pick<ShowDoc, "instances" | "definitions" | "groups" | "effects" | "moments" | "livePads" | "phonePads" | "controls" | "timelines">;
+
+/**
+ * Pone al día los effects del show con el catálogo: los pedazos se cambian
+ * por el effect entero (en botones, MIDI y línea de tiempo; en un momento,
+ * solo si tenía más de un pedazo: uno suelto era un efecto a medias y sale),
+ * y cada grupo con luces recibe los efectos listos que le faltan.
+ */
+export function catalogUpdate(
+  doc: Doc,
+  makeId: (prefix: string) => string,
+): Pick<Doc, "effects" | "moments" | "livePads" | "phonePads" | "controls" | "timelines"> | null {
+  const now = Date.now();
+  const lower = (s: string) => s.toLowerCase();
+  let effects = [...doc.effects];
+  const replaced = new Map<string, string>();
+  for (const group of doc.groups) {
+    const prefix = lower(`${group.name}: `);
+    for (const fx of doc.effects) {
+      const piece = lower(fx.name).startsWith(prefix) ? PIECES[lower(fx.name).slice(prefix.length)] : undefined;
+      if (!piece || fx.kind !== "wave" || fx.groupId !== group.id) continue;
+      const name = lower(`${group.name}: ${piece}`);
+      let whole = effects.find((e) => lower(e.name) === name && e.groupId === group.id);
+      const preset = EFFECT_PRESETS.find((p) => lower(p.name) === piece);
+      if (!whole && preset) {
+        whole = { ...presetEffects(preset, group)[0], id: makeId("effect"), createdAt: now, updatedAt: now };
+        effects.push(whole);
+      }
+      if (whole) replaced.set(fx.id, whole.id);
+    }
+  }
+  effects = effects.filter((fx) => !replaced.has(fx.id));
+
+  const remap = <T extends { action: Action }>(items: T[]) =>
+    items.map((item) =>
+      item.action.do === "effect" && replaced.has(item.action.id)
+        ? { ...item, action: { ...item.action, id: replaced.get(item.action.id)! } }
+        : item,
+    );
+  const moments = doc.moments.map((m) => {
+    const pieces = m.effectIds.filter((id) => replaced.has(id));
+    if (pieces.length === 0) return m;
+    const kept = m.effectIds.filter((id) => !replaced.has(id));
+    const wholes = pieces.length > 1 ? pieces.map((id) => replaced.get(id)!) : [];
+    return { ...m, effectIds: [...new Set([...kept, ...wholes])] };
+  });
+
+  const added = missingPresets({ ...doc, effects }).map((d) => ({ ...d, id: makeId("effect"), createdAt: now, updatedAt: now }));
+  // Sin nada que cambiar no es un paso de Deshacer.
+  if (replaced.size === 0 && added.length === 0) return null;
+  return {
+    effects: [...effects, ...added],
+    moments,
+    livePads: remap(doc.livePads),
+    phonePads: remap(doc.phonePads),
+    controls: remap(doc.controls),
+    timelines: doc.timelines.map((t) => ({ ...t, cues: remap(t.cues) })),
+  };
+}
 
 /** Los effects de los efectos listos que le faltan al show, en cada grupo
  *  con luces (uno ya está si hay un effect con su nombre). */

@@ -7,6 +7,7 @@ import type { EngineMessage } from "@/types/engine";
 import { fakeEngine } from "./fakeEngine";
 import { willAnswer } from "./dialogs";
 import { STORAGE_KEY } from "@/lib/showFile";
+import { CATALOG_VERSION } from "@/lib/effectPresets";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(), isTauri: vi.fn(), Channel: class {} }));
 
@@ -105,7 +106,7 @@ describe("Lo que se mueve solo", () => {
     await user.click(screen.getByRole("button", { name: "Dashboard" }));
     await user.click(top().getByRole("button", { name: "■ Detener" }));
     await waitFor(() => expect(playback(engine).runningEffectIds).toEqual([]));
-    expect(top().queryByRole("button", { name: "■ Detener" })).toBeNull();
+    await waitFor(() => expect(top().queryByRole("button", { name: "■ Detener" })).toBeNull());
   });
 });
 
@@ -209,7 +210,7 @@ describe("Shows de la 0.2", () => {
     const again = fakeEngine();
     render(<App />);
     await waitFor(() => expect(lastDoc(again).effects.length).toBe(doc.effects.length));
-    expect(localStorage.getItem("lumenpro.effects.catalog")).toBe("1");
+    expect(localStorage.getItem("lumenpro.effects.catalog")).toBe(String(CATALOG_VERSION));
   });
 
   it("el golpe de graves de la plantilla vieja queda apagado sin música", async () => {

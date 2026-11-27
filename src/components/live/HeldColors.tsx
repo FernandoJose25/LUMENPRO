@@ -34,7 +34,8 @@ export function HeldColors({ heldColors, onPick }: HeldColorsProps) {
       <div className="flex items-baseline justify-between gap-2">
         <span className="text-xs font-medium tracking-wide text-text-secondary">COLOR FIJO</span>
         <span className="text-[11px] text-text-secondary">
-          Manda hasta que cambias de momento, sin cambiarlo. “Del momento” lo suelta antes.
+          Pinta los efectos de color que corren (siguen igual, en este color). Dura hasta que cambias de momento; “Del
+          momento” lo suelta antes.
         </span>
       </div>
       {lines.map((line) => (

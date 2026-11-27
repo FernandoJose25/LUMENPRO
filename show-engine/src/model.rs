@@ -521,6 +521,15 @@ pub enum PixelPattern {
 }
 
 impl PixelPattern {
+    /// Los que se pintan con un color elegido (y el Color fijo lo cambia);
+    /// los demás traen sus propios colores.
+    pub fn uses_color(self) -> bool {
+        !matches!(
+            self,
+            PixelPattern::Rainbow | PixelPattern::Meter | PixelPattern::Fire | PixelPattern::Confetti | PixelPattern::ColorCycle | PixelPattern::Jump
+        )
+    }
+
     /// Rojo, verde y azul (0–1) del punto `i` de `n`. `cycles`: vueltas que
     /// lleva; `level`: lo que suena (0–1), si sigue la música; `color2`: el
     /// segundo color de los que alternan (negro si no hay).

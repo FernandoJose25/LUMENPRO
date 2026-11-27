@@ -96,17 +96,17 @@ export function buildQuinceTemplate(rig: Rig, makeId: (prefix: string) => string
   // van en espejo.
   const slowPan = figure("Cabezas: círculo lento", "circle", 12, 5);
   const fastMove = figure("Cabezas: ocho fiesta", "eight", 35, 18);
-  // Velocidades distintas para que los tres colores nunca vayan a la par.
-  const rainbow = [
-    ...effect(parsGroup, "PAR: ola roja", "RED", 30, 0, 255, 90),
-    ...effect(parsGroup, "PAR: ola verde", "GREEN", 37, 0, 255, 90),
-    ...effect(parsGroup, "PAR: ola azul", "BLUE", 44, 0, 255, 90),
-  ];
-  // Los mismos, siguiendo la música si se está escuchando.
+  // Los mismos que "Arcoíris" de los efectos listos: con Color fijo siguen
+  // corriendo en ese color.
+  const rainbow = effect(parsGroup, "PAR: arcoíris", "RED", 12, 0, 255, 0, { kind: "pixels", pattern: "rainbow" });
+  // Siguiendo la música si se está escuchando.
   const musicRainbow = [
-    ...effect(parsGroup, "PAR: rojo al ritmo", "RED", 30, 0, 255, 90, { source: "beat", beatsPerCycle: 4 }),
-    ...effect(parsGroup, "PAR: verde al ritmo", "GREEN", 37, 0, 255, 90, { source: "beat", beatsPerCycle: 6 }),
-    ...effect(parsGroup, "PAR: azul al ritmo", "BLUE", 44, 0, 255, 90, { source: "beat", beatsPerCycle: 8 }),
+    ...effect(parsGroup, "PAR: arcoíris al ritmo", "RED", 30, 0, 255, 0, {
+      kind: "pixels",
+      pattern: "rainbow",
+      source: "beat",
+      beatsPerCycle: 8,
+    }),
     // Sin música, apagados (ver level_of en show-engine).
     ...effect(parsGroup, "PAR: golpe de graves", "DIMMER", 120, 0, 255, 0, { source: "bass", waveform: "pulse" }),
   ];
