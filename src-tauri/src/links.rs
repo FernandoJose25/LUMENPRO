@@ -3,15 +3,31 @@
 //! leen los nombres de las canciones y se buscan en YouTube. No se descarga
 //! nada. Las luces lo siguen con "Lo que suena en esta PC" (pc_audio.rs).
 //!
-//! La ventana carga páginas de internet: no tiene acceso a los comandos de
-//! LUMEN. Avisa lo que pasa cambiando su título (`on_document_title_changed`).
+//! Si Brave está instalado, suena en Brave (brave.rs): bloquea los anuncios.
+//! Si no, en la ventana "reproductor" de LUMEN, que carga páginas de internet
+//! sin acceso a los comandos de LUMEN y avisa cambiando su título
+//! (`on_document_title_changed`).
 
+use std::path::Path;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
+use std::thread;
+use std::time::Duration;
 
+use crate::brave::{self, Brave, Fail};
 use serde::Serialize;
 use serde_json::{json, Value};
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager, Url, WebviewUrl, WebviewWindowBuilder, Window, WindowEvent};
+
+/// El Brave que hace de reproductor, si está abierto.
+static BRAVE: Mutex<Option<Brave>> = Mutex::new(None);
+/// Cada Brave tiene quien lo vigile (`watch`); al abrir otro, el anterior se retira.
+static WATCH: AtomicU64 = AtomicU64::new(0);
+
+const PAUSE_JS: &str = "document.querySelector('#movie_player video')?.pause()";
+const PLAY_JS: &str = "document.querySelector('#movie_player video')?.play()";
+const NEXT_JS: &str = "document.querySelector('.ytp-next-button')?.click()";
 
 const MAIN: &str = "main";
 const PLAYER: &str = "reproductor";
@@ -34,12 +50,22 @@ const PLAYER_SCRIPT: &str = r##"(() => {
   // LUMEN marca con lumen=1 la página que abre; YouTube lo borra de la
   // dirección apenas carga, así que se lee al empezar.
   let pending = new URLSearchParams(location.search).has("lumen");
-  let watched = null;
+  let watched = null, done = "", last = -1, stuck = 0;
+  // En una playlist de YouTube sigue YouTube; si no, LUMEN pasa a la siguiente.
+  const finish = () => {
+    const ad = document.querySelector("#movie_player.ad-showing");
+    if (location.pathname !== "/watch" || ad || done === location.href) return;
+    if (new URLSearchParams(location.search).has("list")) return;
+    done = location.href;
+    window.__lumenEnded = Date.now();
+    document.title = "LUMEN:fin";
+  };
   setInterval(() => {
     const path = location.pathname;
     // Una canción de Spotify: el primer video de la búsqueda, solo (sin el "Mix").
+    // YouTube arma los resultados de dos formas distintas: vale el primer enlace a un video.
     if (pending && path === "/results") {
-      const first = document.querySelector('ytd-video-renderer a#video-title[href*="/watch?v="]');
+      const first = document.querySelector('ytd-search a[href*="/watch?v="]');
       const v = first && new URL(first.href).searchParams.get("v");
       if (v) { pending = false; location.replace("/watch?v=" + v); }
     }
@@ -51,14 +77,15 @@ const PLAYER_SCRIPT: &str = r##"(() => {
     const video = path === "/watch" ? document.querySelector("#movie_player video") : null;
     if (video && video !== watched) {
       watched = video;
-      video.addEventListener("ended", () => {
-        const ad = document.querySelector("#movie_player.ad-showing");
-        // En una playlist de YouTube sigue YouTube; si no, LUMEN pasa a la siguiente.
-        if (location.pathname === "/watch" && !ad && !new URLSearchParams(location.search).has("list")) {
-          document.title = "LUMEN:fin";
-        }
-      });
+      video.addEventListener("ended", finish);
     }
+    // Por si el aviso del video no llega, o se traba en los últimos segundos
+    // (YouTube a veces no carga el final): 3 s quieto al final cuenta como terminado.
+    if (video && video.ended) finish();
+    const atEnd = video && !video.paused && video.duration > 0 && video.duration - video.currentTime < 3;
+    stuck = atEnd && video.currentTime === last ? stuck + 1 : 0;
+    last = video ? video.currentTime : -1;
+    if (stuck >= 8) finish();
   }, 400);
 })();"##;
 
@@ -179,6 +206,9 @@ pub fn player_play(app: AppHandle, url: String) -> Result<(), String> {
     if url.scheme() != "https" || url.host_str() != Some("www.youtube.com") {
         return Err("El reproductor solo abre YouTube".into());
     }
+    if let Some(exe) = brave::find() {
+        return play_in_brave(&app, &exe, url.as_str());
+    }
     if let Some(open) = app.get_webview_window(PLAYER) {
         return open.navigate(url).map_err(|e| e.to_string());
     }
@@ -210,24 +240,105 @@ pub fn player_play(app: AppHandle, url: String) -> Result<(), String> {
     Ok(())
 }
 
-/// "pause", "play", "next" (dentro de una playlist de YouTube) o "stop" (cierra el reproductor).
-#[tauri::command]
-pub fn player_control(app: AppHandle, action: String) -> Result<(), String> {
-    let Some(player) = app.get_webview_window(PLAYER) else { return Ok(()) };
-    let done = match action.as_str() {
-        "pause" => player.eval("document.querySelector('video')?.pause()"),
-        "play" => player.eval("document.querySelector('video')?.play()"),
-        "next" => player.eval("document.querySelector('.ytp-next-button')?.click()"),
-        "stop" => player.destroy(),
-        _ => return Err(format!("No sé hacer «{action}»")),
+fn play_in_brave(app: &AppHandle, exe: &Path, url: &str) -> Result<(), String> {
+    let mut open = BRAVE.lock().unwrap();
+    let reused = match open.as_mut() {
+        Some(player) => player.alive() && player.navigate(url).is_ok(),
+        None => false,
     };
-    done.map_err(|e| e.to_string())
+    if reused {
+        return Ok(());
+    }
+    WATCH.fetch_add(1, Ordering::SeqCst);
+    if let Some(old) = open.take() {
+        old.close();
+    }
+    let profile = app.path().app_local_data_dir().map_err(|e| e.to_string())?.join("brave-reproductor");
+    let mut player = Brave::open(exe, &profile, PLAYER_SCRIPT)?;
+    if player.navigate(url).is_err() {
+        player.close();
+        return Err("Brave no abrió el video".into());
+    }
+    *open = Some(player);
+    let turn = WATCH.fetch_add(1, Ordering::SeqCst) + 1;
+    thread::spawn(move || watch(turn));
+    Ok(())
 }
 
-/// Al cerrar la principal se cierra también: si no, la app seguiría viva.
+/// Cada medio segundo mira en Brave el título y si terminó el video; avisa si se cerró.
+fn watch(turn: u64) {
+    let (mut title, mut ended) = (String::new(), Value::Null);
+    loop {
+        thread::sleep(Duration::from_millis(500));
+        let mut open = BRAVE.lock().unwrap();
+        if WATCH.load(Ordering::SeqCst) != turn {
+            return;
+        }
+        let Some(player) = open.as_mut() else { return };
+        match player.eval("[document.title, window.__lumenEnded || 0]") {
+            Ok(now) => {
+                drop(open);
+                if now[1] != ended {
+                    if !ended.is_null() && now[1] != 0 {
+                        tell(json!({ "ended": true }));
+                    }
+                    ended = now[1].clone();
+                }
+                let now_title = now[0].as_str().unwrap_or_default();
+                if now_title != title {
+                    title = now_title.to_string();
+                    if let Some(song) = song_title(&title) {
+                        tell(json!({ "title": song }));
+                    }
+                }
+            }
+            Err(Fail::Other(_)) if player.alive() => {}
+            Err(_) => {
+                if let Some(gone) = open.take() {
+                    gone.close();
+                }
+                drop(open);
+                tell(json!({ "closed": true }));
+                return;
+            }
+        }
+    }
+}
+
+/// "pause", "play", "next" (dentro de una playlist de YouTube) o "stop" (cierra el reproductor).
+/// `async`: cerrar Brave puede tardar un par de segundos.
+#[tauri::command(async)]
+pub fn player_control(app: AppHandle, action: String) -> Result<(), String> {
+    let js = match action.as_str() {
+        "pause" => PAUSE_JS,
+        "play" => PLAY_JS,
+        "next" => NEXT_JS,
+        "stop" => "",
+        _ => return Err(format!("No sé hacer «{action}»")),
+    };
+    let mut open = BRAVE.lock().unwrap();
+    if js.is_empty() {
+        WATCH.fetch_add(1, Ordering::SeqCst);
+        if let Some(player) = open.take() {
+            player.close();
+        }
+    } else if let Some(player) = open.as_mut() {
+        return player.eval(js).map(|_| ()).map_err(|_| "Brave no respondió".to_string());
+    }
+    drop(open);
+    let Some(player) = app.get_webview_window(PLAYER) else { return Ok(()) };
+    if js.is_empty() { player.destroy() } else { player.eval(js) }.map_err(|e| e.to_string())
+}
+
+/// Al cerrar la principal se cierra también: si no, la app seguiría viva
+/// (y Brave sonando).
 pub fn close_with_main(window: &Window, event: &WindowEvent) {
     if window.label() != MAIN || !matches!(event, WindowEvent::Destroyed) {
         return;
+    }
+    WATCH.fetch_add(1, Ordering::SeqCst);
+    if let Some(player) = BRAVE.lock().unwrap().take() {
+        player.close();
     }
     if let Some(player) = window.app_handle().get_webview_window(PLAYER) {
         let _ = player.destroy();

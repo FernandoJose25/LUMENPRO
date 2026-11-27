@@ -6,6 +6,7 @@
 //! que las luces no dependan de la ventana. La ventana además guarda el show
 //! en disco (`show.rs`).
 
+mod brave;
 mod engine;
 mod link;
 mod links;

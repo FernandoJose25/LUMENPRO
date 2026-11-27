@@ -1,3 +1,11 @@
+## Novedades de la 0.13.0
+
+**Los enlaces suenan en Brave, sin anuncios.** Si Brave está instalado, LUMEN abre su propio Brave (aparte del tuyo, no toca tus pestañas ni tu cuenta) y pone ahí los enlaces de YouTube y Spotify: sin anuncios en medio de la música. Desde LUMEN sigues con **Pausa**, **Siguiente** y **Parar**, y pasa solo a la siguiente canción. Sin Brave, suena en el reproductor de LUMEN como antes.
+
+**La pista, en Música.** Encima del simulador se ve lo que suena mientras corre: los graves en rojo, los medios en ámbar y los agudos en azul, y un punto que late con cada golpe. Sirve igual con una canción guardada que con un enlace.
+
+**Si un video se traba al final**, a los 3 segundos pasa a la siguiente: no se queda colgado en medio del evento.
+
 ## Novedades de la 0.12.0
 
 **Enlaces de YouTube y Spotify en Música.** En **Enlaces de YouTube y Spotify** pega el enlace de una canción, un álbum o una playlist (en la app: Compartir → Copiar enlace) y toca ▶. Suena en el reproductor de LUMEN, una ventana con YouTube que puedes minimizar; las canciones de Spotify se buscan en YouTube por artista y nombre. Pasa sola a la siguiente canción y al siguiente enlace, tiene **Pausa**, **Siguiente** y **Parar**, y se pausa al arrancar el vals.

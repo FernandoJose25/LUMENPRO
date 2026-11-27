@@ -9,6 +9,7 @@ import { useFixtureStore } from "@/lib/fixtureStore";
 import type { MusicPlayer } from "@/lib/musicPlayer";
 import { pcAudioAvailable } from "@/lib/pcAudio";
 import { linkDetail, type LinkPlayer } from "@/lib/links";
+import { SoundTrack } from "./SoundTrack";
 import { saveSong, songShape } from "@/lib/songs";
 import type { PlaylistSong } from "@/types/music";
 
@@ -49,7 +50,7 @@ export function MusicView({ music, links }: { music: MusicPlayer; links: LinkPla
   return (
     <div className="flex min-w-0 flex-1 gap-2 p-2">
       <div className="flex w-[30rem] shrink-0 flex-col gap-2">
-        <div className="min-h-0 flex-1">
+        <div className="min-h-0 flex-[2]">
           <Panel title="MÚSICA DE LA HORA LOCA">
             <p className="mb-3 text-xs text-text-secondary">
               La música sale de la laptop por el cable a la consola. Cada canción se analiza al agregarla: las luces que siguen la
@@ -124,7 +125,7 @@ export function MusicView({ music, links }: { music: MusicPlayer; links: LinkPla
           </Panel>
         </div>
         {pcAudioAvailable() ? (
-          <div className="min-h-0 flex-1">
+          <div className="min-h-0 flex-[3]">
             <LinksPanel links={links} />
           </div>
         ) : null}
@@ -175,6 +176,11 @@ export function MusicView({ music, links }: { music: MusicPlayer; links: LinkPla
             </p>
           </Panel>
         </div>
+        <div className="shrink-0">
+          <Panel title="PISTA">
+            <SoundTrack />
+          </Panel>
+        </div>
         <div className="min-h-0 flex-1">
           <Panel title="SIMULADOR">
             <StageCanvas rig={store} />
@@ -195,9 +201,9 @@ function LinksPanel({ links }: { links: LinkPlayer }) {
   return (
     <Panel title="ENLACES DE YOUTUBE Y SPOTIFY">
       <p className="mb-3 text-xs text-text-secondary">
-        Pega el enlace de una canción, álbum o playlist (en la app: Compartir → Copiar enlace). Suena en el reproductor de
-        LUMEN desde YouTube (las de Spotify se buscan ahí por nombre) y las luces la siguen. No se descarga nada: necesita
-        internet, y sin YouTube Premium puede haber anuncios.
+        Pega el enlace de una canción, álbum o playlist (en la app: Compartir → Copiar enlace). Suena desde YouTube (las de
+        Spotify se buscan ahí por nombre) y las luces la siguen. Con Brave instalado suena en Brave, sin anuncios; sin
+        Brave, en el reproductor de LUMEN, que puede tener anuncios. No se descarga nada: necesita internet.
       </p>
       <form
         className="flex gap-2"
