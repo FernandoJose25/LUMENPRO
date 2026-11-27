@@ -414,6 +414,30 @@ fn levels_drive_the_effect_and_without_music_it_stays_at_its_minimum() {
 }
 
 #[test]
+fn following_the_bass_each_hit_flashes_and_moves_the_wave_to_the_next_lights() {
+    let mut r = Rig::new();
+    r.doc["effects"][0]["phaseOffsetDeg"] = json!(180);
+    r.doc["effects"][0]["beatsPerCycle"] = json!(2);
+    music(&mut r, "bass");
+    r.doc["effects"][0]["waveform"] = json!("square");
+    r.reset();
+    r.send(json!({ "type": "startEffect", "id": "fx" }));
+    let hit = |r: &mut Rig, punch: f64, hits: f64| {
+        r.send(json!({ "type": "audio", "audio": { "levels": { "bass": punch, "mid": 0, "treble": 0 }, "beat": null,
+                                                   "hits": { "bass": hits, "mid": 0, "treble": 0 } } }));
+        r.run(20.0);
+    };
+    hit(&mut r, 1.0, 0.0);
+    assert_eq!((r.live("p1", "red"), r.live("p2", "red")), (200, 0));
+    // El golpe siguiente pasa a la otra luz, aunque el reloj no haya corrido.
+    hit(&mut r, 0.5, 1.0);
+    assert_eq!((r.live("p1", "red"), r.live("p2", "red")), (0, 100));
+    // Sin golpes, apagadas al instante.
+    hit(&mut r, 0.0, 1.0);
+    assert_eq!((r.live("p1", "red"), r.live("p2", "red")), (0, 0));
+}
+
+#[test]
 fn the_beat_clock_keeps_counting_a_while_if_the_window_hangs() {
     let mut r = Rig::new();
     music(&mut r, "beat");
@@ -1826,6 +1850,27 @@ fn the_meter_fills_with_the_bass_green_at_the_bottom_red_at_the_top() {
     let (bottom, top) = (pixel(&r, 0), pixel(&r, 3));
     assert!(bottom[1] > bottom[0], "abajo verde: {bottom:?}");
     assert!(top[0] > top[1], "arriba rojo: {top:?}");
+}
+
+#[test]
+fn a_cutter_on_the_bass_steps_with_each_hit_and_goes_dark_between_hits() {
+    let mut r = Rig::new();
+    // Una pasada cada 4 golpes: un segmento por golpe.
+    led_bar(&mut r, "cutter", json!({ "color": "#ffffff", "speedCpm": 60, "source": "bass", "beatsPerCycle": 4 }));
+    let lit = |r: &Rig| (0..4).filter(|&n| pixel(r, n) == [255, 255, 255]).collect::<Vec<_>>();
+    let hit = |r: &mut Rig, punch: f64, hits: f64| {
+        r.send(json!({ "type": "audio", "audio": { "levels": { "bass": punch, "mid": 0, "treble": 0 }, "beat": null,
+                                                   "hits": { "bass": hits, "mid": 0, "treble": 0 } } }));
+        r.run(20.0);
+    };
+    hit(&mut r, 1.0, 1.0);
+    assert_eq!(lit(&r), vec![1]);
+    // Sin golpes no avanza solo con el reloj, y queda a oscuras.
+    r.run(500.0);
+    hit(&mut r, 0.0, 1.0);
+    assert!((0..4).all(|n| pixel(&r, n) == [0, 0, 0]));
+    hit(&mut r, 1.0, 2.0);
+    assert_eq!(lit(&r), vec![2]);
 }
 
 #[test]

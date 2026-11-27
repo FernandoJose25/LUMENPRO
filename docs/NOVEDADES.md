@@ -1,3 +1,9 @@
+## Novedades de la 0.16.0
+
+**El Escenario, ordenado.** Debajo del simulador quedan, en orden, **Momento**, **Color fijo** y **Efectos**. El Color fijo ocupa una sola línea: eliges para qué luces (Todas, Cabezas o PAR) y después el color, y cada botón muestra con un puntito el color que tiene. Los efectos van por grupo de luces y por lo que hacen (**Movimiento**, **Colores**, **Brillo y estrobo**), con su nombre corto y una frase que dice qué hace; los que siguen la música llevan **♪**. Arriba, **Prendidos** muestra lo que está corriendo, con una **✕** para apagar cada uno.
+
+**Graves, medios y agudos, como en una discoteca.** Antes la luz seguía cuánto sonaba el bajo, y en el reggaetón el bajo suena casi todo el tiempo, así que la luz quedaba a media potencia. Ahora sigue los **golpes**: cada bombo (graves), cada caja o palmas (medios) o cada platillo (agudos) es un fogonazo y hace avanzar el efecto. Con un redoble rápido la luz va igual de rápido, y sin golpes se apaga al instante. También vale para las cortadoras, persecuciones y arcoíris de las barras, que antes no cambiaban al elegir Graves. En los ajustes del efecto se elige cada cuántos golpes da la vuelta. Nuevos para la hora loca: **Al azar con los graves**, **Persecución con los graves**, **Golpe de caja**, **Salto de color con los graves** y **Cortadora con los graves**.
+
 ## Novedades de la 0.15.0
 
 **Las luces oyen solo Brave.** Al abrir un enlace en tu Brave, LUMEN escucha solo lo que suena en Brave: un juego, Discord u otro programa ya no mueven las luces ni la pista. En Audio Reactive → Entrada de audio puedes elegir **Solo Brave**, **Solo Spotify** o cualquier programa que tenga sonido en ese momento, o **Todo lo que suena en esta PC** como antes.

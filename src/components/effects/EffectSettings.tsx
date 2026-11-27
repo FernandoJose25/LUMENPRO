@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { askConfirm } from "@/lib/dialogs";
 import { useFixtureStore } from "@/lib/fixtureStore";
 import { factoryEffect } from "@/lib/factory";
+import { describeEffect } from "@/lib/effectPresets";
 import { SWATCHES } from "@/lib/look";
 import {
   EFFECT_SOURCE_LABELS,
@@ -15,6 +16,13 @@ import {
 import { CHANNEL_TYPE_LABELS, COLOR_CHANNEL_TYPES } from "@/types/fixture";
 
 const BEATS = [0.5, 1, 2, 4, 8];
+
+/** Qué golpes son los de cada banda, para elegir sin adivinar. */
+const BAND_HITS: Partial<Record<EffectSource, string>> = {
+  bass: "del bombo",
+  mid: "de caja, palmas o voces",
+  treble: "de platillo",
+};
 
 /**
  * Los ajustes de un effect a mano: sus colores, la velocidad o el ritmo y el
@@ -53,6 +61,14 @@ export function EffectSettings({
   const pattern = effect.pattern ?? "rainbow";
   const ownColors = pixels && !PIXEL_USES_COLOR.includes(pattern);
   const waveOnColor = effect.kind === "wave" && COLOR_CHANNEL_TYPES.includes(effect.channelType);
+  // Sigue los golpes de una parte de la música.
+  const band = Boolean(BAND_HITS[effect.source]);
+  // Con golpes, los que recorren las luces avanzan; un fogonazo parejo o un
+  // vúmetro no tienen vueltas que elegir (show-engine: `walks`, `uses_level`).
+  const steps =
+    effect.source === "beat" ||
+    (effect.kind === "wave" && (effect.phaseOffsetDeg !== 0 || effect.waveform === "random")) ||
+    (pixels && !["center", "flash", "meter", "fill"].includes(pattern));
 
   return (
     <section aria-label={`Ajustes de ${effect.name}`} className="flex flex-col gap-3 text-xs text-text-secondary">
@@ -62,6 +78,7 @@ export function EffectSettings({
           {running ? "■ Apagar" : "▶ Prender"}
         </Button>
       </div>
+      <p className="-mt-1.5">{describeEffect(effect, group?.name)}</p>
 
       {held && (pixels || effect.color) && running ? (
         <p className="rounded-control border border-accent/40 bg-accent/10 p-2 text-[11px] text-text-primary">
@@ -125,11 +142,19 @@ export function EffectSettings({
           {(Object.keys(EFFECT_SOURCE_LABELS) as EffectSource[]).map((s) => (
             <option key={s} value={s}>
               {EFFECT_SOURCE_LABELS[s]}
+              {BAND_HITS[s] ? ` (golpes ${BAND_HITS[s]})` : ""}
             </option>
           ))}
         </select>
       </label>
-      {effect.source === "clock" ? (
+      {band ? (
+        <p>
+          {effect.kind === "figure"
+            ? `La figura crece con cada golpe ${BAND_HITS[effect.source]} y baja despacio; sin golpes, quieta en el centro.`
+            : `Cada golpe ${BAND_HITS[effect.source]} es un fogonazo y lo hace avanzar: con golpes más seguidos va más rápido; sin golpes, apagado.`}
+        </p>
+      ) : null}
+      {effect.source === "clock" || (band && effect.kind === "figure") ? (
         <Fader
           label="Velocidad (vueltas por minuto)"
           value={effect.speedCpm}
@@ -137,11 +162,11 @@ export function EffectSettings({
           max={600}
           onChange={(speedCpm) => updateEffect(effect.id, { speedCpm: Math.max(1, speedCpm) })}
         />
-      ) : effect.source === "beat" ? (
+      ) : steps ? (
         <div className="flex flex-col gap-1">
           Una vuelta cada
           <div className="flex gap-1">
-            {BEATS.map((beats) => (
+            {(band ? BEATS.filter((b) => b >= 1) : BEATS).map((beats) => (
               <Button
                 key={beats}
                 size="sm"
@@ -154,9 +179,7 @@ export function EffectSettings({
             ))}
           </div>
         </div>
-      ) : (
-        <p>Va con lo que suena: sin música queda en su mínimo.</p>
-      )}
+      ) : null}
 
       {factory ? (
         <Button

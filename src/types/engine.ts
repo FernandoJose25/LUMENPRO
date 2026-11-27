@@ -52,6 +52,8 @@ export interface ChaseStatus {
 export interface AudioMessage {
   levels: { bass: number; mid: number; treble: number };
   beat: { beats: number; bpm: number } | null;
+  /** Golpes contados por banda: lo que sigue a una banda avanza con ellos. */
+  hits?: { bass: number; mid: number; treble: number };
 }
 
 export type EngineMessage =

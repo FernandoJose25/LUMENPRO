@@ -530,6 +530,11 @@ impl PixelPattern {
         )
     }
 
+    /// Los que se dibujan con lo que suena (`level` en `color`).
+    pub fn uses_level(self) -> bool {
+        matches!(self, PixelPattern::Center | PixelPattern::Flash | PixelPattern::Meter | PixelPattern::Fill)
+    }
+
     /// Rojo, verde y azul (0–1) del punto `i` de `n`. `cycles`: vueltas que
     /// lleva; `level`: lo que suena (0–1), si sigue la música; `color2`: el
     /// segundo color de los que alternan (negro si no hay).

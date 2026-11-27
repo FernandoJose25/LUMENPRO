@@ -59,6 +59,11 @@ function songFeed(audio: SinkAudio, grid: BeatGrid | null): { feed: AudioFeed; s
     get loudness(): Record<Band, number> {
       return heard?.feed.loudness ?? this.levels;
     },
+    get hits(): Record<Band, number> | undefined {
+      if (heard) return heard.feed.hits;
+      const b = beats();
+      return b === null || b < 0 ? undefined : (Object.fromEntries(BAND_NAMES.map((band) => [band, b])) as Record<Band, number>);
+    },
     beats: () => {
       const b = beats();
       if (b !== null) return Math.max(0, b);

@@ -5,6 +5,7 @@
 use crate::frame::{self, Frame, Overlay};
 use crate::model::{
     Action, Channel, ChannelType, ChannelValues, Cue, Definition, Doc, Effect, EffectKind, EffectSource, Pad, Timeline,
+    Waveform,
 };
 use crate::tap::Tap;
 use serde::{Deserialize, Serialize};
@@ -63,8 +64,14 @@ fn fader_from_speed(speed: f64) -> f64 {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct AudioFeed {
+    /// Por banda: 1 en cada golpe y se apaga rápido hasta el siguiente.
     pub levels: Levels,
     pub beat: Option<Beat>,
+    /// Golpes contados por banda (con decimales: cada golpe llega en un
+    /// instante, no de un salto). Sin esto, lo que sigue a una banda va con su
+    /// velocidad propia.
+    #[serde(default)]
+    pub hits: Option<Levels>,
 }
 
 #[derive(Debug, Clone, Copy, Default, Deserialize)]
@@ -366,6 +373,8 @@ pub struct Show {
     /// Cuánto abrió cada figura, 0–1. Las que se detuvieron siguen acá hasta
     /// volver al centro.
     figures: BTreeMap<String, f64>,
+    /// Las figuras que siguen a una banda: lo que suena, bajando despacio.
+    figure_levels: BTreeMap<String, f64>,
     /// Dónde están las cabezas que dibujan una figura. No toca `live`: el
     /// centro es lo que diga `live`, y se puede mover mientras tanto.
     moving: ChannelValues,
@@ -393,13 +402,25 @@ pub struct Show {
 /// 1 verde, 2 azul, 3 brillo de un punto sin color).
 type Pixel<'a> = (usize, &'a crate::model::Instance, Vec<(usize, &'a Channel)>);
 
-/// Vueltas completas que lleva un effect.
-fn cycles_of(effect: &Effect, started: f64, beats: Option<f64>, now: f64) -> f64 {
-    match beats.filter(|_| effect.source == EffectSource::Beat) {
-        Some(beats) => beats / effect.beats_per_cycle.max(0.01),
+/// Vueltas completas que lleva un effect. Lo que sigue a una banda avanza con
+/// sus golpes: con golpes más seguidos, más rápido; sin golpes, quieto.
+fn cycles_of(effect: &Effect, started: f64, beats: Option<f64>, hits: Option<Levels>, now: f64) -> f64 {
+    let counted = match effect.source {
+        EffectSource::Beat => beats,
+        EffectSource::Bass => hits.map(|h| h.bass),
+        EffectSource::Mid => hits.map(|h| h.mid),
+        EffectSource::Treble => hits.map(|h| h.treble),
+        EffectSource::Clock => None,
+    };
+    match counted {
+        Some(count) => count / effect.beats_per_cycle.max(0.01),
         None => (now - started) / 1000.0 * effect.speed_cpm / 60.0,
     }
 }
+
+/// Cuánto baja la figura que sigue a una banda tras un golpe: las cabezas no
+/// alcanzan a seguir un fogonazo.
+const FIGURE_LEVEL_RELEASE_MS: f64 = 400.0;
 
 /// Cuánto suena la parte de la música que sigue, si sigue alguna. Sin
 /// música (o sin escuchar) es silencio: los PAR que laten con los graves se
@@ -1479,6 +1500,19 @@ impl Show {
         (now - at <= LEVELS_STALE_MS).then_some(feed.levels)
     }
 
+    /// Los golpes de cada banda. Con TAP o el DJ, cada golpe del ritmo.
+    fn hits(&self, now: f64) -> Option<Levels> {
+        if self.tap.beats(now).is_some() || self.dj(now).is_some() {
+            let beats = self.beats(now)?;
+            return Some(Levels { bass: beats, mid: beats, treble: beats });
+        }
+        let (feed, at) = self.audio.as_ref()?;
+        if now - at > LEVELS_STALE_MS {
+            return None;
+        }
+        feed.hits
+    }
+
     fn beats(&self, now: f64) -> Option<f64> {
         if let Some(beats) = self.tap.beats(now) {
             return Some(beats);
@@ -1498,7 +1532,7 @@ impl Show {
         if running.is_empty() {
             return;
         }
-        let (levels, beats, fx) = (self.levels(now), self.beats(now), self.fx_clock);
+        let (levels, beats, hits, fx) = (self.levels(now), self.beats(now), self.hits(now), self.fx_clock);
         let mut writes = Vec::new();
         for id in running {
             let Some(effect) = self.doc.effects.iter().find(|e| e.id == *id) else { continue };
@@ -1507,7 +1541,11 @@ impl Show {
                 continue;
             }
             let Some(group) = &effect.group_id else { continue };
-            let cycles = cycles_of(effect, started, beats, fx);
+            let cycles = cycles_of(effect, started, beats, hits, fx);
+            // Siguiendo una banda, cada golpe es un fogonazo; si la onda
+            // recorre las luces (ola, persecución, al azar), cada golpe pasa a
+            // las siguientes.
+            let walks = effect.phase_offset_deg != 0.0 || effect.waveform == Waveform::Random;
             let level = level_of(effect, levels);
             // Una barra de varios focos cuenta como varias luces seguidas; dos
             // que van juntas, como una sola.
@@ -1528,7 +1566,11 @@ impl Show {
             });
             for (index, member, channels) in cells {
                 let phase = cycles + index as f64 * effect.phase_offset_deg / 360.0;
-                let t = level.unwrap_or_else(|| effect.waveform.level_at(phase, index));
+                let t = match level {
+                    Some(punch) if walks => punch * effect.waveform.level_at(phase, index),
+                    Some(punch) => punch,
+                    None => effect.waveform.level_at(phase, index),
+                };
                 let value = (effect.min + (effect.max - effect.min) * t).round().clamp(0.0, 255.0) as u8;
                 for channel in channels {
                     writes.push((member.id.clone(), channel.id.clone(), value));
@@ -1562,14 +1604,17 @@ impl Show {
     /// Barras y tiras de LEDs: el color de cada punto, en orden por el
     /// grupo (dos luces que van juntas, como una sola).
     fn tick_pixels(&mut self, now: f64) {
-        let (levels, beats, fx) = (self.levels(now), self.beats(now), self.fx_clock);
+        let (levels, beats, hits, fx) = (self.levels(now), self.beats(now), self.hits(now), self.fx_clock);
         let mut writes: Vec<(String, String, u8)> = Vec::new();
         for id in &self.playback.running_effect_ids {
             let Some(effect) = self.doc.effects.iter().find(|e| e.id == *id && e.kind == EffectKind::Pixels) else { continue };
             let Some(group) = &effect.group_id else { continue };
             let started = self.effect_started.get(id).copied().unwrap_or(fx);
-            let cycles = cycles_of(effect, started, beats, fx);
+            let cycles = cycles_of(effect, started, beats, hits, fx);
             let level = level_of(effect, levels);
+            // Los dibujos que no se hacen con lo que suena (cortadora,
+            // arcoíris…): siguiendo una banda, cada golpe es un fogonazo.
+            let punch = level.filter(|_| !effect.pattern.uses_level()).unwrap_or(1.0);
             let color = crate::model::rgb_of(effect.color.as_deref());
             let color2 = effect.color2.as_deref().map_or([0.0; 3], |hex| crate::model::rgb_of(Some(hex)));
             // Con un Color fijo en el grupo, el efecto sigue igual pero en ese
@@ -1622,7 +1667,8 @@ impl Show {
                         tint.map(|c| c * bright)
                     }
                     None => effect.pattern.color(index, count, cycles, level, color, color2),
-                };
+                }
+                .map(|c| c * punch);
                 for (k, channel) in channels {
                     // k 3: un punto sin color, por su brillo; k 4: su blanco,
                     // lo que los tres tienen en común.
@@ -1668,15 +1714,26 @@ impl Show {
     fn tick_figures(&mut self, now: f64) {
         self.ramp_figures(now);
         let (levels, beats) = (self.levels(now), self.beats(now));
+        // Siguiendo una banda, la figura crece con cada golpe y baja despacio.
+        let fade = (-(now - self.last_tick).clamp(0.0, MAX_STEP_MS) / FIGURE_LEVEL_RELEASE_MS).exp();
+        let figures = &self.figures;
+        let effects = &self.doc.effects;
+        self.figure_levels
+            .retain(|id, _| figures.contains_key(id) && effects.iter().any(|e| e.id == *id && level_of(e, None).is_some()));
+        for id in figures.keys() {
+            let Some(level) = effects.iter().find(|e| e.id == *id).and_then(|e| level_of(e, levels)) else { continue };
+            let held = self.figure_levels.entry(id.clone()).or_insert(0.0);
+            *held = level.max(*held * fade);
+        }
         // (instancia, índice del canal) -> grados de más
         let mut offsets: BTreeMap<(&str, usize), f64> = BTreeMap::new();
         for (id, open) in &self.figures {
             let Some(effect) = self.doc.effects.iter().find(|e| e.id == *id) else { continue };
             let Some(group) = &effect.group_id else { continue };
             let started = self.effect_started.get(id).copied().unwrap_or(self.fx_clock);
-            let cycles = cycles_of(effect, started, beats, self.fx_clock);
-            // Siguiendo la música, la figura crece con lo que suena.
-            let size = effect.size_deg * smooth(*open) * level_of(effect, levels).unwrap_or(1.0);
+            // Las cabezas van con su velocidad: saltar con cada golpe las sacudiría.
+            let cycles = cycles_of(effect, started, beats, None, self.fx_clock);
+            let size = effect.size_deg * smooth(*open) * self.figure_levels.get(id).copied().unwrap_or(1.0);
             let (sin, cos) = effect.angle_deg.to_radians().sin_cos();
 
             // Dos cabezas que van juntas ocupan un solo lugar.

@@ -61,6 +61,7 @@ describe("Color fijo", () => {
     await user.click(screen.getByRole("button", { name: "Vista previa" }));
     await screen.findByText("VISTA PREVIA");
     await user.click(screen.getByRole("button", { name: "Vals" }));
+    await user.click(screen.getByRole("button", { name: "Color fijo para PAR" }));
     await user.click(screen.getByRole("button", { name: "PAR: Azul" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "PAR: Azul" })).toHaveAttribute("aria-pressed", "true"));
     expect(playback(engine).activeMomentId).toBeNull();
@@ -99,7 +100,8 @@ describe("Ajustes del efecto en Escenario", () => {
   it("al tocar un efecto se prende y a la derecha se le cambian los colores y la velocidad, y llega a las luces", async () => {
     const { user, engine } = await withTemplate();
     await user.click(screen.getByRole("button", { name: "Escenario" }));
-    await user.click(screen.getByRole("button", { name: /^PAR/, expanded: false }));
+    await user.click(screen.getByRole("tab", { name: /^PAR/ }));
+    await user.click(screen.getByRole("tab", { name: /^Colores/ }));
     await user.click(screen.getByRole("button", { name: "PAR: policía" }));
     const id = lastDoc(engine).effects.find((fx) => fx.name === "PAR: policía")!.id;
     await waitFor(() => expect(playback(engine).runningEffectIds).toContain(id));
@@ -115,15 +117,32 @@ describe("Ajustes del efecto en Escenario", () => {
     await waitFor(() => expect([[0, 255, 0], [255, 255, 0]]).toContainEqual([...par1(engine)]));
 
     // Una ola de brillo con su color: "Ola" en azul.
+    await user.click(screen.getByRole("tab", { name: /^Brillo/ }));
     await user.click(screen.getByRole("button", { name: "PAR: ola" }));
     await user.click(within(screen.getByRole("region", { name: "Ajustes de PAR: ola" })).getByRole("button", { name: "Color: Azul" }));
     expect(lastDoc(engine).effects.find((fx) => fx.name === "PAR: ola")!.color).toBe("#0000ff");
   });
 
+  it("cada efecto dice qué hace, y lo prendido se ve arriba y se apaga desde ahí", async () => {
+    const { user, engine } = await withTemplate();
+    await user.click(screen.getByRole("button", { name: "Escenario" }));
+    await user.click(screen.getByRole("tab", { name: /^PAR/ }));
+    await user.click(screen.getByRole("tab", { name: /^Brillo/ }));
+    const card = screen.getByRole("button", { name: "PAR: latido" });
+    expect(card).toHaveTextContent("Latido");
+    expect(card).toHaveTextContent("Late como un corazón, todas juntas.");
+    await user.click(card);
+    const id = lastDoc(engine).effects.find((fx) => fx.name === "PAR: latido")!.id;
+    await waitFor(() => expect(playback(engine).runningEffectIds).toContain(id));
+    await user.click(within(screen.getByLabelText("Prendidos ahora")).getByRole("button", { name: "Apagar PAR: latido" }));
+    await waitFor(() => expect(playback(engine).runningEffectIds).not.toContain(id));
+  });
+
   it("del fuego al hielo queda solo el hielo, y el fuego se puede poner de un color", async () => {
     const { user, engine } = await withTemplate();
     await user.click(screen.getByRole("button", { name: "Escenario" }));
-    await user.click(screen.getByRole("button", { name: /^PAR/, expanded: false }));
+    await user.click(screen.getByRole("tab", { name: /^PAR/ }));
+    await user.click(screen.getByRole("tab", { name: /^Colores/ }));
     const idOf = (name: string) => lastDoc(engine).effects.find((fx) => fx.name === name)!.id;
     await user.click(screen.getByRole("button", { name: "PAR: fuego" }));
     const panel = within(screen.getByRole("region", { name: "Ajustes de PAR: fuego" }));
@@ -137,8 +156,10 @@ describe("Ajustes del efecto en Escenario", () => {
   it("si el Color fijo pinta el efecto, elegir un color en sus ajustes lo suelta para que se vea", async () => {
     const { user, engine } = await withTemplate();
     await user.click(screen.getByRole("button", { name: "Escenario" }));
-    await user.click(screen.getByRole("button", { name: /^PAR/, expanded: false }));
+    await user.click(screen.getByRole("tab", { name: /^PAR/ }));
+    await user.click(screen.getByRole("tab", { name: /^Colores/ }));
     await user.click(screen.getByRole("button", { name: "PAR: ida y vuelta" }));
+    await user.click(screen.getByRole("button", { name: "Color fijo para PAR" }));
     await user.click(screen.getByRole("button", { name: "PAR: Rojo" }));
     await waitFor(() => expect(playback(engine).heldColors).not.toEqual({}));
     const panel = within(screen.getByRole("region", { name: "Ajustes de PAR: ida y vuelta" }));

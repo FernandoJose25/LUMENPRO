@@ -6,7 +6,6 @@ import { cn } from "@/lib/utils";
 import { engineDoc, useFixtureStore } from "@/lib/fixtureStore";
 import { PreviewShow } from "@/lib/preview";
 import { HeldColors } from "@/components/live/HeldColors";
-import { EffectGroups } from "@/components/effects/EffectGroups";
 import { EffectSettings } from "@/components/effects/EffectSettings";
 import type { EngineMessage } from "@/types/engine";
 import type { ChannelValues } from "@/lib/fade";
@@ -15,6 +14,7 @@ import { aimAt, defaultPlacements, isHead, type Vec3 } from "@/lib/stage";
 import { openStageWindow } from "@/lib/stageMirror";
 import type { FixtureInstance, Placement } from "@/types/fixture";
 import { StageCanvas } from "./StageCanvas";
+import { StageEffects } from "./StageEffects";
 
 /** Coloca las luces como van a estar en el evento y mira cómo se ve. */
 export function StageView() {
@@ -27,7 +27,6 @@ export function StageView() {
   const playback = preview.show?.playback ?? store;
   const [windowError, setWindowError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [openEffects, setOpenEffects] = useState<string[]>([]);
   // El último effect tocado: sus ajustes van a la derecha.
   const [selectedEffectId, setSelectedEffectId] = useState<string | null>(null);
   const selectedEffect = effects.find((fx) => fx.id === selectedEffectId);
@@ -87,7 +86,8 @@ export function StageView() {
           />
         </div>
         {moments.length > 0 ? (
-          <div className="flex shrink-0 flex-wrap gap-2 rounded-panel border border-border bg-panel p-2">
+          <div className="flex shrink-0 flex-wrap items-center gap-2 rounded-panel border border-border bg-panel p-2">
+            <span className="px-1 text-xs font-medium tracking-wide text-text-secondary">MOMENTO</span>
             {moments.map((m) => (
               <Button
                 key={m.id}
@@ -100,42 +100,22 @@ export function StageView() {
           </div>
         ) : null}
         <HeldColors
+          compact
           heldColors={playback.heldColors}
           onPick={(groupId, color) => send({ type: "action", action: { do: "color", groupId, color }, press: true })}
         />
-        {effects.some((fx) => fx.groupId) ? (
-          <div className="flex max-h-56 shrink-0 flex-col gap-1.5 overflow-y-auto rounded-panel border border-border bg-panel p-2">
-            <span className="text-xs font-medium tracking-wide text-text-secondary">EFECTOS</span>
-            <EffectGroups
-              effects={effects.filter((fx) => fx.groupId)}
-              groups={store.groups}
-              running={playback.runningEffectIds}
-              isOpen={(id) => openEffects.includes(id)}
-              onToggle={(id) => setOpenEffects(openEffects.includes(id) ? openEffects.filter((o) => o !== id) : [...openEffects, id])}
-              itemsClassName="flex flex-wrap gap-1.5 pl-5"
-            >
-              {(fx) => {
-                const running = playback.runningEffectIds.includes(fx.id);
-                return (
-                  <Button
-                    key={fx.id}
-                    size="sm"
-                    variant={running ? "primary" : "secondary"}
-                    aria-pressed={running}
-                    title="Prende o apaga; sus ajustes quedan a la derecha"
-                    className={cn(fx.id === selectedEffectId && "ring-2 ring-text-primary")}
-                    onClick={() => {
-                      setSelectedEffectId(fx.id);
-                      toggleEffect(fx.id);
-                    }}
-                  >
-                    {fx.name}
-                  </Button>
-                );
-              }}
-            </EffectGroups>
-          </div>
-        ) : null}
+        <StageEffects
+          effects={effects.filter((fx) => fx.groupId)}
+          groups={store.groups}
+          running={playback.runningEffectIds}
+          selectedId={selectedEffectId}
+          onPick={(fx) => {
+            setSelectedEffectId(fx.id);
+            toggleEffect(fx.id);
+          }}
+          onSelect={(fx) => setSelectedEffectId(fx.id)}
+          onStop={(id) => send({ type: "stopEffect", id })}
+        />
         <div className="flex shrink-0 items-center gap-3">
           <p className="flex-1 text-[11px] text-text-secondary">
             Arrastra una luz para moverla y el fondo para girar la vista. Rueda: acercar. Doble clic: vista inicial.

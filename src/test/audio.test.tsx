@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import App from "@/App";
-import { audible, followBand, gateDb, setAudioFeed, SILENT_BAND, type AudioFeed } from "@/lib/audioInput";
+import { audible, followBand, followHits, gateDb, NO_HITS, setAudioFeed, SILENT_BAND, type AudioFeed } from "@/lib/audioInput";
 import { createBeatTracker } from "@/lib/beatTracker";
 import { FixtureStoreProvider, useFixtureStore } from "@/lib/fixtureStore";
 import type { Effect } from "@/types/effect";
@@ -120,6 +120,125 @@ describe("Nivel por banda", () => {
     const rand = random(1);
     for (let i = 0; i < 500; i++) state = followBand(state, -100 + rand() * 4, gate, 20);
     expect(state.level).toBe(0);
+  });
+});
+
+describe("Golpes por banda", () => {
+  const RATE = 48000;
+  const N = 2048;
+
+  /** Potencia de cada frecuencia, como la saca el AnalyserNode (ventana Blackman). */
+  function spectrum(samples: Float64Array, end: number): Float64Array {
+    const re = new Float64Array(N);
+    const im = new Float64Array(N);
+    for (let i = 0; i < N; i++) {
+      const w = 0.42 - 0.5 * Math.cos((2 * Math.PI * i) / N) + 0.08 * Math.cos((4 * Math.PI * i) / N);
+      re[i] = (samples[end - N + i] ?? 0) * w;
+    }
+    for (let i = 1, j = 0; i < N; i++) {
+      let bit = N >> 1;
+      for (; j & bit; bit >>= 1) j ^= bit;
+      j ^= bit;
+      if (i < j) [re[i], re[j], im[i], im[j]] = [re[j], re[i], im[j], im[i]];
+    }
+    for (let len = 2; len <= N; len <<= 1) {
+      const a = (-2 * Math.PI) / len;
+      for (let i = 0; i < N; i += len) {
+        for (let k = 0; k < len / 2; k++) {
+          const [c, s] = [Math.cos(a * k), Math.sin(a * k)];
+          const [p, q] = [i + k, i + k + len / 2];
+          const tr = re[q] * c - im[q] * s;
+          const ti = re[q] * s + im[q] * c;
+          [re[q], im[q]] = [re[p] - tr, im[p] - ti];
+          [re[p], im[p]] = [re[p] + tr, im[p] + ti];
+        }
+      }
+    }
+    return Float64Array.from({ length: N / 2 }, (_, k) => (re[k] ** 2 + im[k] ** 2) / N ** 2);
+  }
+
+  const bandDb = (power: Float64Array, [from, to]: [number, number]) => {
+    let sum = 1e-12;
+    for (let k = Math.round((from * N) / RATE); k <= Math.round((to * N) / RATE); k++) sum += power[k];
+    return 10 * Math.log10(sum);
+  };
+
+  /**
+   * Reguetón a 95 BPM: bombo en cada golpe, caja en el contratiempo y un
+   * bajo 808 que suena todo el rato. Al final, un redoble de bombos rápidos y
+   * después solo el bajo.
+   */
+  /** Un bombo de verdad: baja de 150 a 50 Hz en unos 30 ms. O uno en 55 Hz
+   *  justo, que con el bajo en 50 Hz se refuerza y se cancela (late). */
+  const KICKS = {
+    real: (d: number) => 0.9 * Math.exp(-d / 0.08) * Math.sin(2 * Math.PI * (50 * d + 100 * 0.03 * (1 - Math.exp(-d / 0.03)))),
+    "pegado al bajo": (d: number) => 0.9 * Math.exp(-d / 0.08) * Math.sin(2 * Math.PI * 55 * d),
+  };
+
+  function dembow(kick: (d: number) => number) {
+    const beat = 60 / 95;
+    const kicks: number[] = [];
+    const snares: number[] = [];
+    for (let b = 0; b < 12; b++) {
+      kicks.push(b * beat);
+      snares.push((b + (b % 2 === 0 ? 0.75 : 0.5)) * beat);
+    }
+    for (let i = 0; i < 8; i++) kicks.push((12 + i / 4) * beat);
+    const seconds = 14 * beat + 2.5;
+    const samples = new Float64Array(Math.round(seconds * RATE));
+    const rand = random(5);
+    for (let n = 0; n < samples.length; n++) {
+      const t = n / RATE;
+      let x = 0.4 * Math.sin(2 * Math.PI * 50 * t);
+      for (const k of kicks) {
+        const d = t - k;
+        if (d >= 0 && d < 0.3) x += kick(d);
+      }
+      for (const s of snares) {
+        const d = t - s;
+        if (d >= 0 && d < 0.2) x += 0.35 * Math.exp(-d / 0.05) * (rand() * 2 - 1);
+      }
+      samples[n] = x;
+    }
+    return { samples, kicks, snares };
+  }
+
+  it.each(Object.keys(KICKS) as (keyof typeof KICKS)[])("cuenta cada bombo del reguetón (%s), también el redoble, y el bajo parejo no deja la luz prendida", (name) => {
+    const { samples, kicks } = dembow(KICKS[name]);
+    const gate = gateDb(60);
+    let bass = NO_HITS;
+    let mid = NO_HITS;
+    const punches: { t: number; punch: number }[] = [];
+    const hitTimes: number[] = [];
+    for (let end = N, t = 0; end <= samples.length; end += 960, t += 20) {
+      const power = spectrum(samples, end);
+      const before = bass.target;
+      bass = followHits(bass, bandDb(power, [40, 160]), gate, t, 20, "bass");
+      mid = followHits(mid, bandDb(power, [160, 2000]), gate, t, 20, "mid");
+      if (bass.target > before) hitTimes.push(end / RATE);
+      punches.push({ t: end / RATE, punch: bass.punch });
+    }
+    // Ninguno inventado: cada uno cae en un bombo (el análisis mira los últimos 43 ms).
+    for (const t of hitTimes) expect(kicks.some((k) => t - k >= 0 && t - k < 0.12), `golpe en ${t}`).toBe(true);
+    // El de verdad, todos; el que se cancela con el bajo, casi todos.
+    expect(hitTimes.length).toBeGreaterThanOrEqual(name === "real" ? kicks.length : kicks.length - 3);
+    // Entre golpes y con solo el bajo, a oscuras.
+    const quiet = punches.filter((p) => hitTimes.every((h) => p.t - h > 0.25 || p.t < h));
+    expect(Math.max(...quiet.map((p) => p.punch))).toBeLessThan(0.1);
+    expect(punches[punches.length - 1].punch).toBeLessThan(0.001);
+    // La caja suena en los medios.
+    expect(mid.target).toBeGreaterThanOrEqual(12);
+    // El contador llega al golpe en un instante.
+    expect(Math.abs(bass.count - bass.target)).toBeLessThan(0.01);
+    expect(bass.target).toBe(hitTimes.length);
+  });
+
+  it("sin sonido se apaga al instante", () => {
+    const gate = gateDb(60);
+    let state = followHits(NO_HITS, -20, gate, 0, 20, "bass");
+    expect(state.punch).toBe(1);
+    state = followHits(state, -120, gate, 20, 20, "bass");
+    expect(state.punch).toBe(0);
   });
 });
 

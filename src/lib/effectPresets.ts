@@ -1,7 +1,7 @@
-import type { Effect, PixelPattern } from "@/types/effect";
+import { FIGURE_LABELS, PIXEL_LABELS, WAVEFORM_LABELS, type Effect, type PixelPattern } from "@/types/effect";
 import type { Action } from "@/types/controls";
 import type { ShowDoc } from "@/lib/history";
-import type { ChannelType, FixtureDefinition, FixtureInstance } from "@/types/fixture";
+import { CHANNEL_TYPE_LABELS, type ChannelType, type FixtureDefinition, type FixtureInstance } from "@/types/fixture";
 import type { Group } from "@/types/group";
 
 export type EffectDraft = Omit<Effect, "id" | "createdAt" | "updatedAt">;
@@ -83,7 +83,8 @@ const COLOR: EffectPreset[] = [
     ["Persecución de color", "Un color que salta de luz en luz.", pixels("chase", { color: "#00ffff", speedCpm: 40 })],
     ["Ida y vuelta", "Un color que va y vuelve por la fila de luces, al ritmo.", pixels("bounce", { color: "#ff00ff", ...beat(4) })],
     ["Barrido de color", "El naranja barre las luces y el morado lo tapa.", pixels("wipe", { color: "#ff8800", color2: "#8000ff", speedCpm: 15 })],
-    ["Color con los graves", "Laten con los bajos de la música; sin música, apagadas.", pixels("flash", { color: "#ff0000", source: "bass" })],
+    ["Color con los graves", "Un fogonazo de color con cada golpe del bombo; sin golpes, apagadas.", pixels("flash", { color: "#ff0000", source: "bass" })],
+    ["Salto de color con los graves", "Con cada golpe del bombo, un fogonazo en otro color. Para la hora loca.", pixels("jump", { source: "bass" })],
   ]),
 ];
 
@@ -101,8 +102,11 @@ const DIMMER: EffectPreset[] = list("dimmer", ["DIMMER"], [
   ["Estrobo", "Parpadeo rápido de todas juntas.", { waveform: "square", speedCpm: 480 }],
   ["Estrobo al ritmo", "Dos fogonazos por cada golpe de la música.", { waveform: "pulse", ...beat(0.5) }],
   ["Golpe al ritmo", "Un fogonazo en cada golpe de la música; entre golpes, a oscuras.", { waveform: "pulse", ...beat(1) }],
-  ["Golpe de graves", "Brillan con los bajos de la música; sin música, apagadas.", { waveform: "pulse", source: "bass" }],
-  ["Brillo con los agudos", "Brillan con los platillos y las voces agudas.", { waveform: "pulse", source: "treble" }],
+  ["Golpe de graves", "Un fogonazo con cada golpe del bombo: si el bombo va más rápido, la luz también; sin golpes, apagadas.", { waveform: "pulse", source: "bass" }],
+  ["Al azar con los graves", "Con cada golpe del bombo se prenden otras luces, al azar. El clásico de discoteca.", { waveform: "random", source: "bass" }],
+  ["Persecución con los graves", "Con cada golpe del bombo, la luz salta a las siguientes.", { waveform: "square", phaseOffsetDeg: 90, source: "bass", beatsPerCycle: 4 }],
+  ["Golpe de caja", "Un fogonazo con cada golpe de caja o de palmas (el «chas» del dembow).", { waveform: "pulse", source: "mid" }],
+  ["Brillo con los agudos", "Un destello con cada platillo.", { waveform: "pulse", source: "treble" }],
 ]);
 
 const MOVE: EffectPreset[] = list("move", ["PAN"], [
@@ -124,7 +128,7 @@ const MOVE: EffectPreset[] = list("move", ["PAN"], [
   ["Rombo", "Dibujan un rombo, en espejo.", figure({ figure: "diamond", sizeDeg: 25, speedCpm: 12 })],
   ["Triángulo", "Dibujan un triángulo.", figure({ figure: "triangle", sizeDeg: 20, speedCpm: 12 })],
   ["Ballyhoo", "Cada cabeza barre el salón por su cuenta, sin parar. El clásico de discoteca.", figure({ figure: "random", sizeDeg: 35, speedCpm: 20, phaseOffsetDeg: 0 })],
-  ["Ballyhoo con los graves", "El ballyhoo, más grande mientras más suenan los bajos.", figure({ figure: "random", sizeDeg: 40, speedCpm: 20, phaseOffsetDeg: 0, source: "bass" })],
+  ["Ballyhoo con los graves", "El ballyhoo se agranda con cada golpe del bombo y se achica despacio.", figure({ figure: "random", sizeDeg: 40, speedCpm: 20, phaseOffsetDeg: 0, source: "bass" })],
 ]);
 
 const PIXELS: EffectPreset[] = list(
@@ -134,10 +138,10 @@ const PIXELS: EffectPreset[] = list(
     ["Píxeles: arcoíris que corre", "Los colores del arcoíris corren a lo largo de la barra o la tira.", pixels("rainbow")],
     ["Píxeles: punto que corre", "Un punto de color recorre la barra dejando estela, al ritmo.", pixels("chase", { color: "#ff00ff", ...beat(4) })],
     ["Píxeles: destellos", "Puntos blancos que destellan al azar, como brillitos.", pixels("sparkle", { color: "#ffffff", speedCpm: 40 })],
-    ["Píxeles: vúmetro", "La barra se llena con los graves: verde abajo, rojo arriba.", pixels("meter", { source: "bass" })],
+    ["Píxeles: vúmetro", "La barra salta con cada golpe del bombo: verde abajo, rojo arriba.", pixels("meter", { source: "bass" })],
     ["Píxeles: auto fantástico", "Un punto rojo que va y vuelve.", pixels("bounce", { color: "#ff0000" })],
     ["Píxeles: se abre desde el centro", "Se abre desde el medio hacia las puntas y se cierra.", pixels("center", { color: "#00aaff" })],
-    ["Píxeles: centro con los graves", "Se abre desde el medio con los bajos de la música.", pixels("center", { color: "#ff00ff", source: "bass" })],
+    ["Píxeles: centro con los graves", "Se abre desde el medio con cada golpe del bombo.", pixels("center", { color: "#ff00ff", source: "bass" })],
     ["Píxeles: se llena y se vacía", "Se llena de color de una punta a la otra y se vacía.", pixels("fill", { color: "#ffaa00" })],
   ],
   { pixels: true },
@@ -154,7 +158,8 @@ const STROBE: EffectPreset[] = list(
     ["Cortadora de ida y vuelta", "Va y vuelve rápido de punta a punta.", pixels("bounce", { color: "#ffffff", speedCpm: 90 })],
     ["Relámpagos", "Ráfagas de destellos al azar, como una tormenta.", pixels("lightning", { color: "#ffffff" })],
     ["Flash al golpe", "Todos los segmentos destellan juntos en cada golpe.", pixels("flash", { color: "#ffffff", ...beat(1) })],
-    ["Flash con los graves", "Destellan con los bajos de la música; sin música, apagados.", pixels("flash", { color: "#ffffff", source: "bass" })],
+    ["Flash con los graves", "Destellan con cada golpe del bombo; sin golpes, apagados.", pixels("flash", { color: "#ffffff", source: "bass" })],
+    ["Cortadora con los graves", "Una pasada rápida con cada golpe del bombo; sin golpes, apagado.", pixels("cutter", { color: "#ffffff", source: "bass" })],
     ["Chispazos", "Segmentos sueltos que destellan rápido.", pixels("sparkle", { color: "#ffffff", speedCpm: 90 })],
     ["Destellos de colores", "Destellos de colores rápidos.", pixels("confetti", { speedCpm: 120 })],
     ["Mitad y mitad", "Una mitad y la otra, rápido.", pixels("halves", { color: "#ffffff", speedCpm: 120 })],
@@ -163,6 +168,23 @@ const STROBE: EffectPreset[] = list(
 );
 
 export const EFFECT_PRESETS: EffectPreset[] = [...MOVE, ...PIXELS, ...STROBE, ...COLOR, ...DIMMER];
+
+/** El nombre sin el grupo adelante: "PAR: latido" → "Latido". */
+export function effectShortName(name: string, groupName?: string): string {
+  const prefix = groupName ? `${groupName}: `.toLowerCase() : "";
+  const rest = prefix && name.toLowerCase().startsWith(prefix) ? name.slice(prefix.length) : name;
+  return rest.charAt(0).toUpperCase() + rest.slice(1);
+}
+
+/** Qué hace, en una frase: la del efecto listo si viene de uno; si no, sale de sus ajustes. */
+export function describeEffect(fx: Effect, groupName?: string): string {
+  const short = effectShortName(fx.name, groupName).toLowerCase();
+  const preset = EFFECT_PRESETS.find((p) => p.name.toLowerCase() === short);
+  if (preset) return preset.text;
+  if (fx.kind === "figure") return `Mueve las cabezas (${FIGURE_LABELS[fx.figure].toLowerCase()}) alrededor de donde apuntan.`;
+  if (fx.kind === "pixels") return `${PIXEL_LABELS[fx.pattern ?? "rainbow"]}.`;
+  return `Onda ${WAVEFORM_LABELS[fx.waveform].toLowerCase()} sobre ${CHANNEL_TYPE_LABELS[fx.channelType]}.`;
+}
 
 interface Rig {
   instances: FixtureInstance[];
@@ -191,11 +213,21 @@ export function presetsFor(rig: Rig, groupId: string): EffectPreset[] {
 
 /** Sube cuando el catálogo cambia: el show se pone al día una vez. */
 // 4: otra vez lo de la 3, porque Deshacer podía devolver los pedazos.
-export const CATALOG_VERSION = 4;
+// 5: los que siguen los golpes del bombo y de la caja (hora loca).
+export const CATALOG_VERSION = 5;
 
 /** En qué versión del catálogo apareció cada efecto listo nuevo (los demás,
  *  en la 1): al ponerse al día solo llegan los que no estaban. */
-const SINCE: Record<string, number> = { "arcoíris": 2, "arcoíris al ritmo": 2, "color con los graves": 2 };
+const SINCE: Record<string, number> = {
+  "arcoíris": 2,
+  "arcoíris al ritmo": 2,
+  "color con los graves": 2,
+  "salto de color con los graves": 5,
+  "al azar con los graves": 5,
+  "persecución con los graves": 5,
+  "golpe de caja": 5,
+  "cortadora con los graves": 5,
+};
 
 /** El mismo effect con otro nombre: va al nuevo también en los momentos. */
 const RENAMED = new Set(["colores que corren", "rojo con los graves"]);

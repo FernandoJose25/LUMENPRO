@@ -15,8 +15,12 @@ const BPM_REFRESH_MS = 500;
 /** Lo que se está oyendo ahora. Vive fuera de React: cambia 50 veces por
  *  segundo y lo leen los medidores y el enlace con el motor. */
 export interface AudioFeed {
-  /** 0–1 por banda, ya ajustado al volumen del local. */
+  /** 0–1 por banda: 1 en cada golpe y se apaga rápido hasta el siguiente;
+   *  sin golpes, 0. Es lo que siguen los effects. */
   levels: Record<Band, number>;
+  /** Golpes contados por banda, con decimales (cada uno llega en un instante):
+   *  lo que sigue a una banda avanza con ellos. */
+  hits?: Record<Band, number>;
   /** Para dibujar lo que suena (Música → Pista): como `levels`, pero en
    *  silencio o en pausa es 0 de verdad (levels se ajusta hasta a un ruido). */
   loudness?: Record<Band, number>;
@@ -79,6 +83,56 @@ export function followBand(state: BandState, db: number, gate: number, dtMs: num
   return { lo, hi, level: Math.max(target, state.level * Math.exp(-dtMs / RELEASE_MS)) };
 }
 
+export interface HitState {
+  /** Lo más alto que sonó hace poco (dB), bajando de a poco. */
+  peak: number;
+  /** `peak` en los dos instantes anteriores. */
+  before: [number, number];
+  lastHit: number;
+  /** 1 en el golpe; se apaga rápido. */
+  punch: number;
+  /** Golpes contados; `count` llega a `target` en un instante. */
+  target: number;
+  count: number;
+}
+
+export const NO_HITS: HitState = { peak: -120, before: [-120, -120], lastHit: -Infinity, punch: 0, target: 0, count: 0 };
+
+/** Entre golpes, lo mínimo (ms; un redoble de reggaetón entra), cuánto dura el
+ *  fogonazo y cuánto baja por segundo lo más alto que sonó. */
+const HIT: Record<Band, { gapMs: number; fadeMs: number; dropDbPerS: number }> = {
+  bass: { gapMs: 90, fadeMs: 90, dropDbPerS: 50 },
+  mid: { gapMs: 70, fadeMs: 70, dropDbPerS: 60 },
+  treble: { gapMs: 55, fadeMs: 50, dropDbPerS: 80 },
+};
+/** Cuánto tiene que sobresalir un golpe de lo que venía sonando. */
+const MIN_RISE_DB = 3.5;
+const COUNT_EASE_MS = 50;
+
+/**
+ * Los golpes de una banda (el bombo en los graves, la caja en los medios, los
+ * platillos en los agudos): lo que sobresale de golpe por encima de lo que
+ * venía sonando, no lo que suena parejo (el bajo del reggaetón suena todo el
+ * rato y no debe dejar la luz prendida), ni lo que vuelve a subir cuando el
+ * bombo y el bajo se mezclan.
+ */
+export function followHits(state: HitState, db: number, gate: number, now: number, dtMs: number, band: Band): HitState {
+  const { gapMs, fadeMs, dropDbPerS } = HIT[band];
+  const rise = db - Math.max(gate, Math.min(...state.before));
+  const hit = db > gate && rise >= MIN_RISE_DB && now - state.lastHit >= gapMs;
+  const target = state.target + (hit ? 1 : 0);
+  const peak = Math.max(db, state.peak - (dropDbPerS * dtMs) / 1000);
+  return {
+    peak,
+    before: [state.before[1], peak],
+    lastHit: hit ? now : state.lastHit,
+    // Sin sonido, a oscuras al instante.
+    punch: db <= gate ? 0 : hit ? 1 : state.punch * Math.exp(-dtMs / fadeMs),
+    target,
+    count: state.count + (target - state.count) * (1 - Math.exp(-dtMs / COUNT_EASE_MS)),
+  };
+}
+
 function bandDb(spectrum: Float32Array, hzPerBin: number, [from, to]: [number, number]): number {
   const first = Math.max(1, Math.round(from / hzPerBin));
   const last = Math.min(spectrum.length - 1, Math.round(to / hzPerBin));
@@ -111,8 +165,10 @@ export function listen(stream: MediaStream, sensitivity: () => number, musicOnly
   const hzPerBin = context.sampleRate / analyser.fftSize;
   const tracker = createBeatTracker();
   const bands: Record<Band, BandState> = { bass: SILENT_BAND, mid: SILENT_BAND, treble: SILENT_BAND };
+  const hits: Record<Band, HitState> = { bass: NO_HITS, mid: NO_HITS, treble: NO_HITS };
   const audioFeed: AudioFeed = {
     levels: { bass: 0, mid: 0, treble: 0 },
+    hits: { bass: 0, mid: 0, treble: 0 },
     loudness: { bass: 0, mid: 0, treble: 0 },
     beats: () => tracker.beats(performance.now()),
     bpm: () => tracker.bpm(),
@@ -129,7 +185,10 @@ export function listen(stream: MediaStream, sensitivity: () => number, musicOnly
     for (const band of BAND_NAMES) {
       current[band] = bandDb(spectrum, hzPerBin, BANDS[band]);
       bands[band] = followBand(bands[band], current[band], gate, now - last);
-      audioFeed.levels[band] = bands[band].level;
+      hits[band] = followHits(hits[band], current[band], gate, now, now - last, band);
+      audioFeed.levels[band] = hits[band].punch;
+      audioFeed.hits![band] = hits[band].count;
+      // La pista se dibuja con lo que suena, no con los golpes.
       audioFeed.loudness![band] = bands[band].level * audible(current[band]);
     }
     if (before) tracker.push(now, onset(before, current, gate));

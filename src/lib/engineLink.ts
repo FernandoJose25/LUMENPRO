@@ -48,7 +48,11 @@ export function audioMessage(): AudioMessage | null {
   const feed = getAudioFeed();
   if (!feed) return null;
   const beats = feed.beats();
-  return { levels: heardLevels(feed), beat: beats === null ? null : { beats, bpm: feed.bpm() ?? 0 } };
+  return {
+    levels: heardLevels(feed),
+    beat: beats === null ? null : { beats, bpm: feed.bpm() ?? 0 },
+    ...(feed.hits ? { hits: { ...feed.hits } } : {}),
+  };
 }
 
 // ---------------------------------------------------------------------

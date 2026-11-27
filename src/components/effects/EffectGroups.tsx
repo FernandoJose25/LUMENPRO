@@ -41,7 +41,7 @@ interface Section {
 }
 
 /** Dentro de un grupo, por lo que hacen. */
-const KINDS = [
+export const KINDS = [
   { id: "move", name: "Movimiento" },
   { id: "color", name: "Colores" },
   { id: "dimmer", name: "Brillo y estrobo" },
