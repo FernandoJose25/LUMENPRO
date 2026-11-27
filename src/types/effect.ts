@@ -36,7 +36,19 @@ export const EFFECT_SOURCE_LABELS: Record<EffectSource, string> = {
 
 /** Una onda sobre un canal, o una figura que dibujan las cabezas alrededor de
  *  donde estén apuntando (sin tocar sus faders: se puede mover el centro). */
-export type EffectKind = "wave" | "figure";
+export type EffectKind = "wave" | "figure" | "pixels";
+
+/** Lo que dibujan los puntos de una barra o tira de LEDs (show-engine,
+ *  `PixelPattern`). */
+export type PixelPattern = "rainbow" | "chase" | "sparkle" | "meter" | "fill";
+
+export const PIXEL_LABELS: Record<PixelPattern, string> = {
+  rainbow: "Arcoíris que corre",
+  chase: "Un punto que corre, con estela",
+  sparkle: "Destellos al azar",
+  meter: "Vúmetro (se llena con lo que suena)",
+  fill: "Se llena y se vacía",
+};
 export type FigureType = "circle" | "eight" | "line" | "fan";
 
 export const FIGURE_LABELS: Record<FigureType, string> = {
@@ -72,6 +84,10 @@ export interface Effect {
   source: EffectSource;
   /** Con source "beat": golpes que dura cada ciclo. */
   beatsPerCycle: number;
+  /** Píxeles: qué dibujan (arcoíris si falta). */
+  pattern?: PixelPattern;
+  /** Píxeles: el color del punto, los destellos o el llenado ("#rrggbb"). */
+  color?: string | null;
   createdAt: number;
   updatedAt: number;
 }

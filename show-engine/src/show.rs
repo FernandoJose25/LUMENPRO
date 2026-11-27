@@ -383,6 +383,10 @@ pub struct Show {
     dj: Option<DjBeat>,
 }
 
+/// Un punto de una barra: su lugar en el grupo, su luz y sus canales (0 rojo,
+/// 1 verde, 2 azul, 3 brillo de un punto sin color).
+type Pixel<'a> = (usize, &'a crate::model::Instance, Vec<(usize, &'a Channel)>);
+
 /// Vueltas completas que lleva un effect.
 fn cycles_of(effect: &Effect, started: f64, beats: Option<f64>, now: f64) -> f64 {
     match beats.filter(|_| effect.source == EffectSource::Beat) {
@@ -502,7 +506,12 @@ impl Show {
             Message::StartEffect { id } => {
                 // Lo último que se toca manda: un effect de color prendido a
                 // mano se ve aunque su grupo tuviera un color fijo.
-                let colors = self.doc.effects.iter().find(|e| e.id == id).filter(|e| e.kind == EffectKind::Wave && e.channel_type.is_color());
+                let colors = self
+                    .doc
+                    .effects
+                    .iter()
+                    .find(|e| e.id == id)
+                    .filter(|e| (e.kind == EffectKind::Wave && e.channel_type.is_color()) || e.kind == EffectKind::Pixels);
                 if let Some(group) = colors.and_then(|e| e.group_id.clone()) {
                     self.edit(|p| {
                         p.held_colors.remove(&group);
@@ -1446,6 +1455,58 @@ impl Show {
     }
 
     /// Abre las figuras que corren y cierra las que se detuvieron.
+    /// Barras y tiras de LEDs: el color de cada punto, en orden por el
+    /// grupo (dos luces que van juntas, como una sola).
+    fn tick_pixels(&mut self, now: f64) {
+        let (levels, beats, fx) = (self.levels(now), self.beats(now), self.fx_clock);
+        let mut writes: Vec<(String, String, u8)> = Vec::new();
+        for id in &self.playback.running_effect_ids {
+            let Some(effect) = self.doc.effects.iter().find(|e| e.id == *id && e.kind == EffectKind::Pixels) else { continue };
+            let Some(group) = &effect.group_id else { continue };
+            let started = self.effect_started.get(id).copied().unwrap_or(fx);
+            let cycles = cycles_of(effect, started, beats, fx);
+            let level = level_of(effect, levels);
+            let color = crate::model::rgb_of(effect.color.as_deref());
+
+            // Cada punto: sus canales rojo, verde, azul; sin color, su dimmer.
+            let mut places: Vec<(&crate::model::Instance, usize)> = Vec::new();
+            let mut pixels: Vec<Pixel> = Vec::new();
+            let mut count = 0;
+            for (instance, definition) in self.doc.rig().filter(|(i, _)| i.group.as_ref() == Some(group)) {
+                let rgb = [ChannelType::Red, ChannelType::Green, ChannelType::Blue].map(|k| definition.cells(k));
+                let heads: Vec<Vec<(usize, &Channel)>> = if rgb[0].iter().any(|c| !c.is_empty()) {
+                    (0..rgb[0].len())
+                        .map(|h| (0..3).flat_map(|k| rgb[k].get(h).into_iter().flatten().map(move |c| (k, *c))).collect())
+                        .collect()
+                } else {
+                    definition.cells(ChannelType::Dimmer).into_iter().map(|cell| cell.into_iter().map(|c| (3, c)).collect()).collect()
+                };
+                let heads: Vec<_> = heads.into_iter().filter(|h: &Vec<(usize, &Channel)>| !h.is_empty()).collect();
+                let base = match places.iter().find(|(other, _)| other.twin_of(instance)) {
+                    Some(&(_, base)) => base,
+                    None => {
+                        places.push((instance, count));
+                        count += heads.len();
+                        count - heads.len()
+                    }
+                };
+                pixels.extend(heads.into_iter().enumerate().map(|(n, head)| (base + n, instance, head)));
+            }
+            for (index, instance, channels) in pixels {
+                let rgb = effect.pattern.color(index, count, cycles, level, color);
+                for (k, channel) in channels {
+                    // k 3: un punto sin color, por su brillo.
+                    let t = if k == 3 { rgb.iter().copied().fold(0.0, f64::max) } else { rgb[k] };
+                    let value = (effect.min + (effect.max - effect.min) * t).round().clamp(0.0, 255.0) as u8;
+                    writes.push((instance.id.clone(), channel.id.clone(), value));
+                }
+            }
+        }
+        for (instance, channel, value) in writes {
+            self.set_live(&instance, &channel, value);
+        }
+    }
+
     fn ramp_figures(&mut self, now: f64) {
         // Tras un reinicio o una suspensión, un paso normal: abrir de golpe
         // sería el salto que esto evita.
@@ -1567,6 +1628,7 @@ impl Show {
         self.tick_moment(now);
         self.tick_chase();
         self.tick_effects(now);
+        self.tick_pixels(now);
         self.tick_figures(now);
         self.last_tick = now;
         if self.playback.identify_id.is_some() && now >= self.identify_until {

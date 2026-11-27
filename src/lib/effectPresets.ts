@@ -24,6 +24,8 @@ export interface EffectPreset {
   text: string;
   /** Lo que tienen que tener las luces del grupo para que se note. */
   needs: ChannelType;
+  /** Solo para barras o tiras de varios puntos. */
+  pixels?: boolean;
   /** Uno por canal: un arcoíris son tres. */
   parts: { name: string; patch: Partial<EffectDraft> }[];
 }
@@ -36,7 +38,37 @@ const figure = (patch: Partial<EffectDraft>): Partial<EffectDraft> => ({
   ...patch,
 });
 
+const pixels = (patch: Partial<EffectDraft>) => one({ kind: "pixels", channelType: "RED", speedCpm: 30, ...patch });
+
 export const EFFECT_PRESETS: EffectPreset[] = [
+  {
+    name: "Píxeles: arcoíris que corre",
+    text: "Los colores del arcoíris corren a lo largo de la barra o la tira.",
+    needs: "RED",
+    pixels: true,
+    parts: pixels({ pattern: "rainbow" }),
+  },
+  {
+    name: "Píxeles: punto que corre",
+    text: "Un punto de color recorre la barra dejando estela, al ritmo.",
+    needs: "RED",
+    pixels: true,
+    parts: pixels({ pattern: "chase", color: "#ff00ff", source: "beat", beatsPerCycle: 4 }),
+  },
+  {
+    name: "Píxeles: destellos",
+    text: "Puntos blancos que destellan al azar, como brillitos.",
+    needs: "RED",
+    pixels: true,
+    parts: pixels({ pattern: "sparkle", color: "#ffffff", speedCpm: 40 }),
+  },
+  {
+    name: "Píxeles: vúmetro",
+    text: "La barra se llena con los graves: verde abajo, rojo arriba.",
+    needs: "RED",
+    pixels: true,
+    parts: pixels({ pattern: "meter", source: "bass" }),
+  },
   {
     name: "Arcoíris",
     text: "Los colores van y vienen solos, cada luz a su tiempo.",
@@ -134,6 +166,13 @@ interface Rig {
 export function groupHas(rig: Rig, groupId: string, type: ChannelType): boolean {
   return rig.instances.some(
     (i) => i.group === groupId && rig.definitions.find((d) => d.id === i.definitionId)?.channels.some((c) => c.type === type),
+  );
+}
+
+/** El grupo tiene una barra o tira de varios puntos. */
+export function groupHasPixels(rig: Rig, groupId: string): boolean {
+  return rig.instances.some(
+    (i) => i.group === groupId && (rig.definitions.find((d) => d.id === i.definitionId)?.heads?.length ?? 0) > 1,
   );
 }
 

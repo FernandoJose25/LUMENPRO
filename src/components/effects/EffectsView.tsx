@@ -14,6 +14,7 @@ import {
   type WaveformType,
 } from "@/types/effect";
 import { CHANNEL_TYPE_LABELS, type ChannelType } from "@/types/fixture";
+import { PIXEL_LABELS, type PixelPattern } from "@/types/effect";
 import { EffectPresets } from "./EffectPresets";
 import { factoryEffect } from "@/lib/factory";
 
@@ -247,6 +248,7 @@ function EffectEditor({ effectId }: { effectId: string | null }) {
           >
             <option value="wave">Sube y baja un canal (dimmer, colores…)</option>
             <option value="figure">Las cabezas dibujan una figura</option>
+            <option value="pixels">Píxeles: cada punto de una barra o tira de LEDs</option>
           </select>
         </label>
         <label className="flex flex-col gap-1">
@@ -309,7 +311,37 @@ function EffectEditor({ effectId }: { effectId: string | null }) {
           </>
         ) : null}
 
-        <label className={cn("flex flex-col gap-1", effect.kind === "figure" && "hidden")}>
+        {effect.kind === "pixels" ? (
+          <>
+            <label className="flex flex-col gap-1">
+              <span className="text-text-secondary">Dibujo</span>
+              <select
+                aria-label="Dibujo"
+                value={effect.pattern ?? "rainbow"}
+                onChange={(e) => updateEffect(effect.id, { pattern: e.target.value as PixelPattern })}
+                className={fieldClass}
+              >
+                {(Object.keys(PIXEL_LABELS) as PixelPattern[]).map((p) => (
+                  <option key={p} value={p}>
+                    {PIXEL_LABELS[p]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className={cn("flex flex-col gap-1", ["rainbow", "meter"].includes(effect.pattern ?? "rainbow") && "hidden")}>
+              <span className="text-text-secondary">Color</span>
+              <input
+                type="color"
+                aria-label="Color de los puntos"
+                value={effect.color ?? "#ffffff"}
+                onChange={(e) => updateEffect(effect.id, { color: e.target.value })}
+                className="h-9 w-20 cursor-pointer rounded-control border border-border bg-panel2"
+              />
+            </label>
+          </>
+        ) : null}
+
+        <label className={cn("flex flex-col gap-1", effect.kind !== "wave" && "hidden")}>
           <span className="text-text-secondary">Tipo de canal</span>
           <select
             value={effect.channelType}
@@ -324,7 +356,7 @@ function EffectEditor({ effectId }: { effectId: string | null }) {
           </select>
         </label>
 
-        <label className={cn("flex flex-col gap-1", effect.kind === "figure" && "hidden")}>
+        <label className={cn("flex flex-col gap-1", effect.kind !== "wave" && "hidden")}>
           <span className="text-text-secondary">Forma de onda</span>
           <select
             value={effect.waveform}
@@ -416,7 +448,7 @@ function EffectEditor({ effectId }: { effectId: string | null }) {
           />
         </label>
 
-        <label className="col-span-2 flex flex-col gap-1">
+        <label className={cn("col-span-2 flex flex-col gap-1", effect.kind === "pixels" && "hidden")}>
           <span className="text-text-secondary">
             Desfase entre fixtures (grados) — 0 = todos sincronizados, &gt;0 crea una ola
           </span>
@@ -433,7 +465,12 @@ function EffectEditor({ effectId }: { effectId: string | null }) {
 
       {group ? (
         <p className="mt-4 border-t border-border pt-3 text-[11px] text-text-secondary">
-          {effect.kind === "figure" ? (
+          {effect.kind === "pixels" ? (
+            <>
+              Pinta cada punto de las barras y tiras de LEDs de <span className="text-text-primary">{group.name}</span>, en
+              orden. Mínimo y máximo son el brillo.
+            </>
+          ) : effect.kind === "figure" ? (
             <>
               Mueve las cabezas de <span className="text-text-primary">{group.name}</span> alrededor de donde estén
               apuntando, sin tocar sus faders: con el pad o una posición se mueve el centro.

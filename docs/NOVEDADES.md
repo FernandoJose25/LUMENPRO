@@ -1,6 +1,8 @@
-## Novedades de la 0.7.0
+## Novedades de la 0.8.0
 
-**VirtualDJ manda el ritmo y los botones.** En Audio Reactive, **Conectar con VirtualDJ**: si el DJ usa VirtualDJ (misma WiFi o cable de red), le pasa a LUMEN cada golpe exacto, sin micrófono, y sus botones (`os2l_button "Nombre"`) lanzan el momento, efecto, efecto especial o línea de tiempo con ese nombre. Se conecta solo; si no, se escribe la dirección que muestra LUMEN en la opción os2lDirectIp de VirtualDJ.
+**Barras y tiras de LEDs punto por punto.** Nuevo tipo de efecto **Píxeles**: cada punto de una barra o tira con su color. Arcoíris que corre, un punto que corre con estela, destellos al azar, vúmetro que se llena con los graves (verde abajo, rojo arriba) y barra que se llena y se vacía; al ritmo o con su velocidad. En Fixtures, **+ Tira de LEDs (WLED)** arma una tira con la cantidad de LEDs que digas, para controlarla por sACN o Art-Net.
+
+**De la 0.7.0:** VirtualDJ manda el ritmo y los botones (OS2L).
 
 **De la 0.6.0:** efectos especiales con seguridad (humo, haze, chispas frías, CO2, confeti).
 

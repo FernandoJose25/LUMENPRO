@@ -1723,3 +1723,80 @@ fn dj_buttons_launch_what_has_that_name() {
     dj(&mut r, json!({ "evt": "btn", "name": "nada", "state": "on" }));
     dj(&mut r, json!({ "evt": "cmd", "id": 1, "param": 50 }));
 }
+
+// ----------------------------------------------------------------------
+// Barras y tiras de LEDs (píxeles)
+// ----------------------------------------------------------------------
+
+/// Una barra de 4 puntos RGB (canales 100–111) en el grupo "bars" y un
+/// effect de píxeles quieto (velocidad 0) con ese dibujo.
+fn led_bar(r: &mut Rig, pattern: &str, patch: Value) {
+    let mut channels = Vec::new();
+    let mut heads = Vec::new();
+    for h in 0..4 {
+        let ids = [format!("r{h}"), format!("g{h}"), format!("b{h}")];
+        for (k, (id, kind)) in ids.iter().zip(["RED", "GREEN", "BLUE"]).enumerate() {
+            channels.push(channel(id, (h * 3 + k + 1) as i32, kind, 0));
+        }
+        heads.push(json!(ids));
+    }
+    r.doc["definitions"].as_array_mut().unwrap().push(json!({ "id": "bar", "channels": channels, "heads": heads }));
+    r.doc["instances"].as_array_mut().unwrap().push(json!({ "id": "bar1", "definitionId": "bar", "universe": 1, "address": 100, "group": "bars" }));
+    let mut effect = json!({ "id": "px", "name": "Barra", "groupId": "bars", "kind": "pixels", "pattern": pattern,
+                             "speedCpm": 0, "min": 0, "max": 255, "source": "clock", "beatsPerCycle": 1 });
+    for (k, v) in patch.as_object().unwrap() {
+        effect[k] = v.clone();
+    }
+    r.doc["effects"].as_array_mut().unwrap().push(effect);
+    r.reset();
+    r.send(json!({ "type": "startEffect", "id": "px" }));
+    r.run(20.0);
+}
+
+fn pixel(r: &Rig, n: usize) -> [u64; 3] {
+    [r.live("bar1", &format!("r{n}")), r.live("bar1", &format!("g{n}")), r.live("bar1", &format!("b{n}"))]
+}
+
+#[test]
+fn the_rainbow_spreads_its_colours_along_the_bar() {
+    let mut r = Rig::new();
+    led_bar(&mut r, "rainbow", json!({}));
+    assert_eq!(pixel(&r, 0), [255, 0, 0]);
+    assert_eq!(pixel(&r, 2), [0, 255, 255]);
+}
+
+#[test]
+fn a_chase_lights_one_point_with_a_trail_in_its_colour() {
+    let mut r = Rig::new();
+    led_bar(&mut r, "chase", json!({ "color": "#00ff00" }));
+    assert_eq!(pixel(&r, 0), [0, 255, 0]);
+    assert_eq!(pixel(&r, 1), [0, 0, 0]);
+    let trail = pixel(&r, 3)[1];
+    assert!(trail > 0 && trail < 128, "estela: {trail}");
+}
+
+#[test]
+fn the_meter_fills_with_the_bass_green_at_the_bottom_red_at_the_top() {
+    let mut r = Rig::new();
+    led_bar(&mut r, "meter", json!({ "source": "bass" }));
+    assert_eq!(pixel(&r, 0), [0, 0, 0], "sin música, vacía");
+    r.send(json!({ "type": "audio", "audio": { "levels": { "bass": 1.0, "mid": 0, "treble": 0 }, "beat": null } }));
+    r.run(20.0);
+    let (bottom, top) = (pixel(&r, 0), pixel(&r, 3));
+    assert!(bottom[1] > bottom[0], "abajo verde: {bottom:?}");
+    assert!(top[0] > top[1], "arriba rojo: {top:?}");
+}
+
+#[test]
+fn a_pixel_effect_started_by_hand_wins_over_its_groups_held_colour() {
+    let mut r = Rig::new();
+    led_bar(&mut r, "rainbow", json!({}));
+    r.doc["groups"] = json!([{ "id": "bars", "name": "Barras" }]);
+    r.doc["colors"] = json!([{ "hex": "#0000ff", "name": "Azul", "values": { "bar1": { "r0": 0, "g0": 0, "b0": 255 } } }]);
+    r.send(json!({ "type": "doc", "doc": r.doc }));
+    r.send(json!({ "type": "action", "action": { "do": "color", "groupId": "bars", "color": "#0000ff" }, "press": true }));
+    assert_eq!(r.playback()["heldColors"], json!({ "bars": "#0000ff" }));
+    r.send(json!({ "type": "stopEffect", "id": "px" }));
+    r.send(json!({ "type": "startEffect", "id": "px" }));
+    assert_eq!(r.playback()["heldColors"], json!({}));
+}

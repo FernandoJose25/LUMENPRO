@@ -462,10 +462,101 @@ pub enum EffectSource {
 pub enum EffectKind {
     /// Las cabezas dibujan una figura alrededor de donde estén.
     Figure,
+    /// Cada punto de una barra o tira de LEDs con su color.
+    Pixels,
     /// Un canal sube y baja.
     #[default]
     #[serde(other)]
     Wave,
+}
+
+/// Lo que dibujan los puntos de una barra o tira de LEDs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PixelPattern {
+    /// Un punto de color que corre, con estela.
+    Chase,
+    /// Puntos que destellan al azar.
+    Sparkle,
+    /// Se llena desde abajo con lo que suena (verde, amarillo, rojo).
+    Meter,
+    /// Se llena y se vacía con el color.
+    Fill,
+    /// Los colores del arcoíris corren por la barra.
+    #[default]
+    #[serde(other)]
+    Rainbow,
+}
+
+impl PixelPattern {
+    /// Rojo, verde y azul (0–1) del punto `i` de `n`. `cycles`: vueltas que
+    /// lleva; `level`: lo que suena (0–1), si sigue la música.
+    pub fn color(self, i: usize, n: usize, cycles: f64, level: Option<f64>, color: [f64; 3]) -> [f64; 3] {
+        let n = n.max(1);
+        let place = i as f64 / n as f64;
+        let frac = |x: f64| x - x.floor();
+        let scaled = |b: f64| color.map(|c| c * b);
+        match self {
+            PixelPattern::Rainbow => hsv(frac(place + cycles)),
+            PixelPattern::Chase => {
+                let head = frac(cycles) * n as f64;
+                let behind = (head - i as f64).rem_euclid(n as f64);
+                let tail = (n as f64 * 0.3).max(1.0);
+                scaled(if behind < tail { 1.0 - behind / tail } else { 0.0 })
+            }
+            PixelPattern::Sparkle => {
+                let steps = cycles * 4.0;
+                let lit = hash(i as u64, steps.floor() as i64) < 0.25;
+                scaled(if lit { 1.0 - frac(steps) } else { 0.0 })
+            }
+            PixelPattern::Meter | PixelPattern::Fill => {
+                let full = level.unwrap_or_else(|| Waveform::Triangle.level(cycles)) * n as f64;
+                let b = (full - i as f64).clamp(0.0, 1.0);
+                if self == PixelPattern::Meter {
+                    // Verde abajo, rojo arriba.
+                    hsv(0.33 * (1.0 - place)).map(|c| c * b)
+                } else {
+                    scaled(b)
+                }
+            }
+        }
+    }
+}
+
+/// Tono 0–1 a rojo, verde y azul a pleno.
+fn hsv(h: f64) -> [f64; 3] {
+    let h = (h - h.floor()) * 6.0;
+    let x = 1.0 - (h % 2.0 - 1.0).abs();
+    match h as u32 {
+        0 => [1.0, x, 0.0],
+        1 => [x, 1.0, 0.0],
+        2 => [0.0, 1.0, x],
+        3 => [0.0, x, 1.0],
+        4 => [x, 0.0, 1.0],
+        _ => [1.0, 0.0, x],
+    }
+}
+
+/// Al azar pero siempre igual para el mismo punto y paso: 0–1.
+fn hash(i: u64, step: i64) -> f64 {
+    let mut x = i.wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ (step as u64).wrapping_mul(0xC2B2_AE3D_27D4_EB4F);
+    x ^= x >> 31;
+    x = x.wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    x ^= x >> 29;
+    (x >> 11) as f64 / (1u64 << 53) as f64
+}
+
+/// "#ff8800" → rojo, verde y azul 0–1; blanco si no se entiende.
+pub fn rgb_of(hex: Option<&str>) -> [f64; 3] {
+    let parse = |hex: &str| -> Option<[f64; 3]> {
+        let hex = hex.strip_prefix('#')?;
+        if hex.len() != 6 {
+            return None;
+        }
+        let byte = |i: usize| u8::from_str_radix(hex.get(i..i + 2)?, 16).ok().map(|b| f64::from(b) / 255.0);
+        Some([byte(0)?, byte(2)?, byte(4)?])
+    };
+    hex.and_then(parse).unwrap_or([1.0; 3])
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
@@ -521,6 +612,9 @@ pub struct Effect {
     pub source: EffectSource,
     #[serde(deserialize_with = "num")]
     pub beats_per_cycle: f64,
+    /// Píxeles: qué dibujan y de qué color (los que no son arcoíris).
+    pub pattern: PixelPattern,
+    pub color: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]

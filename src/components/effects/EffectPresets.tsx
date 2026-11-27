@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/Button";
 import { StageCanvas } from "@/components/stage/StageCanvas";
 import { cn } from "@/lib/utils";
 import { engineDoc, useFixtureStore } from "@/lib/fixtureStore";
-import { EFFECT_PRESETS, groupHas, presetEffects, type EffectPreset } from "@/lib/effectPresets";
+import { EFFECT_PRESETS, groupHas, groupHasPixels, presetEffects, type EffectPreset } from "@/lib/effectPresets";
 import { lookValues } from "@/lib/look";
 import { PreviewShow } from "@/lib/preview";
 import type { Group } from "@/types/group";
@@ -16,7 +16,9 @@ export function EffectPresets({ onAdded }: { onAdded: (effectId: string) => void
   const usable = groups.filter((g) => instances.some((i) => i.group === g.id));
   const [groupId, setGroupId] = useState(usable[0]?.id ?? "");
   const group = usable.find((g) => g.id === groupId) ?? usable[0];
-  const presets = group ? EFFECT_PRESETS.filter((p) => groupHas(store, group.id, p.needs)) : [];
+  const presets = group
+    ? EFFECT_PRESETS.filter((p) => groupHas(store, group.id, p.needs) && (!p.pixels || groupHasPixels(store, group.id)))
+    : [];
   const [chosen, setChosen] = useState<string | null>(null);
   const preset = presets.find((p) => p.name === chosen) ?? presets[0];
 

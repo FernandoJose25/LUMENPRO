@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/Button";
 import { askConfirm, askText } from "@/lib/dialogs";
 import { factoryDefinition, hasFactoryDefinition } from "@/lib/factory";
 import { useFixtureStore } from "@/lib/fixtureStore";
-import type { FixtureDefinition, FixtureInstance } from "@/types/fixture";
+import type { FixtureChannel, FixtureDefinition, FixtureInstance } from "@/types/fixture";
 import { channelCount, isTwin, nextFreeSlot } from "@/lib/dmxFrame";
 import { ChannelFinder } from "./ChannelFinder";
 import { emptyChannel, FixtureEditor } from "./FixtureEditor";
@@ -81,6 +81,41 @@ export function FixtureManager({ onOpenControl }: FixtureManagerProps) {
       ...nextFreeSlot(instances, definitions, count),
     });
     setFinderId(instanceId);
+  }
+
+  /** Una tira de LEDs (WLED o similar): tantos puntos RGB como diga, cada uno
+   *  con su color. Por Art-Net o sACN entran hasta 170 en un universo. */
+  function addStrip() {
+    askText("¿Cuántos puntos (LEDs) tiene la tira? Hasta 170 por universo.", "60", (text) => {
+      const count = Number(text);
+      if (!Number.isInteger(count) || count < 1 || count > 170) return;
+      const definitionId = `def-${crypto.randomUUID()}`;
+      const channels: FixtureChannel[] = [];
+      const heads: string[][] = [];
+      const colors = [["RED", "Rojo"], ["GREEN", "Verde"], ["BLUE", "Azul"]] as const;
+      for (let p = 0; p < count; p++) {
+        const head = colors.map(([type, name], k) => ({ ...emptyChannel(p * 3 + k + 1), type, name: `${name} ${p + 1}` }));
+        channels.push(...head);
+        heads.push(head.map((c) => c.id));
+      }
+      addDefinition({
+        id: definitionId,
+        manufacturer: "WLED",
+        model: `Tira de LEDs (${count} puntos)`,
+        kind: "LED Bar (Pixels)",
+        mode: `${count * 3} canales RGB`,
+        channels,
+        heads,
+        verified: false,
+        verifiedNote: "En WLED: Config → Sync Interfaces → E1.31 (sACN) o Art-Net, con el mismo universo y la dirección de inicio que aquí.",
+      });
+      addInstance({
+        id: `inst-${crypto.randomUUID()}`,
+        definitionId,
+        label: `TIRA LED #${instances.filter((i) => i.label.startsWith("TIRA LED")).length + 1}`,
+        ...nextFreeSlot(instances, definitions, count * 3),
+      });
+    });
   }
 
   if (finderId) return <ChannelFinder instanceId={finderId} onClose={() => setFinderId(null)} />;
@@ -214,6 +249,9 @@ export function FixtureManager({ onOpenControl }: FixtureManagerProps) {
         </Button>
         <Button className="mt-2 w-full" onClick={addUnknown}>
           + Equipo sin manual
+        </Button>
+        <Button className="mt-2 w-full" onClick={addStrip}>
+          + Tira de LEDs (WLED)
         </Button>
       </div>
     </Panel>
