@@ -54,6 +54,8 @@ export function Topbar({
 
       <div className="flex-1" />
 
+      <MovingNow />
+
       <NewVersion lightsOn={dmx.state === "running"} />
 
       <span className="hidden font-mono text-xs text-text-secondary md:inline">FPS {fps}</span>
@@ -128,6 +130,34 @@ function TapButton({ heard }: { heard: number | null }) {
       ) : heard !== null ? (
         <span className="font-mono text-xs text-text-secondary">{heard} BPM</span>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * Lo que se está moviendo solo (effects y chase), esté donde esté el
+ * usuario: un fader que sube y baja sin razón a la vista es un effect que
+ * quedó prendido, por ejemplo el de un momento. "Detener" lo para todo y
+ * deja las luces como están.
+ */
+function MovingNow() {
+  const { effects, runningEffectIds, chases, chase, moments, activeMomentId, stopMoment } = useFixtureStore();
+  const running = effects.filter((fx) => runningEffectIds.includes(fx.id));
+  const chaseName = chase ? chases.find((c) => c.id === chase.id)?.name : undefined;
+  const names = [...running.map((fx) => fx.name), ...(chaseName ? [`chase ${chaseName}`] : [])];
+  if (names.length === 0) return null;
+  const moment = moments.find((m) => m.id === activeMomentId);
+  const fromMoment = moment && running.some((fx) => moment.effectIds.includes(fx.id)) ? ` · del momento «${moment.name}»` : "";
+  const text = names.length === 1 ? names[0] : `${names.length} efectos`;
+  return (
+    <div className="flex min-w-0 items-center gap-1.5" title={`Corriendo: ${names.join(", ")}${fromMoment}`}>
+      <span className="truncate text-xs text-accent">
+        ▶ {text}
+        <span className="text-text-secondary">{fromMoment}</span>
+      </span>
+      <Button size="sm" variant="ghost" title="Detiene efectos y chase; las luces quedan como están" onClick={stopMoment}>
+        ■ Detener
+      </Button>
     </div>
   );
 }

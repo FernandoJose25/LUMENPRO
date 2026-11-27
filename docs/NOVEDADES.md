@@ -2,6 +2,8 @@
 
 **Los efectos nuevos ya vienen cargados.** Al abrir LUMEN, tus grupos (PAR, Cabezas…) reciben todos los efectos listos que les sirven, sin agregarlos uno por uno. Dentro de cada grupo van separados en Movimiento, Colores y Brillo, también en el celular y en Momentos. **Cargar los que faltan**, en Effects, trae los que borres o los de un grupo nuevo.
 
+**Arriba se ve lo que se mueve solo.** Si un efecto o un chase está corriendo (por ejemplo el de un momento), la barra de arriba dice cuál y de qué momento viene, y **■ Detener** lo para desde cualquier sección, dejando las luces como están.
+
 **De la 0.10.0:** más de 60 efectos listos por tipo de luz (cabezas y beam, barras, estrobos tipo Stormy, PAR y color, brillo), efectos por grupo en Live y en el celular, vista previa con el **👁** e **Identificar** desde el Escenario.
 
 **De la 0.9.0:** tu consola en el celular (páginas, colores y "Mi consola").

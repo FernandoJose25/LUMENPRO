@@ -94,6 +94,21 @@ describe("Color de un momento", () => {
   });
 });
 
+describe("Lo que se mueve solo", () => {
+  it("arriba se ve qué efectos corren y de qué momento, y Detener los para desde cualquier sección", async () => {
+    const { user, engine } = await withTemplate();
+    const top = () => within(screen.getByRole("banner"));
+    expect(top().queryByRole("button", { name: "■ Detener" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Live" }));
+    await user.click(within(screen.getByRole("region", { name: "Momentos" })).getByRole("button", { name: /^Hora loca$/ }));
+    await waitFor(() => expect(top().getByText(/efectos/)).toHaveTextContent("del momento «Hora loca»"), { timeout: 4000 });
+    await user.click(screen.getByRole("button", { name: "Dashboard" }));
+    await user.click(top().getByRole("button", { name: "■ Detener" }));
+    await waitFor(() => expect(playback(engine).runningEffectIds).toEqual([]));
+    expect(top().queryByRole("button", { name: "■ Detener" })).toBeNull();
+  });
+});
+
 describe("Efectos listos", () => {
   it("se cargan solos en cada grupo una sola vez, por tipo de luz, y los borrados no vuelven", async () => {
     const { user, engine } = await withTemplate();

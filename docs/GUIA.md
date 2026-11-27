@@ -115,6 +115,7 @@ En el celular está el botón grande **Siguiente**, los momentos, las **Cancione
 - **Las luces parpadean:** en **DMX Output**, desconecta, baja la velocidad a 25 o 20 FPS y conecta de nuevo. Si el adaptador tiene un chip CH340, LUMEN PRO lo avisa: con ese chip suelen parpadear.
 - **"Pausa más larga" pasa de 100 ms:** hubo un corte en la señal. Revisa el cable USB y que la laptop esté enchufada.
 - **Una luz no enciende:** revisa su dirección y su modo, y que su dimmer no esté en 0. **Identificar** ayuda.
+- **Un fader sube y baja solo:** es un efecto prendido, casi siempre el del momento que lanzaste. Arriba dice cuál (**▶ …· del momento «…»**); **■ Detener** lo para. Si no lo quieres en ese momento, desmárcalo en **Momentos → Effects**. Elegir una escena no apaga los efectos.
 - **El celular no entra:** que los dos estén en la misma WiFi; prueba la otra dirección que muestra **Celular**; permite LUMEN PRO en el firewall de Windows.
 - **El PAR enciende o apaga de golpe:** en **Fixtures → Editar perfil**, en la curva del dimmer elige **Suave al encender**.
 
