@@ -8,6 +8,7 @@
 mod ipc;
 pub mod midi;
 pub mod process;
+mod os2l;
 mod remote;
 mod supervisor;
 
@@ -144,6 +145,8 @@ struct Engine {
     remote: std::sync::OnceLock<Remote>,
     ui: Mutex<Ui>,
     midi: midi::Midi,
+    /// VirtualDJ por la red (ver `os2l.rs`).
+    os2l: os2l::Os2l,
 }
 
 #[derive(Deserialize)]
@@ -167,6 +170,9 @@ enum Request {
     /// Un mensaje como si viniera de un controlador.
     MidiInject { device: String, bytes: Vec<u8> },
     RemoteStatus,
+    /// Si VirtualDJ está conectado y en qué direcciones escribirle.
+    Os2lStatus,
+    Os2lSetEnabled { enabled: bool },
     RemoteSetEnabled { enabled: bool },
     RemoteNewPin,
     /// ¿Se notaría si se apaga?
@@ -192,6 +198,7 @@ impl Engine {
             outputs: Mutex::new(Vec::new()),
             remote: std::sync::OnceLock::new(),
             midi: midi::Midi::default(),
+            os2l: os2l::Os2l::default(),
             ui: Mutex::new(Ui {
                 pid: None,
                 connections: 0,
@@ -219,6 +226,7 @@ impl Engine {
             }),
         };
         let _ = engine.remote.set(Remote::load(dir, source));
+        let _ = engine.os2l.engine.set(Arc::downgrade(&engine));
         engine
     }
 
@@ -425,6 +433,15 @@ impl Engine {
                 Ok(json!(nodes))
             }
             Request::RemoteStatus => Ok(json!(self.remote().status())),
+            Request::Os2lSetEnabled { enabled } => {
+                os2l::set_enabled(self, enabled, os2l::PORT)?;
+                self.handle(Request::Os2lStatus)
+            }
+            Request::Os2lStatus => {
+                let mut status = self.os2l.status();
+                status["addresses"] = json!(remote::local_ipv4().iter().map(|ip| ip.to_string()).collect::<Vec<_>>());
+                Ok(status)
+            }
             Request::RemoteSetEnabled { enabled } => {
                 self.remote().set_enabled(enabled)?;
                 Ok(json!(self.remote().status()))
@@ -775,6 +792,33 @@ mod tests {
             midi::lights(&show).into_iter().map(|(c, on)| (c.id.clone(), on)).collect()
         };
         assert_eq!(lights, [("1".into(), false), ("2".into(), false), ("3".into(), false), ("5".into(), true)]);
+    }
+
+    #[test]
+    fn virtual_dj_sends_its_beat_and_buttons_over_the_network() {
+        use std::io::Write;
+        let engine = started("os2l");
+        send(&engine, 1, json!([{ "type": "reset", "doc": doc(), "live": {} }]));
+        os2l::set_enabled(&engine, true, 0).unwrap();
+        let port = ask(&engine, json!({ "cmd": "os2lStatus" }))["port"].as_u64().unwrap() as u16;
+        let mut dj = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+        // Pegados y cortados a la mitad, como llegan por la red.
+        dj.write_all(br#"{"evt":"beat","change":true,"pos":1,"bpm":128.0,"strength":1}{"evt":"bt"#).unwrap();
+        dj.flush().unwrap();
+        std::thread::sleep(Duration::from_millis(50));
+        dj.write_all(br#"n","name":"Hora loca","page":"","state":"on"}"#).unwrap();
+        eventually("el tempo del DJ", || engine.show.lock().unwrap().session().playback.dj_bpm == Some(128.0));
+        eventually("su botón", || engine.show.lock().unwrap().session().playback.active_moment_id.as_deref() == Some("b"));
+        let status = ask(&engine, json!({ "cmd": "os2lStatus" }));
+        assert_eq!(status["clients"], 1);
+        assert_eq!(status["enabled"], true);
+        assert!(os2l::was_enabled(&engine.dir));
+
+        // Apagado: suelta al DJ y deja de escuchar.
+        os2l::set_enabled(&engine, false, 0).unwrap();
+        eventually("suelta al DJ", || ask(&engine, json!({ "cmd": "os2lStatus" }))["clients"] == 0);
+        eventually("deja de escuchar", || std::net::TcpStream::connect(("127.0.0.1", port)).is_err());
+        assert!(!os2l::was_enabled(&engine.dir));
     }
 
     #[test]

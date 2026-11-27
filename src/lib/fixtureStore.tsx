@@ -87,6 +87,7 @@ const IDLE: Omit<Playback, "activeSceneId" | "activeMomentId"> = {
   speed: 100,
   firing: {},
   armed: {},
+  djBpm: null,
 };
 const NOT_SAVED = new Set([...Object.keys(IDLE), "moving"]);
 

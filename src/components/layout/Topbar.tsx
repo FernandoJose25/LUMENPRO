@@ -74,7 +74,7 @@ export function Topbar({
  * la música va con ese tempo, sin micrófono. Al lado, el ritmo que manda.
  */
 function TapButton({ heard }: { heard: number | null }) {
-  const { tapBpm, tap, clearTap } = useFixtureStore();
+  const { tapBpm, djBpm, tap, clearTap } = useFixtureStore();
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.repeat || e.ctrlKey || e.metaKey || e.altKey || e.key.toLowerCase() !== "t") return;
@@ -123,6 +123,8 @@ function TapButton({ heard }: { heard: number | null }) {
             ×
           </button>
         </>
+      ) : djBpm !== null ? (
+        <span className="font-mono text-xs text-text-secondary">{Math.round(djBpm)} BPM · VirtualDJ</span>
       ) : heard !== null ? (
         <span className="font-mono text-xs text-text-secondary">{heard} BPM</span>
       ) : null}

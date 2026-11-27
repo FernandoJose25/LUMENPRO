@@ -23,6 +23,7 @@ export function fakeEngine(overrides: Record<string, (args: Args) => unknown> = 
     ack: 0,
     outputs: [] as OutputStatus[],
     remote: { running: false, pin: "123456", error: null as string | null, addresses: ADDRESSES },
+    os2l: { enabled: false, port: null as number | null, clients: 0, error: null as string | null, addresses: ["192.168.1.20"] },
     session: null as Session | null,
     listening: false,
     focus: false,
@@ -92,6 +93,8 @@ export function fakeEngine(overrides: Record<string, (args: Args) => unknown> = 
     midiStatus: () => state.midi,
     midiInject: () => null,
     remoteStatus: () => ({ ...state.remote }),
+    os2lStatus: () => ({ ...state.os2l }),
+    os2lSetEnabled: ({ enabled }) => ({ ...Object.assign(state.os2l, { enabled, port: enabled ? 9996 : null }) }),
     remoteSetEnabled: ({ enabled }) => ({ ...Object.assign(state.remote, { running: enabled }) }),
     remoteNewPin: () => ({ ...Object.assign(state.remote, { pin: "654321" }) }),
   };

@@ -100,6 +100,9 @@ pub fn engine(dir: &Path, args: &[String]) -> ! {
         }
     }
     super::midi::run(engine.clone());
+    if super::os2l::was_enabled(dir) {
+        let _ = super::os2l::set_enabled(&engine, true, super::os2l::PORT);
+    }
     if ipc::serve(engine.clone()).is_err() {
         std::process::exit(1);
     }

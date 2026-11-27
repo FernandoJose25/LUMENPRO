@@ -355,7 +355,7 @@ fn address(ip: Ipv4Addr, pin: &str) -> Address {
 
 /// Direcciones de esta PC en la red, primero la de la ruta por defecto (con
 /// adaptadores virtuales de por medio suele ser la que sirve).
-fn local_ipv4() -> Vec<Ipv4Addr> {
+pub(super) fn local_ipv4() -> Vec<Ipv4Addr> {
     // connect() en UDP no envía nada: solo pregunta por qué interfaz saldría.
     let preferred = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0))
         .and_then(|s| s.connect((Ipv4Addr::new(8, 8, 8, 8), 80)).map(|_| s))

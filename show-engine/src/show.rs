@@ -33,6 +33,24 @@ pub const SPEED_MAX: f64 = 400.0;
 const ARM_MS: f64 = 5.0 * 60_000.0;
 /// Sin un máximo propio, un disparo dura esto.
 const SPECIAL_DEFAULT_MS: f64 = 5000.0;
+/// VirtualDJ manda un golpe por golpe: sin noticias en este tiempo, la
+/// canción paró o se desconectó.
+const DJ_STALE_MS: f64 = 3000.0;
+
+/// El último golpe que mandó el programa del DJ (OS2L).
+#[derive(Debug, Clone, Copy)]
+struct DjBeat {
+    beats: f64,
+    bpm: f64,
+    strength: f64,
+    at: f64,
+}
+
+impl DjBeat {
+    fn beats(&self, now: f64) -> f64 {
+        self.beats + (now - self.at) * self.bpm / 60_000.0
+    }
+}
 
 /// Fader de 0 a 1 → %, con 100 % en el medio.
 fn speed_from_fader(v: f64) -> f64 {
@@ -177,6 +195,8 @@ pub struct Playback {
     pub firing: BTreeMap<String, f64>,
     /// Efectos especiales armados: id -> hasta qué hora.
     pub armed: BTreeMap<String, f64>,
+    /// El tempo que manda el programa del DJ por OS2L, mientras llegan golpes.
+    pub dj_bpm: Option<f64>,
 }
 
 impl Default for Playback {
@@ -197,6 +217,7 @@ impl Default for Playback {
             speed: 100.0,
             firing: BTreeMap::new(),
             armed: BTreeMap::new(),
+            dj_bpm: None,
         }
     }
 }
@@ -359,6 +380,7 @@ pub struct Show {
     /// 100 % es la hora misma.
     fx_clock: f64,
     clock_at: f64,
+    dj: Option<DjBeat>,
 }
 
 /// Vueltas completas que lleva un effect.
@@ -634,6 +656,58 @@ impl Show {
             },
             _ => {}
         }
+    }
+
+    /// Lo que manda el programa del DJ por OS2L (VirtualDJ): un golpe cada
+    /// golpe, y sus botones (`os2l_button "Nombre"`), que lanzan lo que se
+    /// llame así. Lo que no reconoce lo ignora.
+    pub fn os2l(&mut self, message: &Value, now: f64) {
+        match message["evt"].as_str() {
+            Some("beat") => {
+                let bpm = message["bpm"].as_f64().filter(|b| b.is_finite() && *b > 0.0);
+                let (Some(bpm), Some(pos)) = (bpm, message["pos"].as_f64().filter(|p| p.is_finite())) else { return };
+                // Hay quien la manda de 0 a 1 y quien en %.
+                let strength = message["strength"].as_f64().filter(|s| s.is_finite() && *s >= 0.0).map_or(1.0, |s| {
+                    if s > 1.0 { (s / 100.0).min(1.0) } else { s }
+                });
+                self.dj = Some(DjBeat { beats: pos, bpm, strength, at: now });
+                let shown = Some((bpm * 10.0).round() / 10.0);
+                if self.playback.dj_bpm != shown {
+                    self.edit(|p| p.dj_bpm = shown);
+                }
+            }
+            Some("btn") => {
+                let Some(action) = message["name"].as_str().and_then(|name| self.action_named(name)) else { return };
+                let on = message["state"].as_str() == Some("on");
+                self.act(&action, Some(on), None, now);
+            }
+            _ => {}
+        }
+    }
+
+    /// Lo que se llama así (sin importar mayúsculas): un momento, un efecto
+    /// especial, un effect, una línea de tiempo, o una de las palabras de
+    /// siempre (siguiente, anterior, blackout, estrobo, tap).
+    fn action_named(&self, name: &str) -> Option<Action> {
+        let name = name.trim().to_lowercase();
+        let same = |other: &str| other.trim().to_lowercase() == name;
+        let d = &self.doc;
+        let found = d
+            .moments
+            .iter()
+            .find(|m| same(&m.name))
+            .map(|m| Action::Moment { id: m.id.clone() })
+            .or_else(|| d.specials.iter().find(|s| same(&s.name)).map(|s| Action::Special { id: s.id.clone() }))
+            .or_else(|| d.effects.iter().find(|e| same(&e.name)).map(|e| Action::Effect { id: e.id.clone() }))
+            .or_else(|| d.timelines.iter().find(|t| same(&t.name)).map(|t| Action::Timeline { id: t.id.clone() }));
+        found.or(match name.as_str() {
+            "siguiente" | "next" => Some(Action::Next),
+            "anterior" | "prev" => Some(Action::Prev),
+            "blackout" => Some(Action::Blackout),
+            "estrobo" | "strobe" => Some(Action::Strobe),
+            "tap" => Some(Action::Tap),
+            _ => None,
+        })
     }
 
     /// Lo mismo venga de Live, del celular o de un controlador MIDI.
@@ -1291,9 +1365,19 @@ impl Show {
     // Effects
     // ------------------------------------------------------------------
 
-    /// Con un ritmo marcado a mano, cada golpe suena como un bombo.
+    fn dj(&self, now: f64) -> Option<DjBeat> {
+        self.dj.filter(|dj| now - dj.at <= DJ_STALE_MS)
+    }
+
+    /// Con un ritmo marcado a mano (o el del DJ), cada golpe suena como un
+    /// bombo.
     fn levels(&self, now: f64) -> Option<Levels> {
         if let Some(pulse) = self.tap.pulse(now) {
+            return Some(Levels { bass: pulse, mid: pulse, treble: pulse });
+        }
+        if let Some(dj) = self.dj(now) {
+            let beats = dj.beats(now);
+            let pulse = (-6.0 * (beats - beats.floor())).exp() * dj.strength;
             return Some(Levels { bass: pulse, mid: pulse, treble: pulse });
         }
         let (feed, at) = self.audio.as_ref()?;
@@ -1303,6 +1387,9 @@ impl Show {
     fn beats(&self, now: f64) -> Option<f64> {
         if let Some(beats) = self.tap.beats(now) {
             return Some(beats);
+        }
+        if let Some(dj) = self.dj(now) {
+            return Some(dj.beats(now));
         }
         let (feed, at) = self.audio.as_ref()?;
         let beat = feed.beat?;
@@ -1473,6 +1560,10 @@ impl Show {
         self.advance(now);
         self.tick_timeline(now);
         self.tick_specials(now);
+        if self.playback.dj_bpm.is_some() && self.dj(now).is_none() {
+            self.dj = None;
+            self.edit(|p| p.dj_bpm = None);
+        }
         self.tick_moment(now);
         self.tick_chase();
         self.tick_effects(now);

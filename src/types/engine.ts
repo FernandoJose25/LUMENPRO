@@ -26,6 +26,8 @@ export interface Playback {
   firing: Record<string, number>;
   /** Efectos especiales armados: id -> hasta qué hora del motor. */
   armed: Record<string, number>;
+  /** El tempo que manda VirtualDJ (OS2L) mientras llegan golpes. */
+  djBpm: number | null;
 }
 
 export interface TimelineRun {

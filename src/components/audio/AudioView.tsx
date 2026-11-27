@@ -5,6 +5,7 @@ import { Fader } from "@/components/ui/Fader";
 import { BAND_NAMES, getAudioFeed, type AudioInput, type Band } from "@/lib/audioInput";
 import { useFixtureStore } from "@/lib/fixtureStore";
 import { EFFECT_SOURCE_LABELS } from "@/types/effect";
+import { VirtualDj } from "./VirtualDj";
 
 const BAND_LABELS: Record<Band, string> = { bass: "Graves", mid: "Medios", treble: "Agudos" };
 
@@ -89,7 +90,10 @@ export function AudioView({ audio }: { audio: AudioInput }) {
         </Panel>
       </div>
 
-      <div className="w-80 shrink-0">
+      <div className="flex w-96 shrink-0 flex-col gap-2">
+        <div className="shrink-0">
+          <VirtualDj />
+        </div>
         <Panel title="EFFECTS QUE SIGUEN LA MÚSICA">
           {followers.length === 0 ? (
             <p className="text-xs text-text-secondary">

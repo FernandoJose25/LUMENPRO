@@ -73,3 +73,18 @@ describe("Velocidad general", () => {
     await waitFor(() => expect(engine.state.show.changes(0)!.playback!.speed).toBe(100));
   });
 });
+
+describe("VirtualDJ", () => {
+  it("se conecta desde Audio Reactive y muestra la dirección para escribir en VirtualDJ", async () => {
+    const user = userEvent.setup();
+    const engine = fakeEngine();
+    render(<App />);
+    await user.click(screen.getByRole("button", { name: "Audio Reactive" }));
+    await user.click(await screen.findByRole("button", { name: "Conectar con VirtualDJ" }));
+    expect(await screen.findByText("192.168.1.20:9996")).toBeInTheDocument();
+    expect(screen.getByText(/esperando/)).toBeInTheDocument();
+    expect(engine.state.os2l.enabled).toBe(true);
+    await user.click(screen.getByRole("button", { name: "Desconectar VirtualDJ" }));
+    await waitFor(() => expect(engine.state.os2l.enabled).toBe(false));
+  });
+});

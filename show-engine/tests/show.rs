@@ -1661,3 +1661,65 @@ fn the_phone_arms_and_fires() {
     r.phone(json!({ "type": "special", "id": "chispas", "press": false }));
     assert_eq!(out(&r, 61), 0);
 }
+
+// ----------------------------------------------------------------------
+// VirtualDJ (OS2L)
+// ----------------------------------------------------------------------
+
+fn dj(r: &mut Rig, message: Value) {
+    let now = r.now;
+    r.show.os2l(&message, now);
+}
+
+#[test]
+fn the_dj_beat_leads_the_effects_and_stops_counting_when_the_song_stops() {
+    let mut r = Rig::new();
+    music(&mut r, "beat");
+    // Un golpe recién llegado: el 33 de la canción, a 120 BPM.
+    dj(&mut r, json!({ "evt": "beat", "change": false, "pos": 33, "bpm": 120.0, "strength": 1.0 }));
+    assert_eq!(r.playback()["djBpm"], json!(120.0));
+    r.run(250.0);
+    assert_eq!(r.live("p1", "red"), 100, "medio golpe después");
+    // Sin más golpes (pararon la canción) deja de mandar.
+    r.run(3000.0);
+    assert_eq!(r.playback()["djBpm"], Value::Null);
+}
+
+#[test]
+fn the_dj_beat_also_drives_the_bass_effects_with_its_strength_and_tap_still_wins() {
+    let mut r = Rig::new();
+    music(&mut r, "bass");
+    dj(&mut r, json!({ "evt": "beat", "change": false, "pos": 1, "bpm": 120.0, "strength": 50 }));
+    r.run(20.0);
+    let soft = r.live("p1", "red");
+    assert!(soft > 70 && soft < 100, "a la mitad de fuerza: {soft}");
+
+    music(&mut r, "beat");
+    dj(&mut r, json!({ "evt": "beat", "change": false, "pos": 8, "bpm": 60.0 }));
+    tap_120(&mut r);
+    r.run(250.0);
+    assert_eq!(r.live("p1", "red"), 100, "manda el TAP");
+}
+
+#[test]
+fn dj_buttons_launch_what_has_that_name() {
+    let mut r = Rig::new();
+    with_specials(&mut r);
+    r.moment("a", json!({ "name": "Hora loca" }));
+    dj(&mut r, json!({ "evt": "btn", "name": "hora LOCA", "page": "", "state": "on" }));
+    assert_eq!(r.active(), json!("a"));
+
+    // El humo dispara mientras el botón del DJ está apretado.
+    dj(&mut r, json!({ "evt": "btn", "name": "Humo", "state": "on" }));
+    assert_eq!(out(&r, 60), 255);
+    dj(&mut r, json!({ "evt": "btn", "name": "Humo", "state": "off" }));
+    assert_eq!(out(&r, 60), 0);
+
+    dj(&mut r, json!({ "evt": "btn", "name": "Estrobo", "state": "on" }));
+    assert_eq!(r.playback()["strobeActive"], json!(true));
+    dj(&mut r, json!({ "evt": "btn", "name": "Estrobo", "state": "off" }));
+    assert_eq!(r.playback()["strobeActive"], json!(false));
+    // Un nombre que no existe no hace nada.
+    dj(&mut r, json!({ "evt": "btn", "name": "nada", "state": "on" }));
+    dj(&mut r, json!({ "evt": "cmd", "id": 1, "param": 50 }));
+}

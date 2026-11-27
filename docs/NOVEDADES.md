@@ -1,6 +1,8 @@
-## Novedades de la 0.6.0
+## Novedades de la 0.7.0
 
-**Efectos especiales con seguridad: humo, haze, chispas frías, CO2 y confeti.** En Live → Efectos especiales eliges la máquina y su canal. Ese canal queda en 0 salvo mientras disparas: ninguna escena ni efecto lo prende por error y el Blackout lo corta. El humo dispara mientras mantienes apretado (hasta un máximo de segundos); las chispas, el CO2 y el confeti hay que armarlos antes; el haze se prende y apaga con un toque. También desde el celular, botones, MIDI y la línea de tiempo (humo bajo en el segundo exacto del vals).
+**VirtualDJ manda el ritmo y los botones.** En Audio Reactive, **Conectar con VirtualDJ**: si el DJ usa VirtualDJ (misma WiFi o cable de red), le pasa a LUMEN cada golpe exacto, sin micrófono, y sus botones (`os2l_button "Nombre"`) lanzan el momento, efecto, efecto especial o línea de tiempo con ese nombre. Se conecta solo; si no, se escribe la dirección que muestra LUMEN en la opción os2lDirectIp de VirtualDJ.
+
+**De la 0.6.0:** efectos especiales con seguridad (humo, haze, chispas frías, CO2, confeti).
 
 **De la 0.5.0:** Música, las luces caen en cada golpe sin micrófono.
 
