@@ -17,8 +17,9 @@ export function useEffectCatalog(): void {
   useEffect(() => {
     // Con un show que seguía en marcha (la ventana se reabrió) no se toca
     // nada: cambiar sus effects podría cambiar las luces. Va al próximo inicio.
-    if (engine.resumed || !hasGroups || (readSetting<number>("effects.catalog") ?? 0) >= CATALOG_VERSION) return;
-    updateEffectCatalog();
+    const from = readSetting<number>("effects.catalog") ?? 0;
+    if (engine.resumed || !hasGroups || from >= CATALOG_VERSION) return;
+    updateEffectCatalog(from);
     writeSetting("effects.catalog", CATALOG_VERSION);
     // Solo cuando aparecen los grupos.
     // eslint-disable-next-line react-hooks/exhaustive-deps

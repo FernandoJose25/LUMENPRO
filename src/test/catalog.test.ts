@@ -56,6 +56,24 @@ describe("Puesta al día de los effects", () => {
     expect(names).toEqual(expect.arrayContaining(["PAR: policía", "PAR: fuego"]));
   });
 
+  it("un effect repetido con otro nombre pasa al de ahora sin salir del momento, y lo borrado no vuelve", () => {
+    let n = 0;
+    const show = oldShow();
+    const updated = { ...show, ...catalogUpdate(show, (prefix) => `${prefix}-${++n}`)! };
+    const rainbow = updated.effects.find((fx) => fx.name === "PAR: arcoíris")!;
+    const twin = { ...rainbow, id: "twin", name: "PAR: colores que corren", speedCpm: 20 };
+    const withTwin = {
+      ...updated,
+      effects: [...updated.effects.filter((fx) => fx.name !== "PAR: policía"), twin],
+      moments: [moment("vals", ["twin"])],
+    };
+    const next = catalogUpdate(withTwin, (prefix) => `${prefix}-${++n}`, 2)!;
+    expect(next.effects.map((fx) => fx.name)).not.toContain("PAR: colores que corren");
+    expect(next.moments[0].effectIds).toEqual([rainbow.id]);
+    // La policía la borró el usuario: no vuelve.
+    expect(next.effects.map((fx) => fx.name)).not.toContain("PAR: policía");
+  });
+
   it("al día, no cambia nada", () => {
     let n = 0;
     const once = catalogUpdate(oldShow(), (prefix) => `${prefix}-${++n}`)!;

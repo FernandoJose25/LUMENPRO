@@ -14,7 +14,7 @@ import {
   type FigureType,
   type WaveformType,
 } from "@/types/effect";
-import { CHANNEL_TYPE_LABELS, type ChannelType } from "@/types/fixture";
+import { CHANNEL_TYPE_LABELS, COLOR_CHANNEL_TYPES, type ChannelType } from "@/types/fixture";
 import { PIXEL_LABELS, PIXEL_USES_COLOR, PIXEL_USES_COLOR2, type PixelPattern } from "@/types/effect";
 import { EffectPresets } from "./EffectPresets";
 import { EffectGroups } from "./EffectGroups";
@@ -449,6 +449,30 @@ function EffectEditor({ effectId }: { effectId: string | null }) {
             ))}
           </select>
         </label>
+
+        {effect.kind === "wave" && !COLOR_CHANNEL_TYPES.includes(effect.channelType) ? (
+          <label className="flex flex-col gap-1">
+            <span className="text-text-secondary">Color mientras corre</span>
+            <span className="flex items-center gap-1">
+              <input
+                type="color"
+                aria-label="Color mientras corre"
+                value={effect.color ?? "#000000"}
+                onChange={(e) => updateEffect(effect.id, { color: e.target.value })}
+                className="h-9 w-20 cursor-pointer rounded-control border border-border bg-panel2"
+              />
+              <Button
+                size="sm"
+                variant={effect.color ? "ghost" : "secondary"}
+                selected={!effect.color}
+                title="Sin color propio: el del momento"
+                onClick={() => updateEffect(effect.id, { color: null })}
+              >
+                Del momento
+              </Button>
+            </span>
+          </label>
+        ) : null}
 
         <label className={cn("flex flex-col gap-1", effect.kind !== "wave" && "hidden")}>
           <span className="text-text-secondary">Forma de onda</span>

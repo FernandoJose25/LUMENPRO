@@ -95,6 +95,45 @@ describe("Color de un momento", () => {
   });
 });
 
+describe("Ajustes del efecto en Escenario", () => {
+  it("al tocar un efecto se prende y a la derecha se le cambian los colores y la velocidad, y llega a las luces", async () => {
+    const { user, engine } = await withTemplate();
+    await user.click(screen.getByRole("button", { name: "Escenario" }));
+    await user.click(screen.getByRole("button", { name: /^PAR/, expanded: false }));
+    await user.click(screen.getByRole("button", { name: "PAR: policía" }));
+    const id = lastDoc(engine).effects.find((fx) => fx.name === "PAR: policía")!.id;
+    await waitFor(() => expect(playback(engine).runningEffectIds).toContain(id));
+
+    const panel = () => within(screen.getByRole("region", { name: "Ajustes de PAR: policía" }));
+    await user.click(panel().getByRole("button", { name: "Color: Verde" }));
+    await user.click(panel().getByRole("button", { name: "Segundo color: Amarillo" }));
+    fireEvent.change(panel().getByRole("slider", { name: /Velocidad/ }).parentElement!.querySelector("input")!, {
+      target: { value: "20" },
+    });
+    expect(lastDoc(engine).effects.find((fx) => fx.id === id)).toMatchObject({ color: "#00ff00", color2: "#ffff00", speedCpm: 20 });
+    // Por el cable: el PAR #1 en verde o en amarillo, nunca en el rojo de antes.
+    await waitFor(() => expect([[0, 255, 0], [255, 255, 0]]).toContainEqual([...par1(engine)]));
+
+    // Una ola de brillo con su color: "Ola" en azul.
+    await user.click(screen.getByRole("button", { name: "PAR: ola" }));
+    await user.click(within(screen.getByRole("region", { name: "Ajustes de PAR: ola" })).getByRole("button", { name: "Color: Azul" }));
+    expect(lastDoc(engine).effects.find((fx) => fx.name === "PAR: ola")!.color).toBe("#0000ff");
+  });
+
+  it("si el Color fijo pinta el efecto, elegir un color en sus ajustes lo suelta para que se vea", async () => {
+    const { user, engine } = await withTemplate();
+    await user.click(screen.getByRole("button", { name: "Escenario" }));
+    await user.click(screen.getByRole("button", { name: /^PAR/, expanded: false }));
+    await user.click(screen.getByRole("button", { name: "PAR: ida y vuelta" }));
+    await user.click(screen.getByRole("button", { name: "PAR: Rojo" }));
+    await waitFor(() => expect(playback(engine).heldColors).not.toEqual({}));
+    const panel = within(screen.getByRole("region", { name: "Ajustes de PAR: ida y vuelta" }));
+    expect(await panel.findByText(/El Color fijo de PAR \(rojo\) está pintando este efecto/)).toBeInTheDocument();
+    await user.click(panel.getByRole("button", { name: "Color: Cian" }));
+    await waitFor(() => expect(playback(engine).heldColors).toEqual({}));
+  });
+});
+
 describe("Lo que se mueve solo", () => {
   it("arriba se ve qué efectos corren y de qué momento, y Detener los para desde cualquier sección", async () => {
     const { user, engine } = await withTemplate();

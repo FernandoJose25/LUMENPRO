@@ -1892,6 +1892,24 @@ fn a_bar_with_a_white_per_point_lights_it_when_the_colour_is_white() {
 }
 
 #[test]
+fn a_brightness_wave_with_its_own_colour_paints_its_lights_while_it_runs() {
+    let mut r = Rig::new();
+    r.doc["effects"].as_array_mut().unwrap().push(json!({ "id": "ola", "groupId": "pars", "channelType": "DIMMER",
+        "waveform": "sine", "speedCpm": 60, "min": 0, "max": 255, "phaseOffsetDeg": 90, "color": "#0000ff" }));
+    r.reset();
+    r.set("p1", "red", 200);
+    r.send(json!({ "type": "startEffect", "id": "ola" }));
+    r.run(300.0);
+    assert_eq!([r.live("p1", "red"), r.live("p1", "green"), r.live("p1", "blue")], [0, 0, 255], "azul");
+    assert_eq!(r.live("p2", "blue"), 255);
+    let dims: Vec<u64> = (0..5).map(|_| { r.run(100.0); r.live("p1", "dim") }).collect();
+    assert!(dims.iter().any(|d| *d != dims[0]), "el brillo sube y baja: {dims:?}");
+    r.send(json!({ "type": "stopEffect", "id": "ola" }));
+    r.run(20.0);
+    assert_eq!((r.live("p1", "red"), r.live("p1", "blue")), (200, 0), "vuelve a lo de antes");
+}
+
+#[test]
 fn at_random_each_par_is_on_or_off_on_its_own() {
     let mut r = Rig::new();
     r.doc["effects"][0]["waveform"] = json!("random");

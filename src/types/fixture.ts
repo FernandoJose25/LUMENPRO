@@ -36,6 +36,12 @@ export type ChannelType =
   | "FINE"
   | "OTHER";
 
+/** Los que hacen al color de una luz (como `ChannelType::is_color` en show-engine). */
+export const COLOR_CHANNEL_TYPES: ChannelType[] = [
+  "RED", "GREEN", "BLUE", "WHITE", "AMBER", "UV", "LIME", "INDIGO", "CYAN", "MAGENTA", "YELLOW", "HUE", "SATURATION",
+  "CTO", "COLOR", "COLOR_WHEEL",
+];
+
 export const CHANNEL_TYPE_LABELS: Record<ChannelType, string> = {
   PAN: "Pan",
   PAN_FINE: "Pan Fine",

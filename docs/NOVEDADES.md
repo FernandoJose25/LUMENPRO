@@ -1,3 +1,11 @@
+## Novedades de la 0.10.3
+
+**Los ajustes de cada efecto, en el Escenario.** Toca un efecto: se prende y a la derecha aparecen sus ajustes, sus colores (uno y, si alterna, el segundo), la velocidad o cada cuántos golpes, a qué sigue (tiempo, ritmo, graves) y el tamaño en las cabezas. Si no tocas nada queda como viene; lo que cambies llega a las luces al instante. **Restablecer** lo deja como venía.
+
+**Efectos de brillo con su color.** Ola, latido, estrobo, al azar… ahora pueden llevar su propio color: "Ola" en azul es una ola azul. Con **Del momento**, usan el color del momento como antes.
+
+**Colores que corren** era el mismo arcoíris con otro nombre: ahora es uno solo.
+
 ## Novedades de la 0.10.2
 
 **El Color fijo pinta los efectos.** Un efecto de color (ida y vuelta, barrido, policía, fuego, arcoíris…) sigue moviéndose igual con el color que elijas en **Color fijo**, en vez de quedar tapado. Prenderlo otra vez ya no suelta el color.

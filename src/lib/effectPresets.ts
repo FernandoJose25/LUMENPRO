@@ -190,7 +190,14 @@ export function presetsFor(rig: Rig, groupId: string): EffectPreset[] {
 }
 
 /** Sube cuando el catálogo cambia: el show se pone al día una vez. */
-export const CATALOG_VERSION = 2;
+export const CATALOG_VERSION = 3;
+
+/** En qué versión del catálogo apareció cada efecto listo nuevo (los demás,
+ *  en la 1): al ponerse al día solo llegan los que no estaban. */
+const SINCE: Record<string, number> = { "arcoíris": 2, "arcoíris al ritmo": 2, "color con los graves": 2 };
+
+/** El mismo effect con otro nombre: va al nuevo también en los momentos. */
+const RENAMED = new Set(["colores que corren", "rojo con los graves"]);
 
 /**
  * Effects de antes que eran un pedazo de otro: una onda sobre un solo canal
@@ -225,16 +232,21 @@ type Doc = Pick<ShowDoc, "instances" | "definitions" | "groups" | "effects" | "m
 export function catalogUpdate(
   doc: Doc,
   makeId: (prefix: string) => string,
+  /** La versión del catálogo con la que ya se puso al día (0: nunca). */
+  from = 0,
 ): Pick<Doc, "effects" | "moments" | "livePads" | "phonePads" | "controls" | "timelines"> | null {
   const now = Date.now();
   const lower = (s: string) => s.toLowerCase();
   let effects = [...doc.effects];
   const replaced = new Map<string, string>();
+  const renamed = new Set<string>();
   for (const group of doc.groups) {
     const prefix = lower(`${group.name}: `);
     for (const fx of doc.effects) {
-      const piece = lower(fx.name).startsWith(prefix) ? PIECES[lower(fx.name).slice(prefix.length)] : undefined;
-      if (!piece || fx.kind !== "wave" || fx.groupId !== group.id) continue;
+      const old = lower(fx.name).startsWith(prefix) ? lower(fx.name).slice(prefix.length) : "";
+      const piece = PIECES[old];
+      if (!piece || fx.groupId !== group.id || (fx.kind !== "wave" && !RENAMED.has(old))) continue;
+      if (RENAMED.has(old)) renamed.add(fx.id);
       const name = lower(`${group.name}: ${piece}`);
       let whole = effects.find((e) => lower(e.name) === name && e.groupId === group.id);
       const preset = EFFECT_PRESETS.find((p) => lower(p.name) === piece);
@@ -257,11 +269,18 @@ export function catalogUpdate(
     const pieces = m.effectIds.filter((id) => replaced.has(id));
     if (pieces.length === 0) return m;
     const kept = m.effectIds.filter((id) => !replaced.has(id));
-    const wholes = pieces.length > 1 ? pieces.map((id) => replaced.get(id)!) : [];
+    const wholes = pieces.filter((id) => pieces.length > 1 || renamed.has(id)).map((id) => replaced.get(id)!);
     return { ...m, effectIds: [...new Set([...kept, ...wholes])] };
   });
 
-  const added = missingPresets({ ...doc, effects }).map((d) => ({ ...d, id: makeId("effect"), createdAt: now, updatedAt: now }));
+  // Los nuevos desde la última vez; los que el usuario borró no vuelven.
+  const fresh = (name: string) => {
+    const preset = name.slice(name.indexOf(": ") + 2);
+    return (SINCE[preset] ?? 1) > from;
+  };
+  const added = missingPresets({ ...doc, effects })
+    .filter((d) => fresh(lower(d.name)))
+    .map((d) => ({ ...d, id: makeId("effect"), createdAt: now, updatedAt: now }));
   // Sin nada que cambiar no es un paso de Deshacer.
   if (replaced.size === 0 && added.length === 0) return null;
   return {

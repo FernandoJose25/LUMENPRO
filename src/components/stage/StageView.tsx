@@ -7,6 +7,7 @@ import { engineDoc, useFixtureStore } from "@/lib/fixtureStore";
 import { PreviewShow } from "@/lib/preview";
 import { HeldColors } from "@/components/live/HeldColors";
 import { EffectGroups } from "@/components/effects/EffectGroups";
+import { EffectSettings } from "@/components/effects/EffectSettings";
 import type { EngineMessage } from "@/types/engine";
 import type { ChannelValues } from "@/lib/fade";
 import { readAxis, writeAxis } from "@/lib/panTilt";
@@ -27,6 +28,11 @@ export function StageView() {
   const [windowError, setWindowError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [openEffects, setOpenEffects] = useState<string[]>([]);
+  // El último effect tocado: sus ajustes van a la derecha.
+  const [selectedEffectId, setSelectedEffectId] = useState<string | null>(null);
+  const selectedEffect = effects.find((fx) => fx.id === selectedEffectId);
+  const toggleEffect = (id: string) =>
+    send({ type: playback.runningEffectIds.includes(id) ? "stopEffect" : "startEffect", id });
   const defaults =useMemo(() => defaultPlacements(instances, definitions), [instances, definitions]);
   const placementOf = (i: FixtureInstance) => i.placement ?? defaults.get(i.id);
 
@@ -116,7 +122,12 @@ export function StageView() {
                     size="sm"
                     variant={running ? "primary" : "secondary"}
                     aria-pressed={running}
-                    onClick={() => send({ type: running ? "stopEffect" : "startEffect", id: fx.id })}
+                    title="Prende o apaga; sus ajustes quedan a la derecha"
+                    className={cn(fx.id === selectedEffectId && "ring-2 ring-text-primary")}
+                    onClick={() => {
+                      setSelectedEffectId(fx.id);
+                      toggleEffect(fx.id);
+                    }}
                   >
                     {fx.name}
                   </Button>
@@ -156,7 +167,8 @@ export function StageView() {
         ) : null}
       </div>
 
-      <div className="w-72 shrink-0">
+      <div className="flex w-80 shrink-0 flex-col gap-2">
+        <div className={selectedEffect ? "h-[40%] min-h-0 shrink-0" : "h-full"}>
         <Panel title="LUCES">
           <div className="flex flex-col gap-1">
             {instances.map((i) => (
@@ -216,6 +228,23 @@ export function StageView() {
             Restablecer posiciones
           </Button>
         </Panel>
+        </div>
+        {selectedEffect ? (
+          <div className="min-h-0 flex-1">
+            <Panel title="AJUSTES DEL EFECTO">
+              <EffectSettings
+                key={selectedEffect.id}
+                effect={selectedEffect}
+                running={playback.runningEffectIds.includes(selectedEffect.id)}
+                heldColors={playback.heldColors}
+                onToggle={() => toggleEffect(selectedEffect.id)}
+                onReleaseHeld={() =>
+                  send({ type: "action", action: { do: "color", groupId: selectedEffect.groupId, color: null }, press: true })
+                }
+              />
+            </Panel>
+          </div>
+        ) : null}
       </div>
     </div>
   );

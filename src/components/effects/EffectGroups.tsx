@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
 import type { Effect } from "@/types/effect";
-import type { ChannelType } from "@/types/fixture";
+import { COLOR_CHANNEL_TYPES } from "@/types/fixture";
 import type { Group } from "@/types/group";
 
 /** Los de un grupo abierto; si hay de varias clases, con un título por clase. */
@@ -40,11 +40,6 @@ interface Section {
   effects: Effect[];
 }
 
-const COLOR_CHANNELS: ChannelType[] = [
-  "RED", "GREEN", "BLUE", "WHITE", "AMBER", "UV", "LIME", "INDIGO", "CYAN", "MAGENTA", "YELLOW", "HUE", "SATURATION",
-  "CTO", "COLOR", "COLOR_WHEEL",
-];
-
 /** Dentro de un grupo, por lo que hacen. */
 const KINDS = [
   { id: "move", name: "Movimiento" },
@@ -54,7 +49,7 @@ const KINDS = [
 
 export function effectKind(fx: Effect): (typeof KINDS)[number]["id"] {
   if (fx.kind === "figure") return "move";
-  if (fx.kind === "pixels" || COLOR_CHANNELS.includes(fx.channelType)) return "color";
+  if (fx.kind === "pixels" || COLOR_CHANNEL_TYPES.includes(fx.channelType)) return "color";
   return "dimmer";
 }
 

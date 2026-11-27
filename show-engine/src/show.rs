@@ -510,15 +510,16 @@ impl Show {
             Message::ActiveScene { id } => self.edit(|p| p.active_scene_id = id),
             Message::RecallScene { id } => self.recall_scene(&id),
             Message::StartEffect { id } => {
-                // Lo último que se toca manda: una onda sobre un canal de color
-                // prendida a mano se ve aunque su grupo tuviera un color fijo.
+                // Lo último que se toca manda: una onda sobre un canal de color,
+                // o con su propio color, prendida a mano se ve aunque su grupo
+                // tuviera un color fijo.
                 // Los de píxeles, en cambio, toman el color fijo (tick_pixels).
                 let colors = self
                     .doc
                     .effects
                     .iter()
                     .find(|e| e.id == id)
-                    .filter(|e| e.kind == EffectKind::Wave && e.channel_type.is_color());
+                    .filter(|e| e.kind == EffectKind::Wave && (e.channel_type.is_color() || e.color.is_some()));
                 if let Some(group) = colors.and_then(|e| e.group_id.clone()) {
                     self.edit(|p| {
                         p.held_colors.remove(&group);
@@ -1506,6 +1507,24 @@ impl Show {
                 let value = (effect.min + (effect.max - effect.min) * t).round().clamp(0.0, 255.0) as u8;
                 for channel in channels {
                     writes.push((member.id.clone(), channel.id.clone(), value));
+                }
+            }
+            // Una onda de brillo con su color ("ola" en azul): mientras corre,
+            // sus luces van de ese color.
+            if let Some(hex) = effect.color.as_deref().filter(|_| !effect.channel_type.is_color()) {
+                let rgb = crate::model::rgb_of(Some(hex));
+                let white = rgb.iter().copied().fold(1.0, f64::min);
+                for (member, definition) in &members {
+                    for channel in &definition.channels {
+                        let t = match channel.kind {
+                            ChannelType::Red => rgb[0],
+                            ChannelType::Green => rgb[1],
+                            ChannelType::Blue => rgb[2],
+                            ChannelType::White => white,
+                            _ => continue,
+                        };
+                        writes.push((member.id.clone(), channel.id.clone(), (t * 255.0).round() as u8));
+                    }
                 }
             }
         }

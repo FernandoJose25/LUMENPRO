@@ -196,8 +196,9 @@ interface FixtureStoreValue extends FixtureStoreState {
   addQuinceTemplate: () => void;
   /** Vuelve los momentos, escenas y effects de la plantilla a como los arma. */
   resetQuinceTemplate: () => void;
-  /** Pone los effects al día con los efectos listos (effectPresets.catalogUpdate). */
-  updateEffectCatalog: () => void;
+  /** Pone los effects al día con los efectos listos (effectPresets.catalogUpdate),
+   *  desde la versión del catálogo con la que ya estaba. */
+  updateEffectCatalog: (from?: number) => void;
   /** Uno nuevo de ese tipo, sobre la primera máquina de efectos; sin ninguna,
    *  queda sin asignar (no toca ninguna luz). */
   addSpecial: (kind: SpecialKind) => Special;
@@ -1042,9 +1043,9 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
     [setState],
   );
 
-  const updateEffectCatalog = useCallback(() => {
+  const updateEffectCatalog = useCallback((from = 0) => {
     // Fuera del updater: makeId no debe correr dos veces.
-    const patch = catalogUpdate(stateRef.current, makeId);
+    const patch = catalogUpdate(stateRef.current, makeId, from);
     if (patch) setState((s) => ({ ...s, ...patch }));
   }, [setState]);
 

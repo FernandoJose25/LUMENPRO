@@ -44,7 +44,7 @@ En **Escenario** se ve un simulador con las luces encendidas.
 
 Ve a **Momentos** y toca **Usar plantilla de quinceañera**. Aparecen los momentos de una fiesta típica, ya armados con tus luces: Recepción, Entrada, Vals, Fotos, Brindis, Hora loca, Hora loca con estrobo, Hora loca con música y Cierre.
 
-Pruébalos en **Escenario**: abajo hay un botón por momento, los colores y los efectos.
+Pruébalos en **Escenario**: abajo hay un botón por momento, los colores y los efectos. Al tocar un efecto se prende y a la derecha salen sus **ajustes**: los colores, la velocidad (o cada cuántos golpes), a qué sigue y el tamaño de las figuras. Lo que cambies se ve al instante en las luces; **Restablecer** lo deja como venía.
 
 **Vista previa.** En **Escenario**, toca **Vista previa**: lo que pruebes (momentos, colores, efectos) se ve solo en la pantalla y las luces no cambian. Si te gusta, **Mandar a las luces**; si no, **Salir**.
 
