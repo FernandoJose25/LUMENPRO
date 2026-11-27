@@ -6,7 +6,7 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
  * WebView2, con el localStorage vacío.
  */
 const PREFIX = "lumenpro.";
-const KEYS = ["audio", "dmx.outputs", "dmx.last", "song.output", "live.effectGroups", "effects.catalog"] as const;
+const KEYS = ["audio", "dmx.outputs", "dmx.last", "song.output", "live.effectGroups", "effects.catalog", "music.links"] as const;
 export type SettingKey = (typeof KEYS)[number];
 
 export function readSetting<T>(key: SettingKey): T | null {

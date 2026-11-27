@@ -1,8 +1,12 @@
+## Novedades de la 0.12.0
+
+**Enlaces de YouTube y Spotify en Música.** En **Enlaces de YouTube y Spotify** pega el enlace de una canción, un álbum o una playlist (en la app: Compartir → Copiar enlace) y toca ▶. Suena en el reproductor de LUMEN, una ventana con YouTube que puedes minimizar; las canciones de Spotify se buscan en YouTube por artista y nombre. Pasa sola a la siguiente canción y al siguiente enlace, tiene **Pausa**, **Siguiente** y **Parar**, y se pausa al arrancar el vals.
+
+**Las luces la siguen solas:** al poner un enlace, LUMEN pasa a escuchar **Lo que suena en esta PC**. No se descarga nada, así que necesita internet. Sin YouTube Premium puede haber anuncios; si entras a tu cuenta en el reproductor, queda guardada.
+
 ## Novedades de la 0.11.0
 
 **Música sin descargar canciones.** En Audio Reactive, en **Entrada de audio**, elige **Lo que suena en esta PC**: LUMEN escucha directo lo que sale por los parlantes de la laptop (Spotify, YouTube, VirtualDJ…), sin cable, sin micrófono y sin guardar nada. Las luces siguen los graves, medios, agudos y el ritmo igual que con el micrófono, pero con el sonido limpio. Lo que no tiene es el análisis previo de cada canción de **Música**: para el vals y la línea de tiempo conviene la canción guardada.
-
-Pegar enlaces de Spotify o YouTube no se puede: Spotify no deja leer su audio y de YouTube habría que descargar la canción.
 
 ## Novedades de la 0.10.4
 

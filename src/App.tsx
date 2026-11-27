@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Sidebar, SECTIONS } from "@/components/layout/Sidebar";
 import { Topbar } from "@/components/layout/Topbar";
 import { FixtureStoreProvider, useFixtureStore } from "@/lib/fixtureStore";
@@ -29,6 +29,8 @@ import { useRemoteControl } from "@/lib/remoteControl";
 import { useStagePublisher } from "@/lib/stageMirror";
 import { useTimelineAudio } from "@/lib/timelineAudio";
 import { useMusicPlayer } from "@/lib/musicPlayer";
+import { useLinkPlayer } from "@/lib/links";
+import { PC_AUDIO } from "@/lib/pcAudio";
 import { useEffectCatalog } from "@/lib/effectCatalog";
 
 export default function App() {
@@ -50,6 +52,17 @@ function AppShell() {
   useStagePublisher();
   useTimelineAudio();
   const music = useMusicPlayer();
+  // Un enlace (YouTube/Spotify) suena en la PC: pausa la canción guardada y
+  // las luces pasan a escuchar lo que suena en esta PC.
+  const links = useLinkPlayer(() => {
+    if (music.playing) music.toggle();
+    if (audio.deviceId !== PC_AUDIO) audio.setDeviceId(PC_AUDIO);
+    if (!audio.listening) void audio.start();
+  });
+  const stopLinks = links.stop;
+  useEffect(() => {
+    if (music.playing) stopLinks();
+  }, [music.playing, stopLinks]);
   useEffectCatalog();
 
   return (
@@ -70,7 +83,7 @@ function AppShell() {
         {section === "Live" ? <LiveView /> : null}
         {section === "Momentos" ? <MomentsView /> : null}
         {section === "Línea de tiempo" ? <TimelineView /> : null}
-        {section === "Música" ? <MusicView music={music} /> : null}
+        {section === "Música" ? <MusicView music={music} links={links} /> : null}
         {section === "Escenario" ? <StageView /> : null}
         {section === "Fixtures" ? <FixturesView /> : null}
         {section === "Groups" ? <GroupsView /> : null}

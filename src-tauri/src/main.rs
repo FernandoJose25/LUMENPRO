@@ -8,6 +8,7 @@
 
 mod engine;
 mod link;
+mod links;
 mod pc_audio;
 mod show;
 mod stage_window;
@@ -88,6 +89,7 @@ fn window() {
         .on_window_event(|window, event| {
             link::on_close(window, event);
             stage_window::close_with_main(window, event);
+            links::close_with_main(window, event);
         })
         // Solo se pide al pulsar "Escuchar" (src/lib/audioInput.ts). Con el
         // aviso de WebView2, un "Bloquear" por error queda guardado y no hay
@@ -103,6 +105,10 @@ fn window() {
             link::engine_call,
             link::close_window,
             link::focus_window,
+            links::link_info,
+            links::player_attach,
+            links::player_play,
+            links::player_control,
             pc_audio::pc_audio_start,
             pc_audio::pc_audio_stop,
             show::load_show,

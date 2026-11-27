@@ -8,6 +8,7 @@ import { askConfirm } from "@/lib/dialogs";
 import { useFixtureStore } from "@/lib/fixtureStore";
 import type { MusicPlayer } from "@/lib/musicPlayer";
 import { pcAudioAvailable } from "@/lib/pcAudio";
+import { linkDetail, type LinkPlayer } from "@/lib/links";
 import { saveSong, songShape } from "@/lib/songs";
 import type { PlaylistSong } from "@/types/music";
 
@@ -15,7 +16,7 @@ const songId = () => `song-${Date.now().toString(36)}-${Math.random().toString(3
 
 /** La música de la hora loca, desde la laptop: cada canción viene con su
  *  ritmo analizado y las luces caen en cada golpe sin micrófono. */
-export function MusicView({ music }: { music: MusicPlayer }) {
+export function MusicView({ music, links }: { music: MusicPlayer; links: LinkPlayer }) {
   const store = useFixtureStore();
   const { playlist, addSongs, updateSong, removeSong, moveSong } = store;
   const [pending, setPending] = useState<string[]>([]);
@@ -47,86 +48,86 @@ export function MusicView({ music }: { music: MusicPlayer }) {
 
   return (
     <div className="flex min-w-0 flex-1 gap-2 p-2">
-      <div className="flex w-[30rem] shrink-0 flex-col">
-        <Panel title="MÚSICA DE LA HORA LOCA">
-          <p className="mb-3 text-xs text-text-secondary">
-            La música sale de la laptop por el cable a la consola. Cada canción se analiza al agregarla: las luces que siguen la
-            música caen en cada golpe, sin micrófono.
-          </p>
-          {pcAudioAvailable() ? (
+      <div className="flex w-[30rem] shrink-0 flex-col gap-2">
+        <div className="min-h-0 flex-1">
+          <Panel title="MÚSICA DE LA HORA LOCA">
             <p className="mb-3 text-xs text-text-secondary">
-              ¿Sin descargar canciones? Pon la música en Spotify o YouTube en esta laptop y en Audio Reactive elige{" "}
-              <b className="text-text-primary">Lo que suena en esta PC</b>: las luces siguen los graves igual, sin guardar
-              nada. Lo único que no hay es el análisis previo de cada canción.
+              La música sale de la laptop por el cable a la consola. Cada canción se analiza al agregarla: las luces que siguen la
+              música caen en cada golpe, sin micrófono.
             </p>
-          ) : null}
-          <label className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-control bg-accent px-3.5 text-sm font-medium text-bg hover:bg-accent/90">
-            + Agregar canciones
-            <input
-              type="file"
-              multiple
-              accept="audio/*,.mp3,.m4a,.wav,.ogg"
-              aria-label="Canciones"
-              className="sr-only"
-              onChange={(e) => {
-                const files = [...(e.target.files ?? [])];
-                e.target.value = "";
-                if (files.length > 0) void handleFiles(files);
-              }}
-            />
-          </label>
-          {pending.length > 0 ? (
-            <p role="status" className="mt-2 text-xs text-text-secondary">
-              Analizando {pending.join(", ")}…
-            </p>
-          ) : null}
-          {failed.length > 0 ? (
-            <p role="alert" className="mt-2 text-xs text-state-danger">
-              No pude leer {failed.join(", ")}. Prueba con un MP3.
-            </p>
-          ) : null}
+            <label className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-control bg-accent px-3.5 text-sm font-medium text-bg hover:bg-accent/90">
+              + Agregar canciones
+              <input
+                type="file"
+                multiple
+                accept="audio/*,.mp3,.m4a,.wav,.ogg"
+                aria-label="Canciones"
+                className="sr-only"
+                onChange={(e) => {
+                  const files = [...(e.target.files ?? [])];
+                  e.target.value = "";
+                  if (files.length > 0) void handleFiles(files);
+                }}
+              />
+            </label>
+            {pending.length > 0 ? (
+              <p role="status" className="mt-2 text-xs text-text-secondary">
+                Analizando {pending.join(", ")}…
+              </p>
+            ) : null}
+            {failed.length > 0 ? (
+              <p role="alert" className="mt-2 text-xs text-state-danger">
+                No pude leer {failed.join(", ")}. Prueba con un MP3.
+              </p>
+            ) : null}
 
-          <ol className="mt-3 flex flex-col gap-1.5" aria-label="Lista de canciones">
-            {playlist.map((song, index) => (
-              <li
-                key={song.id}
-                className={cn(
-                  "flex items-center gap-2 rounded-control border px-2 py-1.5 text-sm",
-                  song.id === music.songId ? "border-accent bg-accent/15" : "border-border bg-panel2",
-                )}
-              >
-                <button
-                  type="button"
-                  aria-label={`Poner ${song.name}`}
-                  onClick={() => music.play(song.id)}
-                  className="h-7 w-7 shrink-0 rounded-control text-text-primary hover:bg-panel"
+            <ol className="mt-3 flex flex-col gap-1.5" aria-label="Lista de canciones">
+              {playlist.map((song, index) => (
+                <li
+                  key={song.id}
+                  className={cn(
+                    "flex items-center gap-2 rounded-control border px-2 py-1.5 text-sm",
+                    song.id === music.songId ? "border-accent bg-accent/15" : "border-border bg-panel2",
+                  )}
                 >
-                  {song.id === music.songId && music.playing ? "♪" : "▶"}
-                </button>
-                <span className="min-w-0 flex-1 truncate text-text-primary" title={song.name}>
-                  {song.name}
-                </span>
-                <span className="shrink-0 font-mono text-[11px] text-text-secondary">{formatTime(song.durationMs).replace(/\.\d$/, "")}</span>
-                <Tempo song={song} onChange={(bpm) => updateSong(song.id, { bpm })} />
-                <RowButton label={`Subir ${song.name}`} disabled={index === 0} onClick={() => moveSong(song.id, -1)}>
-                  ↑
-                </RowButton>
-                <RowButton label={`Bajar ${song.name}`} disabled={index === playlist.length - 1} onClick={() => moveSong(song.id, 1)}>
-                  ↓
-                </RowButton>
-                <RowButton
-                  label={`Quitar ${song.name}`}
-                  onClick={() => askConfirm(`¿Quitar «${song.name}» de la lista?`, "Quitar", () => removeSong(song.id))}
-                >
-                  ×
-                </RowButton>
-              </li>
-            ))}
-          </ol>
-          {playlist.length === 0 && pending.length === 0 ? (
-            <p className="mt-3 text-xs text-text-secondary">Todavía no hay canciones.</p>
-          ) : null}
-        </Panel>
+                  <button
+                    type="button"
+                    aria-label={`Poner ${song.name}`}
+                    onClick={() => music.play(song.id)}
+                    className="h-7 w-7 shrink-0 rounded-control text-text-primary hover:bg-panel"
+                  >
+                    {song.id === music.songId && music.playing ? "♪" : "▶"}
+                  </button>
+                  <span className="min-w-0 flex-1 truncate text-text-primary" title={song.name}>
+                    {song.name}
+                  </span>
+                  <span className="shrink-0 font-mono text-[11px] text-text-secondary">{formatTime(song.durationMs).replace(/\.\d$/, "")}</span>
+                  <Tempo song={song} onChange={(bpm) => updateSong(song.id, { bpm })} />
+                  <RowButton label={`Subir ${song.name}`} disabled={index === 0} onClick={() => moveSong(song.id, -1)}>
+                    ↑
+                  </RowButton>
+                  <RowButton label={`Bajar ${song.name}`} disabled={index === playlist.length - 1} onClick={() => moveSong(song.id, 1)}>
+                    ↓
+                  </RowButton>
+                  <RowButton
+                    label={`Quitar ${song.name}`}
+                    onClick={() => askConfirm(`¿Quitar «${song.name}» de la lista?`, "Quitar", () => removeSong(song.id))}
+                  >
+                    ×
+                  </RowButton>
+                </li>
+              ))}
+            </ol>
+            {playlist.length === 0 && pending.length === 0 ? (
+              <p className="mt-3 text-xs text-text-secondary">Todavía no hay canciones.</p>
+            ) : null}
+          </Panel>
+        </div>
+        {pcAudioAvailable() ? (
+          <div className="min-h-0 flex-1">
+            <LinksPanel links={links} />
+          </div>
+        ) : null}
       </div>
 
       <div className="flex min-w-0 flex-1 flex-col gap-2">
@@ -181,6 +182,120 @@ export function MusicView({ music }: { music: MusicPlayer }) {
         </div>
       </div>
     </div>
+  );
+}
+
+/** Canciones y playlists de YouTube o Spotify por enlace: suenan en el
+ *  reproductor de LUMEN y las luces las siguen sin guardar nada. */
+function LinksPanel({ links }: { links: LinkPlayer }) {
+  const [text, setText] = useState("");
+  const now = links.playing;
+  const current = now ? links.links.find((l) => l.id === now.id) : undefined;
+
+  return (
+    <Panel title="ENLACES DE YOUTUBE Y SPOTIFY">
+      <p className="mb-3 text-xs text-text-secondary">
+        Pega el enlace de una canción, álbum o playlist (en la app: Compartir → Copiar enlace). Suena en el reproductor de
+        LUMEN desde YouTube (las de Spotify se buscan ahí por nombre) y las luces la siguen. No se descarga nada: necesita
+        internet, y sin YouTube Premium puede haber anuncios.
+      </p>
+      <form
+        className="flex gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void links.add(text).then((ok) => ok && setText(""));
+        }}
+      >
+        <input
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          aria-label="Enlace de YouTube o Spotify"
+          placeholder="https://open.spotify.com/playlist/…"
+          className="h-9 min-w-0 flex-1 rounded-control border border-border bg-panel2 px-2 text-sm text-text-primary outline-none"
+        />
+        <Button type="submit" variant="primary" disabled={links.busy || !text.trim()}>
+          {links.busy ? "Leyendo…" : "Agregar"}
+        </Button>
+      </form>
+      {links.error ? (
+        <p role="alert" className="mt-2 text-xs text-state-danger">
+          {links.error}
+        </p>
+      ) : null}
+
+      {now && current ? (
+        <div className="mt-3 rounded-control border border-accent bg-accent/15 p-2">
+          <p className="truncate text-sm text-text-primary" title={now.title ?? current.title}>
+            ♪ {now.title ?? (current.source === "spotify" ? current.tracks[now.track] : current.title)}
+          </p>
+          {current.tracks.length > 1 ? (
+            <p className="truncate text-[11px] text-text-secondary">
+              Canción {now.track + 1} de {current.tracks.length} · {current.title}
+            </p>
+          ) : null}
+          <div className="mt-2 flex gap-2">
+            <Button size="sm" onClick={links.toggle}>
+              {now.paused ? "▶ Seguir" : "❚❚ Pausa"}
+            </Button>
+            <Button size="sm" onClick={links.next}>
+              ⏭ Siguiente
+            </Button>
+            <Button size="sm" variant="danger" onClick={links.stop}>
+              ■ Parar
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      <ol className="mt-3 flex flex-col gap-1.5" aria-label="Lista de enlaces">
+        {links.links.map((link, index) => (
+          <li
+            key={link.id}
+            className={cn(
+              "flex items-center gap-2 rounded-control border px-2 py-1.5 text-sm",
+              link.id === now?.id ? "border-accent bg-accent/15" : "border-border bg-panel2",
+            )}
+          >
+            <button
+              type="button"
+              aria-label={`Poner ${link.title}`}
+              onClick={() => links.play(link.id)}
+              className="h-7 w-7 shrink-0 rounded-control text-text-primary hover:bg-panel"
+            >
+              {link.id === now?.id && !now.paused ? "♪" : "▶"}
+            </button>
+            <span
+              aria-hidden
+              className="h-2 w-2 shrink-0 rounded-full"
+              style={{ background: link.source === "youtube" ? "#ff0033" : "#1db954" }}
+            />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-text-primary" title={link.title}>
+                {link.title}
+              </span>
+              <span className="block truncate text-[11px] text-text-secondary">{linkDetail(link)}</span>
+            </span>
+            <RowButton label={`Subir ${link.title}`} disabled={index === 0} onClick={() => links.move(link.id, -1)}>
+              ↑
+            </RowButton>
+            <RowButton
+              label={`Bajar ${link.title}`}
+              disabled={index === links.links.length - 1}
+              onClick={() => links.move(link.id, 1)}
+            >
+              ↓
+            </RowButton>
+            <RowButton
+              label={`Quitar ${link.title}`}
+              onClick={() => askConfirm(`¿Quitar «${link.title}» de la lista?`, "Quitar", () => links.remove(link.id))}
+            >
+              ×
+            </RowButton>
+          </li>
+        ))}
+      </ol>
+      {links.links.length === 0 ? <p className="mt-3 text-xs text-text-secondary">Todavía no hay enlaces.</p> : null}
+    </Panel>
   );
 }
 
