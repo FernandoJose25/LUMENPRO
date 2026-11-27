@@ -190,7 +190,8 @@ export function presetsFor(rig: Rig, groupId: string): EffectPreset[] {
 }
 
 /** Sube cuando el catálogo cambia: el show se pone al día una vez. */
-export const CATALOG_VERSION = 3;
+// 4: otra vez lo de la 3, porque Deshacer podía devolver los pedazos.
+export const CATALOG_VERSION = 4;
 
 /** En qué versión del catálogo apareció cada efecto listo nuevo (los demás,
  *  en la 1): al ponerse al día solo llegan los que no estaban. */

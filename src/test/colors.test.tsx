@@ -120,6 +120,20 @@ describe("Ajustes del efecto en Escenario", () => {
     expect(lastDoc(engine).effects.find((fx) => fx.name === "PAR: ola")!.color).toBe("#0000ff");
   });
 
+  it("del fuego al hielo queda solo el hielo, y el fuego se puede poner de un color", async () => {
+    const { user, engine } = await withTemplate();
+    await user.click(screen.getByRole("button", { name: "Escenario" }));
+    await user.click(screen.getByRole("button", { name: /^PAR/, expanded: false }));
+    const idOf = (name: string) => lastDoc(engine).effects.find((fx) => fx.name === name)!.id;
+    await user.click(screen.getByRole("button", { name: "PAR: fuego" }));
+    const panel = within(screen.getByRole("region", { name: "Ajustes de PAR: fuego" }));
+    expect(panel.getByRole("button", { name: "Sus colores" })).toHaveAttribute("aria-pressed", "true");
+    await user.click(panel.getByRole("button", { name: "Color: Verde" }));
+    expect(lastDoc(engine).effects.find((fx) => fx.name === "PAR: fuego")!.color).toBe("#00ff00");
+    await user.click(screen.getByRole("button", { name: "PAR: hielo" }));
+    await waitFor(() => expect(playback(engine).runningEffectIds).toEqual([idOf("PAR: hielo")]));
+  });
+
   it("si el Color fijo pinta el efecto, elegir un color en sus ajustes lo suelta para que se vea", async () => {
     const { user, engine } = await withTemplate();
     await user.click(screen.getByRole("button", { name: "Escenario" }));
@@ -131,6 +145,32 @@ describe("Ajustes del efecto en Escenario", () => {
     expect(await panel.findByText(/El Color fijo de PAR \(rojo\) está pintando este efecto/)).toBeInTheDocument();
     await user.click(panel.getByRole("button", { name: "Color: Cian" }));
     await waitFor(() => expect(playback(engine).heldColors).toEqual({}));
+  });
+});
+
+describe("Los efectos a medias no vuelven", () => {
+  it("un show con la ola en pedazos se arregla al abrir, aunque ya se hubiera puesto al día, y Deshacer no los devuelve", async () => {
+    const { engine } = await withTemplate();
+    const doc = lastDoc(engine);
+    const par = doc.groups.find((g) => g.name === "PAR")!;
+    const piece = (id: string, name: string, channelType: string) => ({
+      ...doc.effects.find((fx) => fx.name === "PAR: ola")!, id, name, channelType, kind: "wave", groupId: par.id,
+    });
+    const pieces = [piece("r", "PAR: ola roja", "RED"), piece("g", "PAR: ola verde", "GREEN"), piece("b", "PAR: ola azul", "BLUE")];
+    const old = {
+      ...doc,
+      effects: [...doc.effects, ...pieces],
+      moments: doc.moments.map((m) => (m.name === "Entrada" ? { ...m, effectIds: ["b"] } : m)),
+    };
+    cleanup();
+    localStorage.clear();
+    localStorage.setItem("lumenpro.effects.catalog", String(CATALOG_VERSION));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(old));
+    const again = fakeEngine();
+    render(<App />);
+    await waitFor(() => expect(lastDoc(again).effects.map((fx) => fx.name)).not.toContain("PAR: ola roja"));
+    expect(lastDoc(again).moments.find((m) => m.name === "Entrada")!.effectIds).toEqual([]);
+    expect(screen.getByRole("button", { name: "Deshacer" })).toBeDisabled();
   });
 });
 
@@ -250,6 +290,8 @@ describe("Shows de la 0.2", () => {
     render(<App />);
     await waitFor(() => expect(lastDoc(again).effects.length).toBe(doc.effects.length));
     expect(localStorage.getItem("lumenpro.effects.catalog")).toBe(String(CATALOG_VERSION));
+    // No es algo que programó el usuario: Deshacer no lo quita.
+    expect(screen.getByRole("button", { name: "Deshacer" })).toBeDisabled();
   });
 
   it("el golpe de graves de la plantilla vieja queda apagado sin música", async () => {

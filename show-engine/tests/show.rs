@@ -1857,7 +1857,11 @@ fn alternate_and_halves_swap_their_two_colours_each_half_cycle() {
 fn the_new_drawings_stay_within_their_colours() {
     for pattern in ["bounce", "fire", "confetti", "colorCycle", "jump", "center", "lightning", "flash", "wipe"] {
         let mut r = Rig::new();
-        led_bar(&mut r, pattern, json!({ "color": "#00ff00", "speedCpm": 45 }));
+        // Los que traen sus colores, sin uno elegido: con uno, el salto de
+        // color o "todos cambian" quedan de ese color fijo.
+        let own = ["fire", "confetti", "colorCycle", "jump"].contains(&pattern);
+        let patch = if own { json!({ "speedCpm": 45 }) } else { json!({ "color": "#00ff00", "speedCpm": 45 }) };
+        led_bar(&mut r, pattern, patch);
         let mut seen = std::collections::BTreeSet::new();
         for _ in 0..40 {
             r.run(37.0);
@@ -1907,6 +1911,41 @@ fn a_brightness_wave_with_its_own_colour_paints_its_lights_while_it_runs() {
     r.send(json!({ "type": "stopEffect", "id": "ola" }));
     r.run(20.0);
     assert_eq!((r.live("p1", "red"), r.live("p1", "blue")), (200, 0), "vuelve a lo de antes");
+}
+
+#[test]
+fn an_effect_turned_on_by_hand_replaces_the_one_doing_the_same_in_its_group() {
+    let mut r = Rig::new();
+    let wave = |id: &str, kind: &str, channel: &str| {
+        json!({ "id": id, "groupId": "pars", "kind": kind, "pattern": "fire", "channelType": channel, "speedCpm": 30, "min": 0, "max": 255 })
+    };
+    for fx in [wave("fuego", "pixels", "RED"), wave("hielo", "pixels", "RED"), wave("latido", "wave", "DIMMER")] {
+        r.doc["effects"].as_array_mut().unwrap().push(fx);
+    }
+    r.reset();
+    r.send(json!({ "type": "startEffect", "id": "fuego" }));
+    r.send(json!({ "type": "startEffect", "id": "latido" }));
+    r.send(json!({ "type": "startEffect", "id": "hielo" }));
+    // Del fuego al hielo queda el hielo; el latido (brillo) sigue con él.
+    assert_eq!(r.running(), json!(["latido", "hielo"]));
+    // Uno de un momento no apaga a los demás.
+    r.moment("m", json!({ "effectIds": ["fuego", "hielo"] }));
+    r.start("m");
+    r.run(20.0);
+    assert_eq!(r.running(), json!(["fuego", "hielo"]));
+}
+
+#[test]
+fn fire_with_its_own_colour_flickers_in_that_colour() {
+    let mut r = Rig::new();
+    led_bar(&mut r, "fire", json!({ "speedCpm": 30, "color": "#00ff00" }));
+    for _ in 0..10 {
+        r.run(70.0);
+        for n in 0..4 {
+            let [red, green, blue] = pixel(&r, n);
+            assert!(red == 0 && blue == 0 && green > 0, "fuego verde: {:?}", pixel(&r, n));
+        }
+    }
 }
 
 #[test]

@@ -230,7 +230,7 @@ describe("Guardar, exportar e importar el show", () => {
     const user = userEvent.setup();
     fakeEngine();
     render(<App />);
-    await user.click(screen.getByRole("button", { name: "Save" }));
+    await user.click(screen.getByRole("button", { name: "Guardar" }));
 
     expect(await screen.findByRole("button", { name: "Guardado" })).toBeInTheDocument();
     const [, args] = vi.mocked(invoke).mock.calls.find(([cmd]) => cmd === "save_show")!;
@@ -248,7 +248,7 @@ describe("Guardar, exportar e importar el show", () => {
       },
     });
     render(<App />);
-    await user.click(screen.getByRole("button", { name: "Save" }));
+    await user.click(screen.getByRole("button", { name: "Guardar" }));
     expect(await screen.findByRole("button", { name: "Error al guardar" })).toBeInTheDocument();
   });
 

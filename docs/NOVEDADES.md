@@ -1,3 +1,11 @@
+## Novedades de la 0.10.4
+
+**Un efecto a la vez.** Al prender un efecto a mano se apaga el que hacía lo mismo en ese grupo: del fuego al hielo queda solo el hielo. Uno de color y uno de brillo (por ejemplo hielo + latido) sí van juntos. Los efectos de un momento no cambian.
+
+**El fuego, el arcoíris y los que traen sus colores también se pueden poner de un color:** siguen igual, en ese color. **Sus colores** los devuelve a como venían.
+
+**Deshacer ya no devuelve los efectos a medias.** Arreglar los efectos viejos no es algo que programaste, así que Deshacer no lo deshace. Si lo deshiciste antes, se arregla otra vez al abrir. Los botones de arriba ahora dicen **Deshacer**, **Rehacer** y **Guardar**.
+
 ## Novedades de la 0.10.3
 
 **Los ajustes de cada efecto, en el Escenario.** Toca un efecto: se prende y a la derecha aparecen sus ajustes, sus colores (uno y, si alterna, el segundo), la velocidad o cada cuántos golpes, a qué sigue (tiempo, ritmo, graves) y el tamaño en las cabezas. Si no tocas nada queda como viene; lo que cambies llega a las luces al instante. **Restablecer** lo deja como venía.

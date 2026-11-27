@@ -203,21 +203,21 @@ function UndoButtons() {
         variant="ghost"
         size="sm"
         aria-label="Deshacer"
-        title="Deshacer lo último programado (Ctrl+Z). No cambia los faders."
+        title="Vuelve atrás lo último que programaste: un efecto, una escena, un momento (Ctrl+Z). No mueve los faders ni apaga lo que está prendido."
         disabled={!canUndo}
         onClick={undo}
       >
-        Undo
+        ↶ Deshacer
       </Button>
       <Button
         variant="ghost"
         size="sm"
         aria-label="Rehacer"
-        title="Rehacer (Ctrl+Y)"
+        title="Vuelve a poner lo que deshiciste (Ctrl+Y)"
         disabled={!canRedo}
         onClick={redo}
       >
-        Redo
+        ↷ Rehacer
       </Button>
     </>
   );
@@ -237,8 +237,13 @@ function SaveButton({ onSave }: { onSave: () => Promise<void> }) {
   };
 
   return (
-    <Button variant={result === "Error al guardar" ? "danger" : "secondary"} size="sm" onClick={handleClick}>
-      {result ?? "Save"}
+    <Button
+      variant={result === "Error al guardar" ? "danger" : "secondary"}
+      size="sm"
+      title="Se guarda solo; esto lo guarda ya mismo"
+      onClick={handleClick}
+    >
+      {result ?? "Guardar"}
     </Button>
   );
 }

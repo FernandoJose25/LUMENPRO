@@ -407,10 +407,17 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
   const [history, setHistory] = useState(EMPTY_HISTORY);
   const historyRef = useRef(history);
   const lastDoc = useRef(docOf(state));
+  /** Un cambio que no es un paso de Deshacer: pasa a ser el punto de partida. */
+  const quietDoc = useRef<ShowDoc | null>(null);
 
   useEffect(() => {
     const before = lastDoc.current;
     if (sameDoc(before, state)) return;
+    if (quietDoc.current && sameDoc(quietDoc.current, state)) {
+      quietDoc.current = null;
+      lastDoc.current = docOf(state);
+      return;
+    }
     lastDoc.current = docOf(state);
     historyRef.current = recordChange(historyRef.current, before, lastDoc.current, Date.now());
     setHistory(historyRef.current);
@@ -1046,7 +1053,12 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
   const updateEffectCatalog = useCallback((from = 0) => {
     // Fuera del updater: makeId no debe correr dos veces.
     const patch = catalogUpdate(stateRef.current, makeId, from);
-    if (patch) setState((s) => ({ ...s, ...patch }));
+    if (!patch) return;
+    const next = { ...stateRef.current, ...patch };
+    // Es una puesta al día, no algo que programó el usuario: Deshacer no la
+    // quita (antes sí, y volvían los efectos a medias).
+    quietDoc.current = docOf(next);
+    setState(next);
   }, [setState]);
 
   const paintMoment = useCallback(

@@ -414,6 +414,17 @@ fn level_of(effect: &Effect, levels: Option<Levels>) -> Option<f64> {
     }
 }
 
+/// Lo que mueve un effect: 0 el color, 1 el brillo (u otro canal), 2 las
+/// cabezas. Dos de la misma clase en un grupo se pisan.
+fn effect_class(effect: &Effect) -> u8 {
+    match effect.kind {
+        EffectKind::Figure => 2,
+        EffectKind::Pixels => 0,
+        EffectKind::Wave if effect.channel_type.is_color() || effect.color.is_some() => 0,
+        EffectKind::Wave => 1,
+    }
+}
+
 fn smooth(t: f64) -> f64 {
     t * t * (3.0 - 2.0 * t)
 }
@@ -524,6 +535,20 @@ impl Show {
                     self.edit(|p| {
                         p.held_colors.remove(&group);
                     });
+                }
+                // Prendido a mano, reemplaza al que hacía lo mismo en su grupo
+                // (del fuego al hielo queda solo el hielo); uno de color y uno
+                // de brillo sí van juntos. Los de un momento no pasan por acá.
+                if let Some(effect) = self.doc.effects.iter().find(|e| e.id == id) {
+                    let (group, class) = (effect.group_id.clone(), effect_class(effect));
+                    let rivals: Vec<String> = self
+                        .doc
+                        .effects
+                        .iter()
+                        .filter(|e| e.id != id && e.group_id == group && effect_class(e) == class)
+                        .map(|e| e.id.clone())
+                        .collect();
+                    self.edit(|p| p.running_effect_ids.retain(|e| !rivals.contains(e)));
                 }
                 self.start_effect(id);
             }
@@ -1550,7 +1575,14 @@ impl Show {
             // Con un Color fijo en el grupo, el efecto sigue igual pero en ese
             // color: los de un color lo toman en vez del suyo; los que traen
             // sus colores (arcoíris, fuego…) quedan con su brillo y ese tono.
-            let tint = self.playback.held_colors.get(group).map(|hex| crate::model::rgb_of(Some(hex)));
+            // Los que traen sus colores también pueden llevar uno elegido: el
+            // fuego titila igual, en ese color.
+            let tint = self
+                .playback
+                .held_colors
+                .get(group)
+                .or(effect.color.as_ref().filter(|_| !effect.pattern.uses_color()))
+                .map(|hex| crate::model::rgb_of(Some(hex)));
 
             // Cada punto: sus canales rojo, verde, azul (y blanco, si tiene
             // uno por punto); sin color, su dimmer.

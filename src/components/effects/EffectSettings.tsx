@@ -63,7 +63,7 @@ export function EffectSettings({
         </Button>
       </div>
 
-      {held && (pixels || effect.color) ? (
+      {held && (pixels || effect.color) && running ? (
         <p className="rounded-control border border-accent/40 bg-accent/10 p-2 text-[11px] text-text-primary">
           El Color fijo de {group?.name ?? "este grupo"} ({heldName}) está pintando este efecto. Si eliges un color aquí,
           se suelta.
@@ -81,7 +81,14 @@ export function EffectSettings({
           onPick={(color2) => paint({ color2 })}
         />
       ) : null}
-      {ownColors ? <p>Trae sus propios colores. Con el Color fijo lo pasas a uno solo.</p> : null}
+      {ownColors ? (
+        <ColorPicker
+          label="Color"
+          value={effect.color ?? null}
+          noneLabel="Sus colores"
+          onPick={(color) => paint({ color })}
+        />
+      ) : null}
       {effect.kind === "wave" && !waveOnColor ? (
         <ColorPicker
           label="Color"

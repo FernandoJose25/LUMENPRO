@@ -20,7 +20,7 @@ describe("Respaldos automáticos", () => {
     const old = JSON.stringify({ definitions: [], instances: [], moments: [{ id: "m", name: "Del respaldo", sceneId: null, chaseId: null, effectIds: [], fadeMs: 0, durationSec: null }] });
     fakeEngine({ list_backups: () => ["2026-11-26", "2026-11-25"], read_backup: ({ day }) => (day === "2026-11-26" ? old : "{}") });
     render(<App />);
-    await user.click(screen.getByRole("button", { name: "Save" }));
+    await user.click(screen.getByRole("button", { name: "Guardar" }));
     await waitFor(() => expect(vi.mocked(invoke).mock.calls.some(([cmd]) => cmd === "save_show")).toBe(true));
     const [, args] = vi.mocked(invoke).mock.calls.find(([cmd]) => cmd === "save_show")!;
     expect((args as { day: string }).day).toMatch(/^\d{4}-\d{2}-\d{2}$/);
