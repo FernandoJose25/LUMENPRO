@@ -438,6 +438,81 @@ fn following_the_bass_each_hit_flashes_and_moves_the_wave_to_the_next_lights() {
 }
 
 #[test]
+fn a_strobe_with_its_own_colour_stays_on_with_a_colour_effect_and_takes_its_colours() {
+    let mut r = Rig::new();
+    r.doc["effects"] = json!([
+        { "id": "strobe", "groupId": "pars", "channelType": "DIMMER", "waveform": "square", "speedCpm": 60,
+          "min": 0, "max": 255, "phaseOffsetDeg": 0, "source": "clock", "beatsPerCycle": 1, "color": "#ff8800" },
+        { "id": "rain", "groupId": "pars", "kind": "pixels", "pattern": "rainbow", "channelType": "RED", "speedCpm": 0,
+          "min": 0, "max": 255, "phaseOffsetDeg": 0, "source": "clock", "beatsPerCycle": 1 },
+    ]);
+    r.reset();
+    r.send(json!({ "type": "startEffect", "id": "strobe" }));
+    r.run(20.0);
+    assert_eq!((r.live("p1", "red"), r.live("p1", "green")), (255, 136), "solo, en su naranja");
+    r.send(json!({ "type": "startEffect", "id": "rain" }));
+    r.send(json!({ "type": "startEffect", "id": "strobe" }));
+    r.run(20.0);
+    let running = r.running();
+    assert!(running.as_array().unwrap().len() == 2 && running.to_string().contains("rain"), "van juntos: {running}");
+    // El color lo pone el arcoíris: el segundo PAR no queda en naranja.
+    assert_eq!((r.live("p2", "red"), r.live("p2", "green"), r.live("p2", "blue")), (0, 255, 255));
+}
+
+/// Música con ritmo: el golpe del ritmo en `beats` y golpes en las bandas.
+fn groove(r: &mut Rig, beats: f64, mid_hits: f64) {
+    r.send(json!({ "type": "audio", "audio": {
+        "levels": { "bass": 1.0, "mid": 0, "treble": 0 }, "beat": { "beats": beats, "bpm": 60 },
+        "hits": { "bass": 0, "mid": mid_hits, "treble": 0 } } }));
+}
+
+#[test]
+fn reggaeton_flashes_on_the_dembow_kick_snare_kick_snare_and_goes_dark_without_music() {
+    let mut r = Rig::new();
+    music(&mut r, "reggaeton");
+    // A 60 BPM, un tiempo por segundo; el dembow cae en 0, ¾, 1 y 1½.
+    let level_at = |r: &mut Rig, beats: f64| {
+        groove(r, beats, 0.0);
+        r.run(1.0);
+        r.live("p1", "red")
+    };
+    for on in [4.0, 4.75, 5.0, 5.5] {
+        assert!(level_at(&mut r, on + 0.01) > 180, "golpe en {on}");
+    }
+    for off in [4.45, 5.4, 5.9] {
+        assert!(level_at(&mut r, off) < 20, "a oscuras en {off}");
+    }
+    // Sin golpes en ningún lado, aunque el ritmo siga contando: a oscuras.
+    r.send(json!({ "type": "audio", "audio": {
+        "levels": { "bass": 0, "mid": 0, "treble": 0 }, "beat": { "beats": 8.0, "bpm": 60 }, "hits": null } }));
+    r.run(2000.0);
+    assert_eq!(r.live("p1", "red"), 0);
+}
+
+#[test]
+fn reggaeton_finds_which_beat_of_the_pair_has_the_snare() {
+    let mut r = Rig::new();
+    music(&mut r, "reggaeton");
+    // La caja suena en 1¾ y 2½ de cada par (corrida un tiempo): los golpes de
+    // los medios lo dicen.
+    let mut mid = 0.0;
+    for cell in 0..12 {
+        for snare in [1.75, 2.5] {
+            mid += 1.0;
+            groove(&mut r, cell as f64 * 2.0 + snare + 0.06, mid);
+            r.run(20.0);
+        }
+    }
+    groove(&mut r, 41.76, mid);
+    r.run(1.0);
+    assert!(r.live("p1", "red") > 180, "la caja, en su lugar");
+    // Sin corregir, aquí habría caja.
+    groove(&mut r, 40.76, mid);
+    r.run(1.0);
+    assert!(r.live("p1", "red") < 60, "donde no hay caja, apagándose");
+}
+
+#[test]
 fn the_beat_clock_keeps_counting_a_while_if_the_window_hangs() {
     let mut r = Rig::new();
     music(&mut r, "beat");

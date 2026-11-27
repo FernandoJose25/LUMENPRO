@@ -22,6 +22,8 @@ export function StageEffects({
   effects,
   groups,
   running,
+  groupId,
+  onGroup,
   selectedId,
   onPick,
   onSelect,
@@ -30,6 +32,10 @@ export function StageEffects({
   effects: Effect[];
   groups: Group[];
   running: string[];
+  /** El grupo que se ve ("" los que no tienen uno). */
+  groupId: string | null;
+  onGroup: (groupId: string) => void;
+  /** El que tiene sus ajustes a la derecha. */
   selectedId: string | null;
   /** Tocar un efecto: lo prende o lo apaga y muestra sus ajustes. */
   onPick: (effect: Effect) => void;
@@ -38,9 +44,6 @@ export function StageEffects({
   onStop: (id: string) => void;
 }) {
   const sections = effectSections(effects, groups);
-  const [groupId, setGroupId] = useState<string | null>(
-    () => sections.find((s) => s.effects.some((fx) => running.includes(fx.id)))?.id ?? null,
-  );
   const [kindOf, setKindOf] = useState<Record<string, Kind>>({});
   if (sections.length === 0) return null;
 
@@ -55,10 +58,7 @@ export function StageEffects({
   /** Lleva a donde está el efecto y muestra sus ajustes. */
   function show(fx: Effect) {
     const s = sections.find((x) => x.effects.includes(fx));
-    if (s) {
-      setGroupId(s.id);
-      setKindOf({ ...kindOf, [s.id]: effectKind(fx) });
-    }
+    if (s) setKindOf({ ...kindOf, [s.id]: effectKind(fx) });
     onSelect(fx);
   }
 
@@ -76,7 +76,7 @@ export function StageEffects({
                 type="button"
                 role="tab"
                 aria-selected={selected}
-                onClick={() => setGroupId(s.id)}
+                onClick={() => onGroup(s.id)}
                 className={cn(
                   "flex h-8 items-center gap-2 rounded-control border px-3 text-xs font-medium",
                   selected ? "border-accent bg-accent/15 text-text-primary" : "border-border bg-panel2 text-text-secondary hover:text-text-primary",
@@ -185,7 +185,13 @@ function EffectCard({
       type="button"
       aria-label={effect.name}
       aria-pressed={running}
-      title={`${text}\nToca para ${running ? "apagarlo" : "prenderlo"}; sus ajustes quedan a la derecha.`}
+      title={`${text}\n${
+        running
+          ? selected
+            ? "Toca para apagarlo."
+            : "Está prendido: toca para ver sus ajustes (no se apaga)."
+          : "Toca para prenderlo; sus ajustes quedan a la derecha."
+      }`}
       onClick={onClick}
       className={cn(
         "flex min-h-[3.4rem] flex-col items-start gap-0.5 rounded-control border px-2.5 py-1.5 text-left transition-colors",

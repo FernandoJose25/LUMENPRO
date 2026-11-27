@@ -460,6 +460,8 @@ pub enum EffectSource {
     Bass,
     Mid,
     Treble,
+    /// El dembow, enganchado al ritmo: bombo, caja, bombo, caja.
+    Reggaeton,
     #[default]
     #[serde(other)]
     Clock,

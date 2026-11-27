@@ -25,7 +25,7 @@ export const WAVEFORM_LABELS: Record<WaveformType, string> = {
 /** Qué marca el paso: la velocidad propia, el ritmo de la música, o cuánto
  *  suena una parte de ella. Sin música (lib/audioInput.ts) todos vuelven a la
  *  velocidad propia. */
-export type EffectSource = "clock" | "beat" | "bass" | "mid" | "treble";
+export type EffectSource = "clock" | "beat" | "bass" | "mid" | "treble" | "reggaeton";
 
 export const EFFECT_SOURCE_LABELS: Record<EffectSource, string> = {
   clock: "Tiempo fijo",
@@ -33,6 +33,7 @@ export const EFFECT_SOURCE_LABELS: Record<EffectSource, string> = {
   bass: "Graves",
   mid: "Medios",
   treble: "Agudos",
+  reggaeton: "Reggaetón",
 };
 
 /** Una onda sobre un canal, o una figura que dibujan las cabezas alrededor de

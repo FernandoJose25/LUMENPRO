@@ -85,6 +85,7 @@ const COLOR: EffectPreset[] = [
     ["Barrido de color", "El naranja barre las luces y el morado lo tapa.", pixels("wipe", { color: "#ff8800", color2: "#8000ff", speedCpm: 15 })],
     ["Color con los graves", "Un fogonazo de color con cada golpe del bombo; sin golpes, apagadas.", pixels("flash", { color: "#ff0000", source: "bass" })],
     ["Salto de color con los graves", "Con cada golpe del bombo, un fogonazo en otro color. Para la hora loca.", pixels("jump", { source: "bass" })],
+    ["Salto de color reggaetón", "Un fogonazo en otro color en cada golpe del dembow (bombo, caja, bombo, caja). Para el perreo.", pixels("jump", { source: "reggaeton" })],
   ]),
 ];
 
@@ -106,6 +107,9 @@ const DIMMER: EffectPreset[] = list("dimmer", ["DIMMER"], [
   ["Al azar con los graves", "Con cada golpe del bombo se prenden otras luces, al azar. El clásico de discoteca.", { waveform: "random", source: "bass" }],
   ["Persecución con los graves", "Con cada golpe del bombo, la luz salta a las siguientes.", { waveform: "square", phaseOffsetDeg: 90, source: "bass", beatsPerCycle: 4 }],
   ["Golpe de caja", "Un fogonazo con cada golpe de caja o de palmas (el «chas» del dembow).", { waveform: "pulse", source: "mid" }],
+  ["Golpe reggaetón", "Un fogonazo en cada golpe del dembow: bum-cha-bum-chá, enganchado al ritmo de la canción. Para el perreo.", { waveform: "pulse", source: "reggaeton" }],
+  ["Al azar reggaetón", "En cada golpe del dembow se prenden otras luces, al azar.", { waveform: "random", source: "reggaeton" }],
+  ["Persecución reggaetón", "En cada golpe del dembow, la luz salta a las siguientes.", { waveform: "square", phaseOffsetDeg: 90, source: "reggaeton", beatsPerCycle: 4 }],
   ["Brillo con los agudos", "Un destello con cada platillo.", { waveform: "pulse", source: "treble" }],
 ]);
 
@@ -160,6 +164,8 @@ const STROBE: EffectPreset[] = list(
     ["Flash al golpe", "Todos los segmentos destellan juntos en cada golpe.", pixels("flash", { color: "#ffffff", ...beat(1) })],
     ["Flash con los graves", "Destellan con cada golpe del bombo; sin golpes, apagados.", pixels("flash", { color: "#ffffff", source: "bass" })],
     ["Cortadora con los graves", "Una pasada rápida con cada golpe del bombo; sin golpes, apagado.", pixels("cutter", { color: "#ffffff", source: "bass" })],
+    ["Cortadora reggaetón", "Una pasada rápida en cada golpe del dembow (bombo, caja, bombo, caja).", pixels("cutter", { color: "#ffffff", source: "reggaeton" })],
+    ["Flash reggaetón", "Todos los segmentos destellan en cada golpe del dembow.", pixels("flash", { color: "#ffffff", source: "reggaeton" })],
     ["Chispazos", "Segmentos sueltos que destellan rápido.", pixels("sparkle", { color: "#ffffff", speedCpm: 90 })],
     ["Destellos de colores", "Destellos de colores rápidos.", pixels("confetti", { speedCpm: 120 })],
     ["Mitad y mitad", "Una mitad y la otra, rápido.", pixels("halves", { color: "#ffffff", speedCpm: 120 })],
@@ -214,7 +220,8 @@ export function presetsFor(rig: Rig, groupId: string): EffectPreset[] {
 /** Sube cuando el catálogo cambia: el show se pone al día una vez. */
 // 4: otra vez lo de la 3, porque Deshacer podía devolver los pedazos.
 // 5: los que siguen los golpes del bombo y de la caja (hora loca).
-export const CATALOG_VERSION = 5;
+// 6: los del reggaetón (dembow enganchado al ritmo).
+export const CATALOG_VERSION = 6;
 
 /** En qué versión del catálogo apareció cada efecto listo nuevo (los demás,
  *  en la 1): al ponerse al día solo llegan los que no estaban. */
@@ -227,6 +234,12 @@ const SINCE: Record<string, number> = {
   "persecución con los graves": 5,
   "golpe de caja": 5,
   "cortadora con los graves": 5,
+  "salto de color reggaetón": 6,
+  "golpe reggaetón": 6,
+  "al azar reggaetón": 6,
+  "persecución reggaetón": 6,
+  "cortadora reggaetón": 6,
+  "flash reggaetón": 6,
 };
 
 /** El mismo effect con otro nombre: va al nuevo también en los momentos. */

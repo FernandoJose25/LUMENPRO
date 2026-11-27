@@ -15,6 +15,8 @@ import { openStageWindow } from "@/lib/stageMirror";
 import type { FixtureInstance, Placement } from "@/types/fixture";
 import { StageCanvas } from "./StageCanvas";
 import { StageEffects } from "./StageEffects";
+import { effectSections } from "@/components/effects/EffectGroups";
+import type { Effect } from "@/types/effect";
 
 /** Coloca las luces como van a estar en el evento y mira cómo se ve. */
 export function StageView() {
@@ -27,11 +29,26 @@ export function StageView() {
   const playback = preview.show?.playback ?? store;
   const [windowError, setWindowError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  // El último effect tocado: sus ajustes van a la derecha.
-  const [selectedEffectId, setSelectedEffectId] = useState<string | null>(null);
-  const selectedEffect = effects.find((fx) => fx.id === selectedEffectId);
   const toggleEffect = (id: string) =>
     send({ type: playback.runningEffectIds.includes(id) ? "stopEffect" : "startEffect", id });
+  // Los efectos van de a un grupo de luces; cada grupo recuerda el último
+  // tocado y sus ajustes van a la derecha (o los del que corre en el grupo).
+  const stageEffects = effects.filter((fx) => fx.groupId);
+  const sections = effectSections(stageEffects, store.groups);
+  const sectionOf = (fx: Effect) => sections.find((s) => s.effects.includes(fx))?.id ?? "";
+  const [groupId, setGroupId] = useState<string | null>(
+    () => sections.find((s) => s.effects.some((fx) => playback.runningEffectIds.includes(fx.id)))?.id ?? null,
+  );
+  const section = sections.find((s) => s.id === groupId) ?? sections[0];
+  const [pickedIn, setPickedIn] = useState<Record<string, string>>({});
+  const selectedEffect =
+    section?.effects.find((fx) => fx.id === pickedIn[section.id]) ??
+    section?.effects.find((fx) => playback.runningEffectIds.includes(fx.id));
+  const showEffect = (fx: Effect) => {
+    const s = sectionOf(fx);
+    setGroupId(s);
+    setPickedIn((picked) => ({ ...picked, [s]: fx.id }));
+  };
   const defaults =useMemo(() => defaultPlacements(instances, definitions), [instances, definitions]);
   const placementOf = (i: FixtureInstance) => i.placement ?? defaults.get(i.id);
 
@@ -105,15 +122,19 @@ export function StageView() {
           onPick={(groupId, color) => send({ type: "action", action: { do: "color", groupId, color }, press: true })}
         />
         <StageEffects
-          effects={effects.filter((fx) => fx.groupId)}
+          effects={stageEffects}
           groups={store.groups}
           running={playback.runningEffectIds}
-          selectedId={selectedEffectId}
+          groupId={section?.id ?? null}
+          onGroup={setGroupId}
+          selectedId={selectedEffect?.id ?? null}
           onPick={(fx) => {
-            setSelectedEffectId(fx.id);
-            toggleEffect(fx.id);
+            // Uno que ya corre y no se estaba mirando: solo sus ajustes; no se apaga.
+            const look = playback.runningEffectIds.includes(fx.id) && fx.id !== selectedEffect?.id;
+            showEffect(fx);
+            if (!look) toggleEffect(fx.id);
           }}
-          onSelect={(fx) => setSelectedEffectId(fx.id)}
+          onSelect={showEffect}
           onStop={(id) => send({ type: "stopEffect", id })}
         />
         <div className="flex shrink-0 items-center gap-3">

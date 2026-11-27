@@ -79,6 +79,32 @@ pub struct Levels {
     pub bass: f64,
     pub mid: f64,
     pub treble: f64,
+    /// El dembow: no llega de la ventana, lo arma el motor con el ritmo.
+    #[serde(default)]
+    pub reggaeton: f64,
+}
+
+/// Los golpes del dembow en cada dos tiempos: bombo, caja, bombo, caja
+/// ("bum-cha-bum-chá").
+const DEMBOW: [f64; 4] = [0.0, 0.75, 1.0, 1.5];
+/// Cuánto dura el fogonazo de cada golpe del dembow, en tiempos.
+const DEMBOW_FADE_BEATS: f64 = 0.15;
+/// Lo que tarda en llegar un golpe de los medios desde que suena (análisis y
+/// conteo), en segundos: para ver en qué lugar del dembow cayó.
+const MID_LAG_S: f64 = 0.06;
+/// El dembow sigue mientras se oyó algún golpe hace menos de esto.
+const HEARD_HOLD_MS: f64 = 1500.0;
+
+/// Golpes del dembow contados (cada uno llega en un instante) y el fogonazo
+/// del último. `shift`: 1 si la caja cae en el otro tiempo de cada par.
+fn dembow(beats: f64, shift: f64) -> (f64, f64) {
+    let b = beats - shift;
+    let cell = (b / 2.0).floor();
+    let pos = b - cell * 2.0;
+    let index = DEMBOW.iter().rposition(|&p| p <= pos).unwrap_or(0);
+    let since = pos - DEMBOW[index];
+    let count = cell * 4.0 + index as f64 - (-since / 0.05).exp();
+    (count, (-since / DEMBOW_FADE_BEATS).exp())
 }
 
 #[derive(Debug, Clone, Copy, Deserialize)]
@@ -375,6 +401,12 @@ pub struct Show {
     figures: BTreeMap<String, f64>,
     /// Las figuras que siguen a una banda: lo que suena, bajando despacio.
     figure_levels: BTreeMap<String, f64>,
+    /// En qué tiempo de cada par cae la caja del dembow (+ el primero, − el
+    /// otro), y el último golpe de los medios contado.
+    dembow_vote: f64,
+    last_mid_hit: f64,
+    /// El último golpe que se oyó (de cualquier banda).
+    last_heard: f64,
     /// Dónde están las cabezas que dibujan una figura. No toca `live`: el
     /// centro es lo que diga `live`, y se puede mover mientras tanto.
     moving: ChannelValues,
@@ -410,6 +442,7 @@ fn cycles_of(effect: &Effect, started: f64, beats: Option<f64>, hits: Option<Lev
         EffectSource::Bass => hits.map(|h| h.bass),
         EffectSource::Mid => hits.map(|h| h.mid),
         EffectSource::Treble => hits.map(|h| h.treble),
+        EffectSource::Reggaeton => hits.map(|h| h.reggaeton),
         EffectSource::Clock => None,
     };
     match counted {
@@ -431,17 +464,19 @@ fn level_of(effect: &Effect, levels: Option<Levels>) -> Option<f64> {
         EffectSource::Bass => Some(l.bass),
         EffectSource::Mid => Some(l.mid),
         EffectSource::Treble => Some(l.treble),
+        EffectSource::Reggaeton => Some(l.reggaeton),
         EffectSource::Clock | EffectSource::Beat => None,
     }
 }
 
 /// Lo que mueve un effect: 0 el color, 1 el brillo (u otro canal), 2 las
-/// cabezas. Dos de la misma clase en un grupo se pisan.
+/// cabezas. Dos de la misma clase en un grupo se pisan. Un estrobo con su
+/// color sigue siendo de brillo: va junto con el arcoíris, que pone el color.
 fn effect_class(effect: &Effect) -> u8 {
     match effect.kind {
         EffectKind::Figure => 2,
         EffectKind::Pixels => 0,
-        EffectKind::Wave if effect.channel_type.is_color() || effect.color.is_some() => 0,
+        EffectKind::Wave if effect.channel_type.is_color() => 0,
         EffectKind::Wave => 1,
     }
 }
@@ -595,7 +630,7 @@ impl Show {
             Message::StopMoment => self.stop_moment(),
             Message::PlayChase { id } => self.start_chase(&id, false),
             Message::StopChase => self.stop_chase(),
-            Message::Audio { audio } => self.audio = audio.map(|feed| (feed, now)),
+            Message::Audio { audio } => self.hear(audio, now),
             Message::Action { action, press, value } => self.act(&action, press, value, now),
             Message::Tap { at } => {
                 let at = at.filter(|a| a.is_finite()).map_or(now, |a| a.clamp(now - TAP_LATE_MS, now));
@@ -1488,29 +1523,65 @@ impl Show {
     /// Con un ritmo marcado a mano (o el del DJ), cada golpe suena como un
     /// bombo.
     fn levels(&self, now: f64) -> Option<Levels> {
+        // Sin un ritmo reconocido, el dembow está apagado.
+        let reggaeton = self.beats(now).map_or(0.0, |b| dembow(b, self.dembow_shift()).1);
         if let Some(pulse) = self.tap.pulse(now) {
-            return Some(Levels { bass: pulse, mid: pulse, treble: pulse });
+            return Some(Levels { bass: pulse, mid: pulse, treble: pulse, reggaeton });
         }
         if let Some(dj) = self.dj(now) {
             let beats = dj.beats(now);
             let pulse = (-6.0 * (beats - beats.floor())).exp() * dj.strength;
-            return Some(Levels { bass: pulse, mid: pulse, treble: pulse });
+            return Some(Levels { bass: pulse, mid: pulse, treble: pulse, reggaeton: reggaeton * dj.strength });
         }
         let (feed, at) = self.audio.as_ref()?;
-        (now - at <= LEVELS_STALE_MS).then_some(feed.levels)
+        // El ritmo se recuerda un rato aunque pare la música: sin golpes, a oscuras.
+        let reggaeton = if now - self.last_heard <= HEARD_HOLD_MS { reggaeton } else { 0.0 };
+        (now - at <= LEVELS_STALE_MS).then_some(Levels { reggaeton, ..feed.levels })
     }
 
     /// Los golpes de cada banda. Con TAP o el DJ, cada golpe del ritmo.
     fn hits(&self, now: f64) -> Option<Levels> {
+        let beats = self.beats(now);
+        let reggaeton = beats.map_or(0.0, |b| dembow(b, self.dembow_shift()).0);
         if self.tap.beats(now).is_some() || self.dj(now).is_some() {
-            let beats = self.beats(now)?;
-            return Some(Levels { bass: beats, mid: beats, treble: beats });
+            let beats = beats?;
+            return Some(Levels { bass: beats, mid: beats, treble: beats, reggaeton });
         }
         let (feed, at) = self.audio.as_ref()?;
         if now - at > LEVELS_STALE_MS {
             return None;
         }
-        feed.hits
+        feed.hits.map(|h| Levels { reggaeton, ..h })
+    }
+
+    /// 1 si la caja del dembow cae en el otro tiempo de cada par: lo dicen
+    /// los golpes de los medios que van llegando.
+    fn dembow_shift(&self) -> f64 {
+        if self.dembow_vote < 0.0 { 1.0 } else { 0.0 }
+    }
+
+    /// Cada golpe nuevo de los medios (la caja) vota en qué tiempo del par cae.
+    fn hear(&mut self, feed: Option<AudioFeed>, now: f64) {
+        if let Some(feed) = &feed {
+            let l = feed.levels;
+            if l.bass.max(l.mid).max(l.treble) > 0.5 {
+                self.last_heard = now;
+            }
+            let mid = feed.hits.map(|h| h.mid.round());
+            if let (Some(mid), Some(beat)) = (mid, feed.beat) {
+                if mid > self.last_mid_hit {
+                    let pos = (beat.beats - MID_LAG_S * beat.bpm / 60.0).rem_euclid(2.0);
+                    let near = |p: f64| (pos - p).abs().min(2.0 - (pos - p).abs());
+                    let (same, other) = (near(0.75).min(near(1.5)), near(1.75).min(near(0.5)));
+                    if same.min(other) < 0.15 {
+                        let vote = if same < other { 1.0 } else { -1.0 };
+                        self.dembow_vote += (vote - self.dembow_vote) * 0.1;
+                    }
+                }
+                self.last_mid_hit = mid;
+            }
+        }
+        self.audio = feed.map(|feed| (feed, now));
     }
 
     fn beats(&self, now: f64) -> Option<f64> {
@@ -1577,8 +1648,13 @@ impl Show {
                 }
             }
             // Una onda de brillo con su color ("ola" en azul): mientras corre,
-            // sus luces van de ese color.
-            if let Some(hex) = effect.color.as_deref().filter(|_| !effect.channel_type.is_color()) {
+            // sus luces van de ese color, salvo que un efecto de color del
+            // grupo (el arcoíris) ponga los suyos.
+            let colored_by_other = running.iter().any(|other| {
+                other != id
+                    && self.doc.effects.iter().any(|e| e.id == *other && e.group_id.as_ref() == Some(group) && effect_class(e) == 0)
+            });
+            if let Some(hex) = effect.color.as_deref().filter(|_| !effect.channel_type.is_color() && !colored_by_other) {
                 let rgb = crate::model::rgb_of(Some(hex));
                 let white = rgb.iter().copied().fold(1.0, f64::min);
                 for (member, definition) in &members {

@@ -138,6 +138,33 @@ describe("Ajustes del efecto en Escenario", () => {
     await waitFor(() => expect(playback(engine).runningEffectIds).not.toContain(id));
   });
 
+  it("un estrobo con su color sigue prendido con el arcoíris, y al ir a Cabezas y volver se ven sus ajustes sin apagarlo", async () => {
+    const { user, engine } = await withTemplate();
+    await user.click(screen.getByRole("button", { name: "Escenario" }));
+    const idOf = (name: string) => lastDoc(engine).effects.find((fx) => fx.name === name)!.id;
+    await user.click(screen.getByRole("tab", { name: /^PAR/ }));
+    await user.click(screen.getByRole("tab", { name: /^Brillo/ }));
+    await user.click(screen.getByRole("button", { name: "PAR: estrobo" }));
+    await user.click(within(screen.getByRole("region", { name: "Ajustes de PAR: estrobo" })).getByRole("button", { name: "Color: Ámbar" }));
+    await user.click(screen.getByRole("tab", { name: /^Colores/ }));
+    await user.click(screen.getByRole("button", { name: "PAR: arcoíris" }));
+    const names = () => playback(engine).runningEffectIds.map((id) => lastDoc(engine).effects.find((fx) => fx.id === id)?.name);
+    await waitFor(() => expect(names()).toEqual(expect.arrayContaining(["PAR: estrobo", "PAR: arcoíris"])));
+
+    // Tocar el estrobo prendido solo muestra sus ajustes.
+    await user.click(within(screen.getByLabelText("Prendidos ahora")).getByRole("button", { name: /^Estrobo/ }));
+    expect(screen.getByRole("region", { name: "Ajustes de PAR: estrobo" })).toBeInTheDocument();
+    // En Cabezas se ven los de Cabezas; al volver a PAR, el estrobo ya está a la derecha.
+    await user.click(screen.getByRole("tab", { name: /^Cabezas/ }));
+    expect(screen.queryByRole("region", { name: "Ajustes de PAR: estrobo" })).toBeNull();
+    await user.click(screen.getByRole("tab", { name: /^PAR/ }));
+    expect(screen.getByRole("region", { name: "Ajustes de PAR: estrobo" })).toBeInTheDocument();
+    expect(playback(engine).runningEffectIds).toEqual(expect.arrayContaining([idOf("PAR: estrobo"), idOf("PAR: arcoíris")]));
+    // Ya mirándolo, otro toque lo apaga.
+    await user.click(screen.getByRole("button", { name: "PAR: estrobo" }));
+    await waitFor(() => expect(playback(engine).runningEffectIds).not.toContain(idOf("PAR: estrobo")));
+  });
+
   it("del fuego al hielo queda solo el hielo, y el fuego se puede poner de un color", async () => {
     const { user, engine } = await withTemplate();
     await user.click(screen.getByRole("button", { name: "Escenario" }));

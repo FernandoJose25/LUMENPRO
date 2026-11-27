@@ -22,6 +22,15 @@ const BAND_HITS: Partial<Record<EffectSource, string>> = {
   bass: "del bombo",
   mid: "de caja, palmas o voces",
   treble: "de platillo",
+  reggaeton: "del dembow (bombo, caja, bombo, caja)",
+};
+
+/** Al lado de cada opción de "Sigue a". */
+const SOURCE_HINTS: Partial<Record<EffectSource, string>> = {
+  bass: "golpes del bombo",
+  mid: "golpes de caja, palmas o voces",
+  treble: "golpes de platillo",
+  reggaeton: "bum-cha-bum-chá, al ritmo",
 };
 
 /**
@@ -107,12 +116,15 @@ export function EffectSettings({
         />
       ) : null}
       {effect.kind === "wave" && !waveOnColor ? (
-        <ColorPicker
-          label="Color"
-          value={effect.color ?? null}
-          noneLabel="Del momento"
-          onPick={(color) => paint({ color })}
-        />
+        <>
+          <ColorPicker
+            label="Color"
+            value={effect.color ?? null}
+            noneLabel="Del momento"
+            onPick={(color) => paint({ color })}
+          />
+          {effect.color ? <p className="-mt-1.5">Si prendes un efecto de Colores en el grupo, sigue igual con los colores de ese.</p> : null}
+        </>
       ) : null}
       {waveOnColor ? (
         <p>
@@ -142,7 +154,7 @@ export function EffectSettings({
           {(Object.keys(EFFECT_SOURCE_LABELS) as EffectSource[]).map((s) => (
             <option key={s} value={s}>
               {EFFECT_SOURCE_LABELS[s]}
-              {BAND_HITS[s] ? ` (golpes ${BAND_HITS[s]})` : ""}
+              {SOURCE_HINTS[s] ? ` (${SOURCE_HINTS[s]})` : ""}
             </option>
           ))}
         </select>
@@ -151,7 +163,9 @@ export function EffectSettings({
         <p>
           {effect.kind === "figure"
             ? `La figura crece con cada golpe ${BAND_HITS[effect.source]} y baja despacio; sin golpes, quieta en el centro.`
-            : `Cada golpe ${BAND_HITS[effect.source]} es un fogonazo y lo hace avanzar: con golpes más seguidos va más rápido; sin golpes, apagado.`}
+            : effect.source === "reggaeton"
+              ? `Un fogonazo en cada golpe ${BAND_HITS.reggaeton}, enganchado al ritmo de la canción aunque la mezcla esté cargada; cada golpe también lo hace avanzar. Sin ritmo o sin música, apagado.`
+              : `Cada golpe ${BAND_HITS[effect.source]} es un fogonazo y lo hace avanzar: con golpes más seguidos va más rápido; sin golpes, apagado.`}
         </p>
       ) : null}
       {effect.source === "clock" || (band && effect.kind === "figure") ? (

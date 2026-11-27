@@ -1,3 +1,11 @@
+## Novedades de la 0.17.0
+
+**Reggaetón.** Nueva opción en «Sigue a»: **Reggaetón**. Las luces van con el dembow (bum-cha-bum-chá: bombo, caja, bombo, caja) enganchado al ritmo de la canción, así que cada fogonazo cae en su lugar aunque la mezcla esté cargada de bajo o voces. LUMEN se da cuenta solo de en qué tiempo cae la caja, y si para la música se apaga. Listos para el perreo: **Golpe reggaetón**, **Al azar reggaetón**, **Persecución reggaetón**, **Salto de color reggaetón** y, en los estrobos de segmentos, **Cortadora reggaetón** y **Flash reggaetón**. Funciona también con TAP y con VirtualDJ.
+
+**El estrobo ya no se pierde.** Un estrobo (o cualquier efecto de brillo) con su propio color seguía la regla de los efectos de color, y al prender el arcoíris se apagaba (y al revés). Ahora van juntos: el estrobo pone el parpadeo y el arcoíris los colores.
+
+**En el Escenario, cada grupo recuerda su efecto.** Al pasar a Cabezas se ven los ajustes del de Cabezas, y al volver a PAR siguen ahí los del estrobo, sin tocar nada. Tocar un efecto que ya está prendido solo muestra sus ajustes (no lo apaga); un segundo toque, ya mirándolo, lo apaga.
+
 ## Novedades de la 0.16.0
 
 **El Escenario, ordenado.** Debajo del simulador quedan, en orden, **Momento**, **Color fijo** y **Efectos**. El Color fijo ocupa una sola línea: eliges para qué luces (Todas, Cabezas o PAR) y después el color, y cada botón muestra con un puntito el color que tiene. Los efectos van por grupo de luces y por lo que hacen (**Movimiento**, **Colores**, **Brillo y estrobo**), con su nombre corto y una frase que dice qué hace; los que siguen la música llevan **♪**. Arriba, **Prendidos** muestra lo que está corriendo, con una **✕** para apagar cada uno.
