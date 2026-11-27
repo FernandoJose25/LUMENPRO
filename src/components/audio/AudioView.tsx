@@ -35,6 +35,10 @@ export function AudioView({ audio }: { audio: AudioInput }) {
                     : "Buscando el ritmo… (tarda unos 5 segundos)"}
             </span>
           </div>
+          <p className="mt-3 text-xs text-text-secondary">
+            ¿No oye bien o no hay cómo conectar nada? Toca <b className="text-text-primary">TAP</b> arriba (o la tecla T) al
+            ritmo de la canción, un toque por golpe: las luces siguen ese ritmo hasta que lo sueltes con ×.
+          </p>
           {audio.error ? (
             <p role="alert" className="mt-3 text-xs text-state-danger">
               {audio.error}

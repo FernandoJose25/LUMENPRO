@@ -7,7 +7,7 @@ import type { Chase, ChaseStep } from "@/types/chase";
 import type { Effect } from "@/types/effect";
 import type { Moment } from "@/types/moment";
 import type { Timeline } from "@/types/timeline";
-import { noteEngineNow } from "@/lib/engineClock";
+import { engineNow, noteEngineNow } from "@/lib/engineClock";
 import type { Palette, PaletteKind } from "@/types/palette";
 import type { Action, Control, Pad } from "@/types/controls";
 import {
@@ -81,6 +81,7 @@ const IDLE: Omit<Playback, "activeSceneId" | "activeMomentId"> = {
   chase: null,
   heldColors: {},
   timeline: null,
+  tapBpm: null,
 };
 const NOT_SAVED = new Set([...Object.keys(IDLE), "moving"]);
 
@@ -193,6 +194,10 @@ interface FixtureStoreValue extends FixtureStoreState {
   playTimeline: (timelineId: string, fromMs: number) => void;
   pauseTimeline: () => void;
   stopTimeline: () => void;
+  /** Un toque al ritmo de la canción (Tap). */
+  tap: () => void;
+  /** Vuelve a seguir lo que se escucha. */
+  clearTap: () => void;
   /** Lanza un momento: corta los effects del anterior, el estrobo y el
    *  Blackout. */
   startMoment: (momentId: string) => void;
@@ -926,6 +931,9 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
   );
   const pauseTimeline = useCallback(() => engine.send({ type: "pauseTimeline" }), [engine]);
   const stopTimeline = useCallback(() => engine.send({ type: "stopTimeline" }), [engine]);
+  // Con la hora en que se tocó: el envío puede demorar un poco.
+  const tap = useCallback(() => engine.send({ type: "tap", at: Math.round(engineNow()) }), [engine]);
+  const clearTap = useCallback(() => engine.send({ type: "clearTap" }), [engine]);
 
   const moveMoment = useCallback((momentId: string, direction: -1 | 1) => {
     setState((s) => {
@@ -1099,6 +1107,8 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
     playTimeline,
     pauseTimeline,
     stopTimeline,
+    tap,
+    clearTap,
     moveMoment,
     addQuinceTemplate,
     resetQuinceTemplate,

@@ -6,6 +6,7 @@ use crate::frame::{self, Frame, Overlay};
 use crate::model::{
     Action, Channel, ChannelType, ChannelValues, Cue, Definition, Doc, Effect, EffectKind, EffectSource, Pad, Timeline,
 };
+use crate::tap::Tap;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
@@ -22,6 +23,9 @@ const BEATS_STALE_MS: f64 = 10_000.0;
 /// La canción y el reloj del motor pueden separarse un poco: recién con esta
 /// diferencia las luces se corren a donde va la canción.
 const SYNC_TOLERANCE_MS: f64 = 40.0;
+/// Un toque que dice haber sido hace más que esto llega tarde por otra cosa:
+/// cuenta como recién tocado.
+const TAP_LATE_MS: f64 = 1000.0;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct AudioFeed {
@@ -74,6 +78,11 @@ pub enum Message {
     StopTimeline,
     /// Por dónde va la canción que suena en la ventana.
     TimelineSync { id: String, position_ms: f64 },
+    /// Un toque al ritmo. `at`: cuándo se tocó, si llegó con demora (el
+    /// celular por WiFi); sin él, ahora.
+    Tap { #[serde(default)] at: Option<f64> },
+    /// Vuelve a seguir lo que se escucha.
+    ClearTap,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -136,6 +145,9 @@ pub struct Playback {
     pub held_colors: BTreeMap<String, String>,
     /// La línea de tiempo que suena.
     pub timeline: Option<TimelineRun>,
+    /// El ritmo marcado a mano; mientras haya uno, manda sobre lo que se
+    /// escucha.
+    pub tap_bpm: Option<f64>,
 }
 
 impl Default for Playback {
@@ -152,6 +164,7 @@ impl Default for Playback {
             chase: None,
             held_colors: BTreeMap::new(),
             timeline: None,
+            tap_bpm: None,
         }
     }
 }
@@ -309,6 +322,7 @@ pub struct Show {
     audio: Option<(AudioFeed, f64)>,
     /// Hasta dónde de la canción ya se dispararon las marcas.
     timeline_cursor: f64,
+    tap: Tap,
 }
 
 /// Vueltas completas que lleva un effect.
@@ -380,6 +394,8 @@ impl Show {
         self.playback = Playback { identify_id: None, chase: None, ..session.playback };
         // Lo que ya sonó no se repite.
         self.timeline_cursor = self.playback.timeline.as_ref().map_or(0.0, |run| run.position(now));
+        // El golpe se pierde; el tempo no.
+        self.tap = self.playback.tap_bpm.map(|bpm| Tap::resume(bpm, now)).unwrap_or_default();
         if let Some(chase) = chase {
             self.start_chase(&chase.id, self.active_moment_chase() == Some(chase.id.as_str()), now);
             self.begin_step(chase.step_index, now);
@@ -452,6 +468,16 @@ impl Show {
             Message::StopChase => self.stop_chase(),
             Message::Audio { audio } => self.audio = audio.map(|feed| (feed, now)),
             Message::Action { action, press, value } => self.act(&action, press, value, now),
+            Message::Tap { at } => {
+                let at = at.filter(|a| a.is_finite()).map_or(now, |a| a.clamp(now - TAP_LATE_MS, now));
+                self.tap.tap(at);
+                let bpm = self.tap.bpm().map(|bpm| (bpm * 10.0).round() / 10.0);
+                self.edit(|p| p.tap_bpm = bpm);
+            }
+            Message::ClearTap => {
+                self.tap = Tap::default();
+                self.edit(|p| p.tap_bpm = None);
+            }
             Message::PlayTimeline { id, from_ms } => self.play_timeline(&id, from_ms, now),
             Message::PauseTimeline => self.pause_timeline(now),
             Message::StopTimeline => self.stop_timeline(now),
@@ -515,6 +541,12 @@ impl Show {
                 let text = |key: &str| command[key].as_str().map(str::to_owned);
                 let action = Action::Color { group_id: text("group"), color: text("color") };
                 self.act(&action, Some(true), None, now);
+            }
+            "tap" => {
+                let _ = self.apply(Message::Tap { at: command["at"].as_f64() }, now);
+            }
+            "tapClear" => {
+                let _ = self.apply(Message::ClearTap, now);
             }
             "timeline" => match (command["id"].as_str(), command["play"].as_bool()) {
                 (Some(id), Some(true)) => self.play_timeline(id, 0.0, now),
@@ -584,6 +616,7 @@ impl Show {
                 Some(Message::StopChase)
             }
             Action::Chase { id } => Some(Message::PlayChase { id: id.clone() }),
+            Action::Tap => Some(Message::Tap { at: None }),
             Action::Timeline { id } if self.timeline_playing(id) => Some(Message::StopTimeline),
             Action::Timeline { id } => Some(Message::PlayTimeline { id: id.clone(), from_ms: 0.0 }),
             Action::Blackout => Some(Message::Blackout { on: !self.playback.blackout_active }),
@@ -611,6 +644,7 @@ impl Show {
             Action::Strobe => p.strobe_active,
             Action::Stop => p.moment_run.is_none(),
             Action::Timeline { id } => self.timeline_playing(id),
+            Action::Tap => p.tap_bpm.is_some(),
             Action::Color { group_id: Some(group), color } => p.held_colors.get(group) == color.as_ref(),
             Action::Color { group_id: None, color: None } => p.held_colors.is_empty(),
             Action::Color { group_id: None, color: Some(hex) } => {
@@ -974,7 +1008,7 @@ impl Show {
             Action::Blackout => Message::Blackout { on: true },
             Action::Strobe => Message::Strobe { on: true },
             // Otra línea de tiempo desde una marca se pisaría con esta.
-            Action::Timeline { .. } | Action::Master | Action::GroupFader { .. } | Action::Nothing => return,
+            Action::Timeline { .. } | Action::Tap | Action::Master | Action::GroupFader { .. } | Action::Nothing => return,
             other => return self.act(other, Some(true), None, at),
         };
         let _ = self.apply(message, at);
@@ -1103,12 +1137,19 @@ impl Show {
     // Effects
     // ------------------------------------------------------------------
 
+    /// Con un ritmo marcado a mano, cada golpe suena como un bombo.
     fn levels(&self, now: f64) -> Option<Levels> {
+        if let Some(pulse) = self.tap.pulse(now) {
+            return Some(Levels { bass: pulse, mid: pulse, treble: pulse });
+        }
         let (feed, at) = self.audio.as_ref()?;
         (now - at <= LEVELS_STALE_MS).then_some(feed.levels)
     }
 
     fn beats(&self, now: f64) -> Option<f64> {
+        if let Some(beats) = self.tap.beats(now) {
+            return Some(beats);
+        }
         let (feed, at) = self.audio.as_ref()?;
         let beat = feed.beat?;
         (now - at <= BEATS_STALE_MS).then(|| beat.beats + (now - at) * beat.bpm / 60_000.0)
@@ -1341,6 +1382,7 @@ impl Show {
             "master": p.master,
             "dmx": dmx,
             "pads": self.pads_snapshot(&self.doc.phone_pads),
+            "tapBpm": p.tap_bpm,
             "effects": self
                 .doc
                 .effects

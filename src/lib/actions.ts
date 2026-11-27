@@ -30,6 +30,7 @@ export function actionOptions(rig: Rig): ActionOption[] {
     [{ do: "blackout" }, "Blackout (enciende / apaga)"],
     [{ do: "strobe" }, "Estrobo (mientras se aprieta)"],
     [{ do: "master" }, "Intensidad general (fader)"],
+    [{ do: "tap" }, "Tap: marcar el ritmo (un toque por golpe)"],
   ];
   const options: ActionOption[] = fixed.map(([action, label]) => ({ key: actionKey(action), label, group: "Show", action }));
   const add = (
@@ -91,6 +92,8 @@ export function isActive(action: Action, rig: Rig): boolean {
       return rig.runningEffectIds.includes(action.id);
     case "chase":
       return rig.chase?.id === action.id;
+    case "tap":
+      return rig.tapBpm !== null;
     case "timeline":
       return rig.timeline?.id === action.id && rig.timeline.pausedAt === null;
     case "blackout":

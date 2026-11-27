@@ -18,6 +18,8 @@ export interface Playback {
   heldColors: Record<string, string>;
   /** La línea de tiempo que suena. */
   timeline: TimelineRun | null;
+  /** El ritmo marcado a mano (Tap); mientras haya uno, manda sobre lo que se escucha. */
+  tapBpm: number | null;
 }
 
 export interface TimelineRun {
@@ -66,7 +68,10 @@ export type EngineMessage =
   | { type: "playTimeline"; id: string; fromMs: number }
   | { type: "pauseTimeline" | "stopTimeline" }
   /** Por dónde va la canción que suena en la ventana: el motor la sigue. */
-  | { type: "timelineSync"; id: string; positionMs: number };
+  | { type: "timelineSync"; id: string; positionMs: number }
+  /** Un toque al ritmo; `at`, la hora del motor en que se tocó. */
+  | { type: "tap"; at?: number }
+  | { type: "clearTap" };
 
 export interface EngineChanges {
   rev: number;

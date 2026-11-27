@@ -3,6 +3,7 @@
 pub mod frame;
 pub mod model;
 pub mod show;
+pub mod tap;
 
 #[cfg(target_arch = "wasm32")]
 mod wasm;

@@ -6,6 +6,7 @@ import { useUpdate } from "@/lib/updates";
 import { UpdateModal } from "./UpdateModal";
 import type { EngineStatus } from "@/types/engine";
 import { BlackoutButton } from "./BlackoutButton";
+import { cn } from "@/lib/utils";
 
 interface TopbarProps {
   dmx: EngineStatus;
@@ -48,7 +49,7 @@ export function Topbar({
             label={`${universes.length === 1 ? "Universo" : "Universos"} ${universes.join(", ")}`}
           />
         ) : null}
-        {bpm !== null ? <span className="font-mono text-xs text-text-secondary">{bpm} BPM</span> : null}
+        <TapButton heard={bpm} />
       </div>
 
       <div className="flex-1" />
@@ -65,6 +66,67 @@ export function Topbar({
       <div className="h-5 w-px bg-border" />
       <BlackoutButton active={blackoutActive} onBlackout={onBlackout} onRelease={onReleaseBlackout} />
     </header>
+  );
+}
+
+/**
+ * Tap: se toca al ritmo de la canción (también con la tecla T) y lo que sigue
+ * la música va con ese tempo, sin micrófono. Al lado, el ritmo que manda.
+ */
+function TapButton({ heard }: { heard: number | null }) {
+  const { tapBpm, tap, clearTap } = useFixtureStore();
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.repeat || e.ctrlKey || e.metaKey || e.altKey || e.key.toLowerCase() !== "t") return;
+      const target = e.target as HTMLElement | null;
+      if (target && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))) return;
+      e.preventDefault();
+      tap();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [tap]);
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <button
+        type="button"
+        aria-label="Tap: marcar el ritmo"
+        title="Toca al ritmo de la canción, un toque por golpe (o la tecla T). Lo que sigue la música va con este ritmo."
+        // Al apretar, no al soltar: cada toque tiene que caer en el golpe.
+        onPointerDown={(e) => {
+          e.preventDefault();
+          tap();
+        }}
+        onKeyDown={(e) => {
+          if (e.key !== "Enter" && e.key !== " ") return;
+          e.preventDefault();
+          tap();
+        }}
+        className={cn(
+          "h-7 select-none rounded-control border px-2.5 text-xs font-semibold tracking-wide active:scale-95",
+          tapBpm !== null ? "border-accent bg-accent/20 text-accent" : "border-border bg-panel2 text-text-primary hover:bg-panel2/70",
+        )}
+      >
+        TAP
+      </button>
+      {tapBpm !== null ? (
+        <>
+          <span className="font-mono text-xs text-accent">{Math.round(tapBpm)} BPM a mano</span>
+          <button
+            type="button"
+            aria-label="Soltar el ritmo"
+            title="Volver a seguir lo que se escucha"
+            onClick={clearTap}
+            className="h-6 w-6 rounded-control text-text-secondary hover:bg-panel2 hover:text-text-primary"
+          >
+            ×
+          </button>
+        </>
+      ) : heard !== null ? (
+        <span className="font-mono text-xs text-text-secondary">{heard} BPM</span>
+      ) : null}
+    </div>
   );
 }
 

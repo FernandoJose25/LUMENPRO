@@ -566,7 +566,7 @@ fn phone_snapshot_has_only_what_the_page_shows() {
     let keys: Vec<_> = s.as_object().unwrap().keys().cloned().collect();
     assert_eq!(
         keys,
-        ["activeId", "blackout", "colors", "dmx", "effects", "master", "moments", "pads", "startedAt", "strobe", "timeline", "timelines"]
+        ["activeId", "blackout", "colors", "dmx", "effects", "master", "moments", "pads", "startedAt", "strobe", "tapBpm", "timeline", "timelines"]
     );
     assert_eq!(s["moments"], json!([{ "id": "a", "name": "A", "durationSec": 90.0 }]));
 }
@@ -1374,4 +1374,114 @@ fn the_phone_and_the_buttons_start_and_stop_the_song() {
     assert_eq!(r.playback()["timeline"]["id"], json!("vals"));
     r.send(button);
     assert_eq!(r.playback()["timeline"], Value::Null);
+}
+
+// ----------------------------------------------------------------------
+// Tap: el ritmo marcado a mano
+// ----------------------------------------------------------------------
+
+fn tap(r: &mut Rig) {
+    r.send(json!({ "type": "tap" }));
+}
+
+/// Cuatro toques a 120 BPM (uno cada 500 ms).
+fn tap_120(r: &mut Rig) {
+    for _ in 0..3 {
+        tap(r);
+        r.run(500.0);
+    }
+    tap(r);
+}
+
+#[test]
+fn tapping_sets_the_tempo_and_the_beat_effects_follow_it_without_music() {
+    let mut r = Rig::new();
+    music(&mut r, "beat");
+    tap_120(&mut r);
+    assert_eq!(r.playback()["tapBpm"], json!(120.0));
+    r.run(250.0); // medio golpe
+    assert_eq!(r.live("p1", "red"), 100);
+    r.run(500.0); // golpe y medio
+    assert_eq!(r.live("p1", "red"), 100);
+}
+
+#[test]
+fn one_tap_moves_the_beat_and_tapping_again_after_a_pause_changes_the_tempo() {
+    let mut r = Rig::new();
+    music(&mut r, "beat");
+    tap_120(&mut r);
+    r.run(3130.0);
+    // Un toque solo: mismo tempo, el golpe cae ahora.
+    tap(&mut r);
+    assert_eq!(r.playback()["tapBpm"], json!(120.0));
+    r.run(250.0);
+    assert_eq!(r.live("p1", "red"), 100);
+
+    r.run(3000.0);
+    tap(&mut r);
+    r.run(400.0);
+    tap(&mut r);
+    assert_eq!(r.playback()["tapBpm"], json!(150.0));
+}
+
+#[test]
+fn with_a_tapped_tempo_the_bass_effects_beat_like_a_kick_and_letting_go_silences_them() {
+    let mut r = Rig::new();
+    music(&mut r, "bass");
+    r.run(300.0);
+    assert_eq!(r.live("p1", "red"), 0, "sin música ni ritmo, en su mínimo");
+    tap_120(&mut r);
+    r.run(20.0);
+    assert!(r.live("p1", "red") > 150, "en el golpe");
+    r.run(230.0);
+    assert!(r.live("p1", "red") < 20, "entre golpes");
+    r.run(270.0);
+    assert!(r.live("p1", "red") > 150, "en el golpe siguiente");
+
+    r.send(json!({ "type": "clearTap" }));
+    assert_eq!(r.playback()["tapBpm"], Value::Null);
+    r.run(20.0);
+    assert_eq!(r.live("p1", "red"), 0);
+}
+
+#[test]
+fn the_tapped_tempo_wins_over_what_the_microphone_hears() {
+    let mut r = Rig::new();
+    music(&mut r, "beat");
+    r.send(json!({ "type": "audio", "audio": { "levels": { "bass": 0, "mid": 0, "treble": 0 },
+                                               "beat": { "beats": 8.25, "bpm": 60 } } }));
+    r.run(20.0);
+    tap_120(&mut r);
+    r.run(250.0);
+    assert_eq!(r.live("p1", "red"), 100);
+}
+
+#[test]
+fn a_tap_from_the_phone_counts_when_it_was_touched_not_when_it_arrived() {
+    let mut r = Rig::new();
+    r.phone(json!({ "type": "tap", "at": r.now - 300.0 }));
+    r.run(700.0);
+    // Llegó 700 ms después del anterior, pero se tocó 500 ms después.
+    r.phone(json!({ "type": "tap", "at": r.now - 500.0 }));
+    assert_eq!(r.playback()["tapBpm"], json!(120.0));
+    r.phone(json!({ "type": "tapClear" }));
+    assert_eq!(r.playback()["tapBpm"], Value::Null);
+}
+
+#[test]
+fn a_button_taps_and_a_restarted_engine_keeps_the_tempo() {
+    let mut r = Rig::new();
+    music(&mut r, "beat");
+    let button = json!({ "type": "action", "action": { "do": "tap" }, "press": true });
+    r.send(button.clone());
+    r.run(500.0);
+    r.send(button);
+    assert_eq!(r.playback()["tapBpm"], json!(120.0));
+
+    let saved = serde_json::to_string(&r.show.session()).unwrap();
+    r.show = Show::new();
+    r.show.restore(serde_json::from_str::<Session>(&saved).unwrap(), r.now).unwrap();
+    assert_eq!(r.playback()["tapBpm"], json!(120.0));
+    r.run(250.0);
+    assert_eq!(r.live("p1", "red"), 100);
 }

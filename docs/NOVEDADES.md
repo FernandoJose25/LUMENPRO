@@ -1,6 +1,8 @@
-## Novedades de la 0.4.0
+## Novedades de la 0.4.1
 
-**Línea de tiempo: el vals a tiempo con la canción.** Nueva sección **Línea de tiempo**. Cargas la canción del vals, ves su forma de onda y pones en cada segundo un momento, un color fijo, un efecto, un golpe de estrobo o un apagón. Al darle Reproducir, todo sale a tiempo con la música. Para marcar rápido, toca los botones al ritmo mientras suena y después afina arrastrando. Se puede arrancar desde la mitad para ensayar, elegir por dónde sale la música (por ejemplo, a la consola del DJ) y arrancarla desde el celular o con un botón MIDI.
+**TAP: el ritmo a mano, sin micrófono.** Arriba a la izquierda (o con la tecla T, o desde el celular) toca al ritmo de la canción, un toque por golpe. Las luces que siguen la música (colores al ritmo, golpe de graves, el ocho de las cabezas) van con ese ritmo aunque no se escuche nada. La × lo suelta y vuelve a seguir lo que se escucha. También se puede poner en un botón del celular o del controlador MIDI.
+
+**De la 0.4.0:** línea de tiempo para el vals, a tiempo con la canción.
 
 **De la 0.3.5:** varias luces a la vez en el Dashboard (de un toque todas, un grupo o un modelo).
 

@@ -562,6 +562,8 @@ pub enum Action {
     Color { group_id: Option<String>, color: Option<String> },
     /// Arranca la línea de tiempo desde el principio, o la detiene.
     Timeline { id: String },
+    /// Un toque al ritmo de la canción.
+    Tap,
     #[default]
     #[serde(other)]
     Nothing,

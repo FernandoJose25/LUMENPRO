@@ -46,6 +46,9 @@
   label b { color: var(--text); font-variant-numeric: tabular-nums; }
   input[type=range] { width: 100%; height: 48px; margin: 0; accent-color: var(--accent); touch-action: none; }
   #strobe.on { background: var(--text); color: var(--bg); }
+  #tap { font-weight: 700; letter-spacing: .06em; touch-action: manipulation; user-select: none; -webkit-user-select: none; }
+  #tap.on { border-color: var(--accent); color: var(--accent); }
+  #tap:active { transform: scale(.97); }
   #blackout { color: var(--danger); background: rgba(239, 68, 68, .15); border-color: transparent; letter-spacing: .05em; }
   #blackout.armed, #blackout.on { background: var(--danger); color: #fff; }
   #blackout.on { animation: pulse 1.2s infinite; }
@@ -116,6 +119,7 @@
     <div class="bottom">
       <label for="master">Intensidad <b id="master-value"></b></label>
       <input id="master" type="range" min="0" max="100">
+      <div class="row"><button id="tap">TAP</button><button id="tap-clear">Soltar ritmo</button></div>
       <div class="row"><button id="strobe">Estrobo</button><button id="blackout"></button></div>
     </div>
   </main>
@@ -261,6 +265,10 @@ function render() {
   if (Date.now() - masterTouched > 800) $("master").value = state.master;
   $("master-value").textContent = $("master").value + " %";
   $("master").disabled = !online;
+  $("tap").className = state.tapBpm ? "on" : "";
+  $("tap").textContent = state.tapBpm ? "TAP · " + Math.round(state.tapBpm) + " BPM" : "TAP al ritmo";
+  $("tap").disabled = !online;
+  $("tap-clear").disabled = !online || !state.tapBpm;
   $("strobe").className = state.strobe ? "on" : "";
   $("strobe").textContent = state.strobe ? "Estrobo encendido" : "Estrobo";
   $("strobe").disabled = !online;
@@ -452,6 +460,13 @@ $("next").onclick = () => send({ type: "next", from: state.activeId });
 $("prev").onclick = () => send({ type: "prev", from: state.activeId });
 $("stop").onclick = () => send({ type: "stop" });
 $("strobe").onclick = () => send({ type: "strobe", on: !state.strobe });
+// Al apretar, con la hora de la laptop: el WiFi demora distinto cada vez y
+// el tempo saldría torcido si contara la llegada.
+$("tap").onpointerdown = (e) => {
+  e.preventDefault();
+  send({ type: "tap", at: Date.now() + clockOffset });
+};
+$("tap-clear").onclick = () => send({ type: "tapClear" });
 $("blackout").onclick = () => {
   if (state.blackout) return send({ type: "blackout", on: false });
   if (Date.now() < armedUntil) {
