@@ -8,6 +8,7 @@
 
 mod engine;
 mod link;
+mod pc_audio;
 mod show;
 mod stage_window;
 mod updates;
@@ -102,6 +103,8 @@ fn window() {
             link::engine_call,
             link::close_window,
             link::focus_window,
+            pc_audio::pc_audio_start,
+            pc_audio::pc_audio_stop,
             show::load_show,
             show::save_show,
             show::export_show,

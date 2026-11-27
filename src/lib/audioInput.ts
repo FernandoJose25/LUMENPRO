@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createBeatTracker, type BeatTracker } from "@/lib/beatTracker";
+import { PC_AUDIO, openPcAudio } from "@/lib/pcAudio";
 import { readSetting, writeSetting } from "@/lib/settings";
 
 export type Band = "bass" | "mid" | "treble";
@@ -169,7 +170,7 @@ export interface AudioInput {
   error: string | null;
   bpm: number | null;
   devices: { id: string; label: string }[];
-  /** "" = la entrada predeterminada de Windows. */
+  /** "" = la entrada predeterminada de Windows; PC_AUDIO = lo que suena en esta PC. */
   deviceId: string;
   sensitivity: number;
   musicOnly: boolean;
@@ -236,29 +237,50 @@ export function useAudioInput(autoStart = false): AudioInput {
     setError(null);
     try {
       const { deviceId } = settingsRef.current;
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
-          // Pensados para voz: con música borran el ritmo.
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: false,
-        },
-      });
-      if (mine !== attempt.current) {
-        stream.getTracks().forEach((t) => t.stop());
-        return;
-      }
-      stream.getAudioTracks()[0].addEventListener("ended", () => {
+      const lost = (message: string) => {
         if (mine !== attempt.current) return;
         stop();
-        setError("Se desconectó la entrada de audio. Los effects siguen con su propia velocidad.");
-      });
-      session.current = listen(
+        setError(message);
+      };
+      const pc =
+        deviceId === PC_AUDIO
+          ? await openPcAudio(() =>
+              lost("Se cortó el sonido de la PC (¿cambiaste de parlantes o audífonos?). Toca ▶ Escuchar otra vez."),
+            )
+          : null;
+      const stream =
+        pc?.stream ??
+        (await navigator.mediaDevices.getUserMedia({
+          audio: {
+            ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+            // Pensados para voz: con música borran el ritmo.
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false,
+          },
+        }));
+      if (mine !== attempt.current) {
+        stream.getTracks().forEach((t) => t.stop());
+        pc?.stop();
+        return;
+      }
+      stream.getAudioTracks()[0].addEventListener("ended", () =>
+        lost("Se desconectó la entrada de audio. Los effects siguen con su propia velocidad."),
+      );
+      const heard = listen(
         stream,
         () => settingsRef.current.sensitivity,
         () => settingsRef.current.musicOnly,
       );
+      session.current = pc
+        ? {
+            ...heard,
+            stop: () => {
+              heard.stop();
+              pc.stop();
+            },
+          }
+        : heard;
       setAudioFeed(session.current.feed);
       setListening(true);
       // Los nombres de las entradas solo se ven después del permiso.

@@ -1,3 +1,9 @@
+## Novedades de la 0.11.0
+
+**Música sin descargar canciones.** En Audio Reactive, en **Entrada de audio**, elige **Lo que suena en esta PC**: LUMEN escucha directo lo que sale por los parlantes de la laptop (Spotify, YouTube, VirtualDJ…), sin cable, sin micrófono y sin guardar nada. Las luces siguen los graves, medios, agudos y el ritmo igual que con el micrófono, pero con el sonido limpio. Lo que no tiene es el análisis previo de cada canción de **Música**: para el vals y la línea de tiempo conviene la canción guardada.
+
+Pegar enlaces de Spotify o YouTube no se puede: Spotify no deja leer su audio y de YouTube habría que descargar la canción.
+
 ## Novedades de la 0.10.4
 
 **Un efecto a la vez.** Al prender un efecto a mano se apaga el que hacía lo mismo en ese grupo: del fuego al hielo queda solo el hielo. Uno de color y uno de brillo (por ejemplo hielo + latido) sí van juntos. Los efectos de un momento no cambian.

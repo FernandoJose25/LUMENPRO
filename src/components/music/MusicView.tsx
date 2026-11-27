@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { askConfirm } from "@/lib/dialogs";
 import { useFixtureStore } from "@/lib/fixtureStore";
 import type { MusicPlayer } from "@/lib/musicPlayer";
+import { pcAudioAvailable } from "@/lib/pcAudio";
 import { saveSong, songShape } from "@/lib/songs";
 import type { PlaylistSong } from "@/types/music";
 
@@ -52,6 +53,13 @@ export function MusicView({ music }: { music: MusicPlayer }) {
             La música sale de la laptop por el cable a la consola. Cada canción se analiza al agregarla: las luces que siguen la
             música caen en cada golpe, sin micrófono.
           </p>
+          {pcAudioAvailable() ? (
+            <p className="mb-3 text-xs text-text-secondary">
+              ¿Sin descargar canciones? Pon la música en Spotify o YouTube en esta laptop y en Audio Reactive elige{" "}
+              <b className="text-text-primary">Lo que suena en esta PC</b>: las luces siguen los graves igual, sin guardar
+              nada. Lo único que no hay es el análisis previo de cada canción.
+            </p>
+          ) : null}
           <label className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-control bg-accent px-3.5 text-sm font-medium text-bg hover:bg-accent/90">
             + Agregar canciones
             <input

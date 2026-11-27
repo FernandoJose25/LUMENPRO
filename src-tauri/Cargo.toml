@@ -1,6 +1,6 @@
 [package]
 name = "lumenpro"
-version = "0.10.4"
+version = "0.11.0"
 description = "LUMEN PRO — consola de control DMX"
 edition = "2021"
 
@@ -29,6 +29,8 @@ mdns-sd = "0.22.0"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Diagnostics_ToolHelp", "Win32_System_Power", "Win32_System_Threading", "Win32_UI_WindowsAndMessaging"] }
+# Copiar lo que suena en la PC (src/pc_audio.rs).
+windows = { version = "0.62", features = ["Win32_Media_Audio", "Win32_System_Com"] }
 
 [[bin]]
 name = "lumenpro"
