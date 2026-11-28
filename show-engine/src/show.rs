@@ -72,6 +72,9 @@ pub struct AudioFeed {
     /// velocidad propia.
     #[serde(default)]
     pub hits: Option<Levels>,
+    /// Cómo suena la música: -1 calmada, 0 normal, 1 intensa.
+    #[serde(default)]
+    pub intensity: Option<i8>,
 }
 
 #[derive(Debug, Clone, Copy, Default, Deserialize)]
@@ -94,6 +97,10 @@ const DEMBOW_FADE_BEATS: f64 = 0.15;
 const MID_LAG_S: f64 = 0.06;
 /// El dembow sigue mientras se oyó algún golpe hace menos de esto.
 const HEARD_HOLD_MS: f64 = 1500.0;
+/// Piloto automático: tiempos mínimos entre cambios, y con cuántos en el
+/// mismo momento pide otro.
+const PILOT_MIN_BEATS: i64 = 8;
+const PILOT_MAX_BEATS: i64 = 32;
 
 /// Golpes del dembow contados (cada uno llega en un instante) y el fogonazo
 /// del último. `shift`: 1 si la caja cae en el otro tiempo de cada par.
@@ -137,6 +144,8 @@ pub enum Message {
     PlayChase { id: String },
     StopChase,
     Audio { audio: Option<AudioFeed> },
+    /// Prende o apaga el piloto automático.
+    Autopilot { on: bool },
     /// Un botón (press: true al apretar, false al soltar) o un fader (value 0–1).
     Action { action: Action, #[serde(default)] press: Option<bool>, #[serde(default)] value: Option<f64> },
     /// Desde ese punto de la canción (también para seguir tras una pausa).
@@ -230,6 +239,10 @@ pub struct Playback {
     pub armed: BTreeMap<String, f64>,
     /// El tempo que manda el programa del DJ por OS2L, mientras llegan golpes.
     pub dj_bpm: Option<f64>,
+    /// Piloto automático: cambia solo de momento según la música.
+    pub autopilot_on: bool,
+    /// Cómo suena la música: -1 calmada, 0 normal, 1 intensa; `None` sin escuchar.
+    pub intensity: Option<i8>,
 }
 
 impl Default for Playback {
@@ -251,6 +264,8 @@ impl Default for Playback {
             firing: BTreeMap::new(),
             armed: BTreeMap::new(),
             dj_bpm: None,
+            autopilot_on: false,
+            intensity: None,
         }
     }
 }
@@ -407,6 +422,12 @@ pub struct Show {
     last_mid_hit: f64,
     /// El último golpe que se oyó (de cualquier banda).
     last_heard: f64,
+    /// Piloto automático: el último tiempo contado, los tiempos que lleva el
+    /// momento, si hay que cambiar en el próximo compás y la intensidad vista.
+    pilot_beat: Option<i64>,
+    pilot_beats: i64,
+    pilot_change: bool,
+    pilot_intensity: Option<i8>,
     /// Dónde están las cabezas que dibujan una figura. No toca `live`: el
     /// centro es lo que diga `live`, y se puede mover mientras tanto.
     moving: ChannelValues,
@@ -625,9 +646,20 @@ impl Show {
                 self.identify_until = now + IDENTIFY_MS;
                 self.edit(|p| p.identify_id = Some(id));
             }
-            Message::StartMoment { id } => self.start_moment(&id, now),
-            Message::StepMoment { direction } => self.step_moment(direction, now),
-            Message::StopMoment => self.stop_moment(),
+            // Un momento elegido a mano (o por el vals) manda: el piloto se apaga.
+            Message::StartMoment { id } => {
+                self.set_autopilot(false);
+                self.start_moment(&id, now);
+            }
+            Message::StepMoment { direction } => {
+                self.set_autopilot(false);
+                self.step_moment(direction, now);
+            }
+            Message::StopMoment => {
+                self.set_autopilot(false);
+                self.stop_moment();
+            }
+            Message::Autopilot { on } => self.set_autopilot(on),
             Message::PlayChase { id } => self.start_chase(&id, false),
             Message::StopChase => self.stop_chase(),
             Message::Audio { audio } => self.hear(audio, now),
@@ -661,7 +693,10 @@ impl Show {
                     self.edit(|p| p.speed = value.round().clamp(SPEED_MIN, SPEED_MAX));
                 }
             }
-            Message::PlayTimeline { id, from_ms } => self.play_timeline(&id, from_ms, now),
+            Message::PlayTimeline { id, from_ms } => {
+                self.set_autopilot(false);
+                self.play_timeline(&id, from_ms, now);
+            }
             Message::PauseTimeline => self.pause_timeline(now),
             Message::StopTimeline => self.stop_timeline(now),
             Message::TimelineSync { id, position_ms } => {
@@ -1871,6 +1906,87 @@ impl Show {
     }
 
     // ------------------------------------------------------------------
+    // Piloto automático
+    //
+    // Pasado de sound-to-light-osc (https://github.com/scheb/sound-to-light-osc,
+    // MIT, © 2024 Christian Scheb; ver THIRD_PARTY_NOTICES.md): cambia de
+    // programa solo al empezar un compás, al menos 8 tiempos después del
+    // último cambio, cuando cambia la intensidad de la música o tras 32
+    // tiempos en el mismo. El compás depende de la intensidad: 8 tiempos
+    // calmada, 4 normal, 1 intensa. Acá los programas son momentos.
+    // ------------------------------------------------------------------
+
+    fn set_autopilot(&mut self, on: bool) {
+        if on && !self.playback.autopilot_on {
+            // Al prenderlo, cambia en el próximo compás.
+            self.pilot_change = true;
+            self.pilot_beats = PILOT_MIN_BEATS;
+            self.pilot_beat = None;
+        }
+        if self.playback.autopilot_on != on {
+            self.edit(|p| p.autopilot_on = on);
+        }
+    }
+
+    fn tick_autopilot(&mut self, now: f64) {
+        let intensity = self
+            .audio
+            .as_ref()
+            .filter(|(_, at)| now - at <= LEVELS_STALE_MS)
+            .and_then(|(feed, _)| feed.intensity);
+        if self.playback.intensity != intensity {
+            self.edit(|p| p.intensity = intensity);
+        }
+        if !self.playback.autopilot_on {
+            return;
+        }
+        if intensity != self.pilot_intensity {
+            self.pilot_intensity = intensity;
+            self.pilot_change = true;
+        }
+        // Sin un ritmo no hay compases: se queda donde está.
+        let Some(beat) = self.beats(now).map(|b| b.floor() as i64) else {
+            self.pilot_beat = None;
+            return;
+        };
+        let Some(last) = self.pilot_beat.replace(beat) else { return };
+        if beat <= last {
+            return;
+        }
+        self.pilot_beats += (beat - last).min(PILOT_MAX_BEATS);
+        if self.pilot_beats > PILOT_MAX_BEATS {
+            self.pilot_change = true;
+        }
+        let bar = match intensity {
+            Some(i) if i < 0 => 8,
+            Some(i) if i > 0 => 1,
+            _ => 4,
+        };
+        if !self.pilot_change || self.pilot_beats < PILOT_MIN_BEATS || beat.rem_euclid(bar) != 0 {
+            return;
+        }
+        self.pilot_change = false;
+        self.pilot_beats = 0;
+        let pilot = &self.doc.autopilot;
+        let list = match intensity {
+            Some(i) if i < 0 => &pilot.calm,
+            Some(i) if i > 0 => &pilot.intense,
+            _ => &pilot.normal,
+        };
+        let current = self.playback.active_moment_id.clone().filter(|_| self.playback.moment_run.is_some());
+        let choices: Vec<String> =
+            list.iter().filter(|id| self.doc.moments.iter().any(|m| m.id == **id)).cloned().collect();
+        // Otro que el que suena, si hay más de uno; al azar, como el original.
+        let others: Vec<&String> = choices.iter().filter(|id| Some(*id) != current.as_ref()).collect();
+        if others.is_empty() {
+            return;
+        }
+        let pick = (crate::model::hash(7, beat) * others.len() as f64) as usize % others.len();
+        let next = others[pick].clone();
+        self.start_moment(&next, now);
+    }
+
+    // ------------------------------------------------------------------
     // Salida
     // ------------------------------------------------------------------
 
@@ -1892,6 +2008,7 @@ impl Show {
             self.dj = None;
             self.edit(|p| p.dj_bpm = None);
         }
+        self.tick_autopilot(now);
         self.tick_moment(now);
         self.tick_chase();
         self.tick_effects(now);

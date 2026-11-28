@@ -33,6 +33,7 @@ import { closeWindow, createEngineLink, type EngineHost, type EngineLink } from 
 import { askChoice } from "@/lib/dialogs";
 import type { ChannelValues } from "@/lib/fade";
 import { docOf, EMPTY_HISTORY, recordChange, sameDoc, travel, type ShowDoc } from "@/lib/history";
+import { autopilotOf, type Autopilot } from "@/lib/autopilot";
 import { STORAGE_KEY, writeShow } from "@/lib/showFile";
 import type { EngineChanges, EngineDoc, EngineMessage, Playback } from "@/types/engine";
 
@@ -70,7 +71,7 @@ export function engineDoc(s: ShowDoc): EngineDoc {
   if (colorsCache?.of[0] !== s.instances || colorsCache.of[1] !== s.definitions) {
     colorsCache = { of: [s.instances, s.definitions], colors: quickColors(s) };
   }
-  return { ...docOf(s), colors: colorsCache.colors };
+  return { ...docOf(s), autopilot: autopilotOf(s), colors: colorsCache.colors };
 }
 
 /** Lo que no se guarda con el show: al abrir, nada arranca solo. La excepción
@@ -90,6 +91,8 @@ const IDLE: Omit<Playback, "activeSceneId" | "activeMomentId"> = {
   firing: {},
   armed: {},
   djBpm: null,
+  autopilotOn: false,
+  intensity: null,
 };
 const NOT_SAVED = new Set([...Object.keys(IDLE), "moving"]);
 
@@ -204,6 +207,8 @@ interface FixtureStoreValue extends FixtureStoreState {
   addSpecial: (kind: SpecialKind) => Special;
   updateSpecial: (specialId: string, patch: Partial<Omit<Special, "id">>) => void;
   removeSpecial: (specialId: string) => void;
+  /** Los momentos del piloto automático para cada intensidad. */
+  setAutopilot: (autopilot: Autopilot) => void;
   addSongs: (songs: PlaylistSong[]) => void;
   updateSong: (songId: string, patch: Partial<Omit<PlaylistSong, "id">>) => void;
   removeSong: (songId: string) => void;
@@ -288,6 +293,7 @@ function restoreState(parsed: Partial<FixtureStoreState>): FixtureStoreState {
     timelines: parsed.timelines ?? [],
     playlist: parsed.playlist ?? [],
     specials: parsed.specials ?? [],
+    autopilot: parsed.autopilot,
     activeMomentId: parsed.activeMomentId ?? null,
     ...IDLE,
   };
@@ -969,6 +975,9 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
   const removeSpecial = useCallback((specialId: string) => {
     setState((s) => ({ ...s, specials: s.specials.filter((x) => x.id !== specialId) }));
   }, [setState]);
+  const setAutopilot = useCallback((autopilot: Autopilot) => {
+    setState((s) => ({ ...s, autopilot }));
+  }, [setState]);
 
   const addSongs = useCallback((songs: PlaylistSong[]) => {
     setState((s) => ({ ...s, playlist: [...s.playlist, ...songs] }));
@@ -1201,6 +1210,7 @@ export function FixtureStoreProvider({ children }: { children: React.ReactNode }
     addSpecial,
     updateSpecial,
     removeSpecial,
+    setAutopilot,
     addSongs,
     updateSong,
     removeSong,

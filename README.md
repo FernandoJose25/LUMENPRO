@@ -98,3 +98,5 @@ Código visible, todos los derechos reservados: ver [LICENSE](LICENSE). El insta
 ## Créditos
 
 Los perfiles de equipos (`public/library`) y las imágenes de gobos (`public/gobos`) son de [QLC+](https://www.qlcplus.org) (Heikki Junnila, Massimo Callegari y colaboradores), bajo [licencia Apache 2.0](public/library/LICENSE.txt). Ver [NOTICE](public/library/NOTICE.txt).
+
+El piloto automático (cómo suena la música: calmada, normal o intensa, y el cambio de momento al empezar un compás) está pasado de [sound-to-light-osc](https://github.com/scheb/sound-to-light-osc) de Christian Scheb, bajo licencia MIT. Ver [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

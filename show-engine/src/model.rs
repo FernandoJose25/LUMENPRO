@@ -653,7 +653,7 @@ fn hsv(h: f64) -> [f64; 3] {
 }
 
 /// Al azar pero siempre igual para el mismo punto y paso: 0–1.
-fn hash(i: u64, step: i64) -> f64 {
+pub(crate) fn hash(i: u64, step: i64) -> f64 {
     let mut x = i.wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ (step as u64).wrapping_mul(0xC2B2_AE3D_27D4_EB4F);
     x ^= x >> 31;
     x = x.wrapping_mul(0xBF58_476D_1CE4_E5B9);
@@ -928,6 +928,16 @@ pub struct Control {
     pub action: Action,
 }
 
+/// Piloto automático: los momentos entre los que elige según cómo suena la
+/// música (calmada, normal o intensa).
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
+pub struct Autopilot {
+    pub calm: Vec<String>,
+    pub normal: Vec<String>,
+    pub intense: Vec<String>,
+}
+
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Doc {
@@ -946,6 +956,7 @@ pub struct Doc {
     pub live_pads: Vec<Pad>,
     pub phone_pads: Vec<Pad>,
     pub controls: Vec<Control>,
+    pub autopilot: Autopilot,
     /// Índice del perfil de cada instancia.
     #[serde(skip)]
     profile: Vec<Option<usize>>,

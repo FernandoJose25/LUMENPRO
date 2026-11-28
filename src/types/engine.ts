@@ -28,6 +28,10 @@ export interface Playback {
   armed: Record<string, number>;
   /** El tempo que manda VirtualDJ (OS2L) mientras llegan golpes. */
   djBpm: number | null;
+  /** Piloto automático: cambia solo de momento según cómo suena la música. */
+  autopilotOn: boolean;
+  /** Cómo suena: -1 calmada, 0 normal, 1 intensa; null sin escuchar. */
+  intensity: -1 | 0 | 1 | null;
 }
 
 export interface TimelineRun {
@@ -54,6 +58,8 @@ export interface AudioMessage {
   beat: { beats: number; bpm: number } | null;
   /** Golpes contados por banda: lo que sigue a una banda avanza con ellos. */
   hits?: { bass: number; mid: number; treble: number };
+  /** Cómo suena la música: -1 calmada, 0 normal, 1 intensa (piloto automático). */
+  intensity?: -1 | 0 | 1 | null;
 }
 
 export type EngineMessage =
@@ -73,6 +79,7 @@ export type EngineMessage =
   | { type: "stepMoment"; direction: -1 | 1 }
   | { type: "stopMoment" | "stopChase" }
   | { type: "audio"; audio: AudioMessage | null }
+  | { type: "autopilot"; on: boolean }
   | { type: "action"; action: Action; press?: boolean; value?: number }
   /** Desde ese punto de la canción; también para seguir tras una pausa. */
   | { type: "playTimeline"; id: string; fromMs: number }

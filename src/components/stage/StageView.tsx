@@ -15,6 +15,7 @@ import { openStageWindow } from "@/lib/stageMirror";
 import type { FixtureInstance, Placement } from "@/types/fixture";
 import { StageCanvas } from "./StageCanvas";
 import { StageEffects } from "./StageEffects";
+import { AutopilotControls } from "./AutopilotControls";
 import { effectSections } from "@/components/effects/EffectGroups";
 import type { Effect } from "@/types/effect";
 
@@ -114,6 +115,11 @@ export function StageView() {
                 {m.name}
               </Button>
             ))}
+            <AutopilotControls
+              on={playback.autopilotOn}
+              intensity={playback.intensity}
+              onToggle={(on) => send({ type: "autopilot", on })}
+            />
           </div>
         ) : null}
         <HeldColors

@@ -71,6 +71,7 @@ function songFeed(audio: SinkAudio, grid: BeatGrid | null): { feed: AudioFeed; s
     },
     bpm: () => grid?.bpm ?? heard?.feed.bpm() ?? null,
     musicOnly: () => false,
+    intensity: () => heard?.feed.intensity?.() ?? null,
   };
   return { feed, stop: () => heard?.stop() };
 }

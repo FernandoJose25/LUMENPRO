@@ -6,6 +6,7 @@ import { useUpdate } from "@/lib/updates";
 import { UpdateModal } from "./UpdateModal";
 import type { EngineStatus } from "@/types/engine";
 import { BlackoutButton } from "./BlackoutButton";
+import { IntensityPill } from "@/components/stage/AutopilotControls";
 import { cn } from "@/lib/utils";
 
 interface TopbarProps {
@@ -54,6 +55,7 @@ export function Topbar({
 
       <div className="flex-1" />
 
+      <AutopilotNow />
       <MovingNow />
 
       <NewVersion lightsOn={dmx.state === "running"} />
@@ -157,6 +159,21 @@ function MovingNow() {
       </span>
       <Button size="sm" variant="ghost" title="Detiene efectos y chase; las luces quedan como están" onClick={stopMoment}>
         ■ Detener
+      </Button>
+    </div>
+  );
+}
+
+/** El piloto automático cambia de momento solo: se ve desde cualquier sección y se apaga acá. */
+function AutopilotNow() {
+  const { autopilotOn, intensity, engine } = useFixtureStore();
+  if (!autopilotOn) return null;
+  return (
+    <div className="flex items-center gap-1.5 rounded-control border border-accent/50 bg-accent/10 pl-2.5">
+      <span className="text-xs font-medium text-accent">Piloto automático</span>
+      <IntensityPill intensity={intensity} />
+      <Button size="sm" variant="ghost" title="Apaga el piloto: el momento que suena se queda" onClick={() => engine.send({ type: "autopilot", on: false })}>
+        ■ Apagar
       </Button>
     </div>
   );

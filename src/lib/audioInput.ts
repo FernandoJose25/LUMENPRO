@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createBeatTracker, type BeatTracker } from "@/lib/beatTracker";
+import { createIntensityDetector, spectralFlux, type Intensity } from "@/lib/intensity";
 import { appLabel, appOf, isPcSource, openPcAudio } from "@/lib/pcAudio";
 import { readSetting, writeSetting } from "@/lib/settings";
 
@@ -29,6 +30,8 @@ export interface AudioFeed {
   bpm: () => number | null;
   /** Sin un ritmo reconocido (voces, ruido, una pausa) cuenta como silencio. */
   musicOnly?: () => boolean;
+  /** Cómo suena: calmada, normal o intensa (lib/intensity.ts). */
+  intensity?: () => Intensity | null;
 }
 
 const SILENCE: Record<Band, number> = { bass: 0, mid: 0, treble: 0 };
@@ -166,6 +169,10 @@ export function listen(stream: MediaStream, sensitivity: () => number, musicOnly
   const tracker = createBeatTracker();
   const bands: Record<Band, BandState> = { bass: SILENT_BAND, mid: SILENT_BAND, treble: SILENT_BAND };
   const hits: Record<Band, HitState> = { bass: NO_HITS, mid: NO_HITS, treble: NO_HITS };
+  const intensity = createIntensityDetector();
+  const amplitudes = new Float32Array(analyser.frequencyBinCount);
+  // Hasta 16 kHz: más arriba casi no hay música, solo ruido.
+  const fluxBins = Math.min(analyser.frequencyBinCount, Math.round(16000 / hzPerBin));
   const audioFeed: AudioFeed = {
     levels: { bass: 0, mid: 0, treble: 0 },
     hits: { bass: 0, mid: 0, treble: 0 },
@@ -173,6 +180,7 @@ export function listen(stream: MediaStream, sensitivity: () => number, musicOnly
     beats: () => tracker.beats(performance.now()),
     bpm: () => tracker.bpm(),
     musicOnly,
+    intensity: intensity.intensity,
   };
   let before: Record<Band, number> | null = null;
   let last = performance.now();
@@ -192,6 +200,7 @@ export function listen(stream: MediaStream, sensitivity: () => number, musicOnly
       audioFeed.loudness![band] = bands[band].level * audible(current[band]);
     }
     if (before) tracker.push(now, onset(before, current, gate));
+    intensity.push(spectralFlux(spectrum, amplitudes, fluxBins), BAND_NAMES.every((band) => current[band] <= gate));
     before = current;
     last = now;
   }, TICK_MS);

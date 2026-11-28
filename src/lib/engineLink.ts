@@ -52,6 +52,7 @@ export function audioMessage(): AudioMessage | null {
     levels: heardLevels(feed),
     beat: beats === null ? null : { beats, bpm: feed.bpm() ?? 0 },
     ...(feed.hits ? { hits: { ...feed.hits } } : {}),
+    intensity: feed.intensity?.() ?? null,
   };
 }
 

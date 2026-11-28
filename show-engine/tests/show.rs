@@ -512,6 +512,69 @@ fn reggaeton_finds_which_beat_of_the_pair_has_the_snare() {
     assert!(r.live("p1", "red") < 60, "donde no hay caja, apagándose");
 }
 
+/// Música con ritmo (60 BPM) y su intensidad: -1 calmada, 0 normal, 1 intensa.
+fn pilot(r: &mut Rig, beats: f64, intensity: i8) {
+    r.send(json!({ "type": "audio", "audio": {
+        "levels": { "bass": 0, "mid": 0, "treble": 0 }, "beat": { "beats": beats, "bpm": 60 }, "intensity": intensity } }));
+    r.run(1.0);
+}
+
+fn pilot_rig() -> Rig {
+    let mut r = Rig::new();
+    let moment = |id: &str| json!({ "id": id, "name": id, "effectIds": [], "fadeMs": 0 });
+    r.doc["moments"] = json!([moment("calma"), moment("fiesta"), moment("fiesta2"), moment("locura"), moment("vals")]);
+    r.doc["autopilot"] = json!({ "calm": ["calma"], "normal": ["fiesta", "fiesta2"], "intense": ["locura"] });
+    r.reset();
+    r
+}
+
+#[test]
+fn the_autopilot_picks_a_moment_by_intensity_on_a_bar_and_waits_at_least_8_beats() {
+    let mut r = pilot_rig();
+    r.send(json!({ "type": "autopilot", "on": true }));
+    pilot(&mut r, 0.5, 0);
+    pilot(&mut r, 1.1, 0);
+    assert_eq!(r.playback()["activeMomentId"], json!(null), "a mitad del compás no cambia");
+    pilot(&mut r, 4.1, 0);
+    let normal = r.playback()["activeMomentId"].as_str().unwrap().to_string();
+    assert!(normal.starts_with("fiesta"), "normal: {normal}");
+    assert_eq!(r.playback()["intensity"], json!(0));
+    // Se pone intensa: cambia, pero no antes de 8 tiempos desde el último cambio.
+    pilot(&mut r, 5.1, 1);
+    pilot(&mut r, 11.1, 1);
+    assert_eq!(r.playback()["activeMomentId"], json!(normal));
+    pilot(&mut r, 12.1, 1);
+    assert_eq!(r.playback()["activeMomentId"], json!("locura"));
+    // Un momento elegido a mano lo apaga.
+    r.send(json!({ "type": "startMoment", "id": "vals" }));
+    assert_eq!(r.playback()["autopilotOn"], json!(false));
+    pilot(&mut r, 24.1, -1);
+    assert_eq!(r.playback()["activeMomentId"], json!("vals"));
+}
+
+#[test]
+fn the_autopilot_changes_after_32_beats_in_the_same_moment_and_stays_put_without_rhythm() {
+    let mut r = pilot_rig();
+    r.send(json!({ "type": "autopilot", "on": true }));
+    pilot(&mut r, 0.5, 0);
+    pilot(&mut r, 4.1, 0);
+    let first = r.playback()["activeMomentId"].clone();
+    for beat in 5..=36 {
+        pilot(&mut r, beat as f64 + 0.1, 0);
+    }
+    assert_eq!(r.playback()["activeMomentId"], first, "32 tiempos todavía no");
+    for beat in 37..=40 {
+        pilot(&mut r, beat as f64 + 0.1, 0);
+    }
+    assert_ne!(r.playback()["activeMomentId"], first, "pasados 32, en el compás siguiente cambia al otro");
+    // Sin ritmo no hay compases.
+    let now = r.playback()["activeMomentId"].clone();
+    r.send(json!({ "type": "audio", "audio": null }));
+    r.run(60_000.0);
+    assert_eq!(r.playback()["activeMomentId"], now);
+    assert_eq!(r.playback()["intensity"], json!(null));
+}
+
 #[test]
 fn the_beat_clock_keeps_counting_a_while_if_the_window_hangs() {
     let mut r = Rig::new();

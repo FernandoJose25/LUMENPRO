@@ -147,7 +147,7 @@ export function StageEffects({
       <div
         role="tabpanel"
         aria-label={`${section.name}: ${kind.name}`}
-        className="grid max-h-52 grid-cols-[repeat(auto-fill,minmax(210px,1fr))] gap-1.5 overflow-y-auto pr-1 scrollbar-thin"
+        className="grid max-h-52 auto-rows-max grid-cols-[repeat(auto-fill,minmax(210px,1fr))] gap-1.5 overflow-y-auto pr-1 scrollbar-thin"
       >
         {kind.effects.map((fx) => (
           <EffectCard

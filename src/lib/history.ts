@@ -9,6 +9,7 @@ import type { Scene } from "@/types/scene";
 import type { Timeline } from "@/types/timeline";
 import type { PlaylistSong } from "@/types/music";
 import type { Special } from "@/types/special";
+import type { Autopilot } from "@/lib/autopilot";
 
 /** Lo que se programa, que es lo que Deshacer recupera. Los valores en vivo
  *  quedan fuera a propósito: deshacer a mitad del evento no debe mover luces. */
@@ -29,11 +30,13 @@ export interface ShowDoc {
   livePads: Pad[];
   phonePads: Pad[];
   controls: Control[];
+  /** Piloto automático; sin elegir, los momentos de la plantilla (lib/autopilot.ts). */
+  autopilot?: Autopilot;
 }
 
 const KEYS = [
   "definitions", "instances", "scenes", "palettes", "groups", "chases", "effects", "moments", "timelines", "playlist",
-  "specials", "livePads", "phonePads", "controls",
+  "specials", "livePads", "phonePads", "controls", "autopilot",
 ] as const;
 
 const LIMIT = 100;
@@ -61,7 +64,8 @@ export function sameDoc(a: ShowDoc, b: ShowDoc): boolean {
 
 export function recordChange(history: History, before: ShowDoc, after: ShowDoc, now: number): History {
   const changed = KEYS.filter((k) => before[k] !== after[k]);
-  const edited = changed.every((k) => before[k].length === after[k].length) ? changed.join() : "";
+  const size = (list: unknown) => (Array.isArray(list) ? list.length : 0);
+  const edited = changed.every((k) => size(before[k]) === size(after[k])) ? changed.join() : "";
   const continues = edited !== "" && edited === history.lastEdited && now - history.lastChangeAt < COALESCE_MS;
   return {
     past: continues ? history.past : [...history.past, before].slice(-LIMIT),

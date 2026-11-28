@@ -1,3 +1,9 @@
+## Novedades de la 0.18.0
+
+**Piloto automático (de sound-to-light-osc).** LUMEN escucha si la música está **calmada**, **normal** o **intensa** (por ejemplo, cuando revienta el coro) y cambia solo de momento, siempre al empezar un compás para que no se note el corte. Cambia cuando cambia la música, o después de 32 tiempos en el mismo momento para no repetir, y nunca antes de 8 tiempos desde el último cambio. Se prende en **Escenario**, al lado de los momentos, con **Piloto automático**; en **Ajustar** eliges qué momentos van con cada música (ya viene: Hora loca para calmada, Hora loca con música para normal, Hora loca + estrobo para intensa). Al lado se ve cómo suena la música ahora. Mientras está prendido se ve arriba, con **■ Apagar**. Elegir un momento a mano, **■ Detener** o arrancar el vals lo apagan. Necesita oír el ritmo (o el TAP); sin ritmo se queda donde está.
+
+La idea y la forma de medir la intensidad vienen de [sound-to-light-osc](https://github.com/scheb/sound-to-light-osc), de Christian Scheb (licencia MIT).
+
 ## Novedades de la 0.17.0
 
 **Reggaetón.** Nueva opción en «Sigue a»: **Reggaetón**. Las luces van con el dembow (bum-cha-bum-chá: bombo, caja, bombo, caja) enganchado al ritmo de la canción, así que cada fogonazo cae en su lugar aunque la mezcla esté cargada de bajo o voces. LUMEN se da cuenta solo de en qué tiempo cae la caja, y si para la música se apaga. Listos para el perreo: **Golpe reggaetón**, **Al azar reggaetón**, **Persecución reggaetón**, **Salto de color reggaetón** y, en los estrobos de segmentos, **Cortadora reggaetón** y **Flash reggaetón**. Funciona también con TAP y con VirtualDJ.
